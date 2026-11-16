@@ -1173,14 +1173,17 @@ F2. ✅ "no data from MSFS" flickered 8 times in the first minute and twice on t
     without data.
 F3. ✅ Microphone hints say "python -m atc --list-mics", which an .exe user can't run: "Settings → Audio → Microphone".
 
-**Part G — Other aircraft in the air** (the user's one addition)
+**Part G — Other aircraft in the air** ✅ (`atc/controller/air_chatter.py`; to check in MSFS) (the user's one addition)
 Today the other aircraft are only heard on Ground, Apron and Tower (taxi, takeoff, landing). On Departure, Approach
 and Center nobody else talks. Plan, from what the real LiveTraffic aircraft in our controller's area really do,
 nothing made up:
-G1. Center and Departure: an aircraft entering the sector checks in with its level; climbing or descending, the
+G1. ✅ Center and Departure: an aircraft entering the sector checks in with its level; climbing or descending, the
     controller clears it; leaving, it is handed over.
-G2. Approach: arrivals check in, get the descent, vectors and the ILS clearance as they really turn and descend.
-G3. Rules for all: never on top of a call to us or our readback, a pause after each exchange, the same voice
+G2. ✅ Approach: arrivals check in, get the descent, vectors and the ILS clearance as they really turn and descend.
+    Done: check-in with "expect vectors ILS approach runway …", descents in steps (not below 3000 ft above the
+    airport), handed to the Tower on final. Not done: single headings per turn (we can't tell a vector from a turn
+    the pilot flies on his own).
+G3. ✅ Rules for all: never on top of a call to us or our readback, a pause after each exchange, the same voice
     per callsign. **User: medium to busy.**
 
 **Part H — Approach, redone** ✅ (`atc/controller/vectors.py`; to check in MSFS) (user: "it gives a heading several times, doesn't resolve it or give a new one; the

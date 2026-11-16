@@ -14,10 +14,12 @@ from atc.controller.common import AIR_PHASES, PHASES, TRAFFIC_INFO_GAP_S, Respon
 
 
 class TrafficMixin:
-    def update_traffic(self, traffic: list[Traffic], now: float | None = None) -> list[Response]:
+    def update_traffic(self, traffic: list[Traffic], now: float | None = None,
+                       last_radio: float | None = None) -> list[Response]:
         """The other aircraft from the sim, every few seconds (the live loop). Returns ATC calls about them.
-        `now`: the live clock, for the time between departures (L5); without it there is no wake spacing."""
-        self.traffic_clock = now
+        `now`: the live clock, for the time between departures (L5); without it there is no wake spacing.
+        `last_radio`: when the radio was last busy, so the chatter in the air waits for a quiet one (G)."""
+        self.traffic_clock, self.last_radio_at = now, last_radio
         places = [(self.airport, self.zones)]
         if self.destination is not None:
             self._arrival_graph()
@@ -89,8 +91,10 @@ class TrafficMixin:
         to, from what they really did since the last update: one exchange at a time, nothing is made up."""
         state = self.state
         tuned = self.station_at(state.com1_khz) if self.chatter and state else None
-        if tuned is None or tuned.freq.role not in ("T", "G", "APRON"):
+        if tuned is None:
             return []
+        if tuned.freq.role not in ("T", "G", "APRON"):
+            return self._air_chatter(tuned)  # Departure, Approach, Center (atc/controller/air_chatter.py)
         airport = next((a for a, _ in places if a.ident == tuned.ident), None)
         if airport is None:
             return []

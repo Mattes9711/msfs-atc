@@ -187,7 +187,8 @@ class LiveSession:
         if read is None or self.clock is None or self.clock() < self.next_traffic:
             return
         self.next_traffic = self.clock() + TRAFFIC_EVERY_S
-        emit_responses(self.sink, self.controller.update_traffic(read(), self.clock()))
+        emit_responses(self.sink, self.controller.update_traffic(read(), self.clock(),
+                                                                 self.radio.last if self.radio else None))
 
     def step(self, text: str = "") -> bool:
         """Returns False when the user wants to quit."""

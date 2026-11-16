@@ -40,9 +40,10 @@ from atc.controller.ground import GroundMixin
 from atc.controller.tower import TowerMixin
 from atc.controller.air import AirMixin
 from atc.controller.traffic_calls import TrafficMixin
+from atc.controller.air_chatter import AirChatterMixin
 
 
-class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin):
+class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixin):
     """The deterministic ATC brain: one state machine for the whole flight. Pilot calls go to handle(); position
     changes go to tick(), which is where ATC calls the pilot by itself. Only `rng` (squawks) is random."""
 
@@ -132,6 +133,10 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin):
         self.last_landing: dict[str, wake.Departure] = {}  # airport → the last landing seen there (B5)
         self.last_departure: dict[str, wake.Departure] = {}  # airport → the last takeoff seen there (L5)
         self.traffic_clock: float | None = None  # the live clock at the last traffic update
+        self.last_radio_at: float | None = None  # when the radio was last busy, at the last traffic update
+        self.air_tracks: dict = {}  # object id -> air_chatter.Track: the other aircraft in the air (G)
+        self.air_area_key: tuple[str, str] | None = None  # whose area the tracks were looked at for
+        self.air_chatter_at: float | None = None  # the last exchange in the air
         self.takeoff_intersection: str | None = None  # asked to depart from it, kept while waiting
         self.wake_told = False  # "expect departure in two minutes, wake turbulence" said
         self.following: Traffic | None = None  # the aircraft ahead of us on final we were told to follow (L6)
