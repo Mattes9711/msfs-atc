@@ -4,7 +4,7 @@ Voice ATC for Microsoft Flight Simulator 2020, running entirely on your own PC: 
 no cloud. You talk on push-to-talk; Clearance, Ground, Tower, Departure, Center and Approach answer in ICAO
 phraseology, with a voice of their own for each controller.
 
-> **Early test version (0.1.3).** Most of it has been flown in MSFS, the newest parts (co-pilot calls, GSX,
+> **Early test version (0.1.4).** Most of it has been flown in MSFS, the newest parts (co-pilot calls, GSX,
 > cabin sound) only in practice mode so far. Reports are welcome in the Issues.
 
 > **MSFS 2024: not tested yet.** It connects through SimConnect the same way, and MSFS ATC reads Little Navmap's
