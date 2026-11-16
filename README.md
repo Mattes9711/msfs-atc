@@ -7,6 +7,10 @@ phraseology, with a voice of their own for each controller.
 > **Early test version (0.1.2).** Most of it has been flown in MSFS, the newest parts (co-pilot calls, GSX,
 > cabin sound) only in practice mode so far. Reports are welcome in the Issues.
 
+> **MSFS 2024: not tested yet.** It connects through SimConnect the same way, but MSFS ATC doesn't read Little
+> Navmap's MSFS 2024 database yet, only the 2020 one: with MSFS 2024 the airports, taxiways and gates would not
+> match your scenery.
+
 ## What it does
 
 - **The whole flight:** IFR clearance with SID and squawk, pushback, taxi with every named taxiway, holding point
