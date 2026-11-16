@@ -1103,31 +1103,31 @@ plus one thing: "in the air you hardly hear other aircraft". Each step: first a 
 log), then the fix, tests, `--text --nosim`, a commit. Answers to the open questions (❓) come first.
 
 **Part A — Descent and directs** (the user: "it crashes most with the descent; far too many directs")
-A1. **No descent at all.** Every Center gave a direct-to (Zucka, Lular, Landu), and the descent check still measured
+A1. ✅ **No descent at all.** Every Center gave a direct-to (Zucka, Lular, Landu), and the descent check still measured
     the track miles along the original route, via the points the direct skips: it never reached the top of descent.
     At 13:27 the pilot asked, already descending through FL270. Fix: remember the cleared direct-to; track miles to
     go = straight to that fix, then the route from it.
-A2. **A direct at every Center check-in, the same one twice:** Zucka by both Bremen sectors, Landu by Frankfurt and
+A2. ✅ **A direct at every Center check-in, the same one twice:** Zucka by both Bremen sectors, Landu by Frankfurt and
     by Munich Radar. Fix: a direct only when it is a real shortcut beyond the one already given, never the same
     fix again, none into the STAR. **User: 1–2 real shortcuts a flight.**
     The descent itself stays "descend flight level 100" (start now), just before the FMC's TOD (user).
-A3. **An instruction from a Center the pilot hasn't called yet:** reproduced while looking at the co-pilot. Right
+A3. ✅ **An instruction from a Center the pilot hasn't called yet:** reproduced while looking at the co-pilot. Right
     after a sector handoff the next sector's controller gave the descent on its frequency before the check-in: not
     heard, and the readback it waits for blocks everything. Fix: a controller instructs only after the check-in.
 
 **Part B — The runway at the destination** (go-around, "number six", the incursion after landing)
-B1. **EDDM landing runway 26L while the traffic landed on 26R and departed from 26L.** The runway came from the
+B1. ✅ **EDDM landing runway 26L while the traffic landed on 26R and departed from 26L.** The runway came from the
     METAR; the traffic is only seen within 40 nm of our aircraft, and the landing runway froze at the first call to
     Approach. Result: "go around, runway occupied" by a departure, and in the go-around 26R → 26L → back in 7 s.
     Fix: change it until the ILS clearance (with "expect ILS 26R"); for arrivals the landings count, departures
     only without landings; on a tie keep the current one (no flipping).
-B2. **"number six" / "number four":** the sequence counted the arrivals for the other, independent parallel 26R.
+B2. ✅ **"number six" / "number four":** the sequence counted the arrivals for the other, independent parallel 26R.
     Fix: only our runway and close parallels (under 760 m).
-B3. **"traffic to follow traffic on downwind"** when the aircraft has no name: say it without the name.
-B4. **Traffic information on final:** three calls in 20 s, also traffic behind ("six o'clock") and on the parallel
+B3. ✅ **"traffic to follow traffic on downwind"** when the aircraft has no name: say it without the name.
+B4. ✅ **Traffic information on final:** three calls in 20 s, also traffic behind ("six o'clock") and on the parallel
     approach. Fix: on final, no traffic information about aircraft landing or departing at the airport or behind
     us; at most one call a minute.
-B5. **After landing: "stop immediately, runway incursion 08L/26R", and one second later "vacate runway, contact
+B5. ✅ **After landing: "stop immediately, runway incursion 08L/26R", and one second later "vacate runway, contact
     Ground".** **The user landed on 26R**, with the traffic: B1 is the cause. Also: never "vacate" right after
     "stop"; "stopping immediately" understood as an acknowledgement (it got "say again").
 
@@ -1178,7 +1178,7 @@ G2. Approach: arrivals check in, get the descent, vectors and the ILS clearance 
 G3. Rules for all: never on top of a call to us or our readback, a pause after each exchange, the same voice
     per callsign. **User: medium to busy.**
 
-**Part H — Approach, redone** (user: "it gives a heading several times, doesn't resolve it or give a new one; the
+**Part H — Approach, redone** ✅ (`atc/controller/vectors.py`; to check in MSFS) (user: "it gives a heading several times, doesn't resolve it or give a new one; the
 whole approach phase must be redone"). Today: one heading towards a point 14 NM out, then nothing until within 3 NM
 of it; missed (wind, after the go-around) means no more instructions: 8 minutes on heading 075 after the go-around.
 Wanted: **radar vectors** (user): downwind, base, intercept, each leg with its own heading and altitude, watched

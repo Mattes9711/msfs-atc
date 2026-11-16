@@ -17,9 +17,7 @@ DESCENT_LEAD_NM = 5  # the descent comes this far before the top of descent: tim
 APPROACH_HANDOFF_NM = 40
 TOWER_HANDOFF_NM = 12  # from the landing threshold
 FINAL_FIX_NM = 10
-# Radar vectors (P5d): fly towards a point this far out on the extended centreline, and turn onto the localizer
-# this close to it (or at once when already in the final cone)
-VECTOR_POINT_NM, INTERCEPT_WITHIN_NM = 14, 3
+# Radar vectors: downwind, base and intercept, see atc/controller/vectors.py (Milestone 8, H)
 INTERCEPT_ANGLE = 30
 FINAL_CONE_DEG, FINAL_CONE_NM = 15, 18
 ON_COURSE_DEG = 3  # this close to the extended centreline counts as established

@@ -91,6 +91,10 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin):
         self.at_holding_point = False
         self.lined_up = False
         self.vectoring: Station | None = None  # the Approach controller vectoring us to the ILS
+        self.vector_leg: str | None = None  # "downwind" or "base" while vectored (H)
+        self.vector_side = 1  # +1 left of the final facing the runway, -1 right
+        self.vector_heading: int | None = None  # the last heading given
+        self.vector_at: float | None = None  # when it was given (live clock)
         self.apron_handed = False  # Apron has handed the departure over to Ground
         self.apron_in = False  # Ground has handed the arrival over to Apron
         self.route_in: TaxiRoute | None = None
@@ -330,7 +334,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin):
                     self.descent_given or state.alt_msl_ft < 10000 or en_route is None):
                 return self._handoff(role, "approach", "arrival", state)
         if self.phase == "approach" and self.vectoring:
-            return self._intercept(state)
+            return self._vector_progress(state, now)
         if self.phase in ("approach", "final") and (spacing := self._speed_control(state)):
             return spacing
         if self.phase == "approach":

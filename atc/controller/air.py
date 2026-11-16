@@ -3,11 +3,11 @@ the sequence and speed control). A part of Controller (atc/controller/controller
 short; it uses the controller's state through self."""
 import math
 
-from atc.airport.geo import bearing_deg, destination_point, distance_nm
+from atc.airport.geo import bearing_deg, distance_nm
 from atc.airspace.centers import PLACEHOLDER, CenterSector
 from atc.controller import readback as rb
 from atc.controller.give_way import traffic_name
-from atc.controller import wake
+from atc.controller import vectors, wake
 from atc.sim.traffic import M_PER_NM, Traffic
 from atc.flightplan.route import first_fix, spoken_star
 from atc.flightplan.track import track_to_go_nm
@@ -18,9 +18,9 @@ from atc.units import format_khz
 from atc.controller.common import (APPROACH_SPEED_KT, CENTER_HANDOFF_FT, CENTER_HANDOFF_NM, CLOSE_PARALLEL_M,
                                    CLOSING_KT, DEPARTURE_CEILING_FL, DESCENT_ALTITUDE_FT, DESCENT_FL, DESCENT_LEAD_NM,
                                    DESCENT_MARGIN_NM, DIRECT_MAX_NM, FINAL_CONE_DEG, FINAL_CONE_NM, FINAL_FIX_NM,
-                                   FINAL_SPEED_KT, GAP_SHRINK_NM, INTERCEPT_ANGLE, INTERCEPT_WITHIN_NM, MAX_FL,
+                                   FINAL_SPEED_KT, GAP_SHRINK_NM, INTERCEPT_ANGLE, MAX_FL,
                                    ON_COURSE_DEG, PATTERN_AGL_FT, PATTERN_NM, SHORTCUTS, SHORTCUT_MIN_NM,
-                                   SPACING_SPEED_KT, SPEED_CONTROL_UNTIL_NM, VECTOR_POINT_NM, VFR_SQUAWK, Response,
+                                   SPACING_SPEED_KT, SPEED_CONTROL_UNTIL_NM, VFR_SQUAWK, Response,
                                    Station, center_station)
 
 
@@ -228,15 +228,14 @@ class AirMixin:
         return round((true_heading - self.destination.mag_var) / 5) * 5 % 360 or 360
 
     def _vectors(self, station: Station, state: AircraftState) -> list[Response]:
-        """First call to Approach: altitude with the QNH, a speed and a heading towards a point on the extended
-        centreline; the approach clearance follows near that point (_intercept). Already in the final cone (e.g.
-        /final in practice mode): the approach clearance at once."""
+        """First call to Approach: altitude with the QNH, a speed and the first heading of the radar vectors
+        (atc/controller/vectors.py), which _vector_progress then follows to the localizer. Already in the final cone
+        (e.g. /final in practice mode): the approach clearance at once."""
         if self._on_final(state):
             return self._approach_clearance(station, state)
         self.phase, self.vectoring = "approach", station
-        end, course, _, _ = self._final_geometry(state)
-        point = destination_point(end.lat, end.lon, (course + 180) % 360, VECTOR_POINT_NM)
-        heading = self._magnetic(bearing_deg(state.lat, state.lon, *point))
+        end = self.destination.runway_end(self.arrival_runway)
+        heading = self._first_vector(end, state)
         items = [rb.altitude(self._approach_altitude(), "descend")]
         if self.destination_metar and self.destination_metar.qnh_hpa:
             items.append(rb.qnh(self.destination_metar.qnh_hpa))
@@ -246,13 +245,53 @@ class AirMixin:
         return [self._say(station, f"{self.cs}, {station.name}, " + rb.instruction_text(items) +
                           f", vectors {approach_type} approach runway {spoken.runway(end.name)}")]
 
-    def _intercept(self, state: AircraftState) -> list[Response]:
-        end, course, _, offset = self._final_geometry(state)
-        point = destination_point(end.lat, end.lon, (course + 180) % 360, VECTOR_POINT_NM)
-        if distance_nm(state.lat, state.lon, *point) > INTERCEPT_WITHIN_NM and not self._on_final(state):
+    def _first_vector(self, end, state: AircraftState) -> int:
+        """The first leg: far out in front of the runway straight towards the final (45 degrees), else the
+        downwind to the base point. Returns the magnetic heading and remembers the leg."""
+        along, across = vectors.frame(end, state.lat, state.lon)
+        self.vector_side, self.vector_at = vectors.side_of(across), None
+        if along >= vectors.STRAIGHT_IN_ALONG_NM:
+            self.vector_leg = "base"
+            true = (end.heading_true + 45 * self.vector_side) % 360
+        else:
+            self.vector_leg = "downwind"
+            true = bearing_deg(state.lat, state.lon, *vectors.base_point(end, across))
+        self.vector_heading = self._magnetic(true)
+        return self.vector_heading
+
+    def _vector_progress(self, state: AircraftState, now: float | None) -> list[Response]:
+        """Every tick while vectored: the base turn at the base point, the intercept and the approach clearance
+        near the centreline (or across it), and a corrected heading when the way to the base point drifts."""
+        station = self.vectoring
+        end = self.destination.runway_end(self.arrival_runway)
+        along, across = vectors.frame(end, state.lat, state.lon)
+        crossed =vectors.side_of(across) != self.vector_side and abs(across) > 0.2
+        if self._on_final(state) or (self.vector_leg == "base" and (
+                abs(across) <= vectors.INTERCEPT_ACROSS_NM or crossed)):
+            self.vectoring, self.vector_leg = None, None
+            return self._approach_clearance(station, state, intercept=True)
+        if self.vector_leg == "downwind":
+            base = vectors.base_point(end, self.vector_side * vectors.DOWNWIND_NM)
+            if (distance_nm(state.lat, state.lon, *base) <= vectors.BASE_WITHIN_NM
+                    or along >= vectors.BASE_ALONG_NM):
+                self.vector_leg = "base"
+                return self._give_vector(station, state, vectors.base_heading_true(end, self.vector_side), now)
+            wanted = self._magnetic(bearing_deg(state.lat, state.lon, *base))
+            off = abs((wanted - self.vector_heading + 540) % 360 - 180)
+            waited = now is None or self.vector_at is None or now - self.vector_at >= vectors.CORRECT_EVERY_S
+            if off >= vectors.CORRECT_DEG and waited:
+                return self._give_vector(station, state, bearing_deg(state.lat, state.lon, *base), now)
+        return []
+
+    def _give_vector(self, station: Station, state: AircraftState, true_heading: float, now: float | None):
+        """"turn left heading two six zero", read back like every heading."""
+        heading = self._magnetic(true_heading)
+        if heading == self.vector_heading:
             return []
-        station, self.vectoring = self.vectoring, None
-        return self._approach_clearance(station, state, intercept=True)
+        item = rb.heading(heading, vectors.turn_direction(state.heading_mag, heading))
+        self.vector_heading, self.vector_at = heading, now
+        self._set_pending([item], station.key)
+        return self._transmit(station, f"{self.cs}, {item.phrase}", state)
 
     def _approach_altitude(self) -> int:
         return -(-(int(self.destination.elevation_ft) + 3000) // 100) * 100  # round up to 100 ft
