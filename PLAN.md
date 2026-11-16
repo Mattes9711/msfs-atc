@@ -1095,6 +1095,105 @@ W1. 🔶 **Start screen** (user picked: briefing, dark look; the start check was
       Traffic: on by default, path optional.
     - **Open:** an onboarding at the flight start "like SayIntentions": what exactly is still to be agreed.
 
+### Milestone 8 — Fixes from the first full test flight (planned 2026-11-16, not started)
+
+The flight: EDDH → EDDM in MSFS 2020 with LiveTraffic, GSX Pro and the Fenix A320 (start.bat, strict readbacks),
+log `2026-11-16_1216Z_DLH758.txt`, the user's answers in TESTFLUG.md. The user: "fix every error, no new features",
+plus one thing: "in the air you hardly hear other aircraft". Each step: first a test that reproduces it (from the
+log), then the fix, tests, `--text --nosim`, a commit. Answers to the open questions (❓) come first.
+
+**Part A — Descent and directs** (the user: "it crashes most with the descent; far too many directs")
+A1. **No descent at all.** Every Center gave a direct-to (Zucka, Lular, Landu), and the descent check still measured
+    the track miles along the original route, via the points the direct skips: it never reached the top of descent.
+    At 13:27 the pilot asked, already descending through FL270. Fix: remember the cleared direct-to; track miles to
+    go = straight to that fix, then the route from it.
+A2. **A direct at every Center check-in, the same one twice:** Zucka by both Bremen sectors, Landu by Frankfurt and
+    by Munich Radar. Fix: a direct only when it is a real shortcut beyond the one already given, never the same
+    fix again, none into the STAR. **User: 1–2 real shortcuts a flight.**
+    The descent itself stays "descend flight level 100" (start now), just before the FMC's TOD (user).
+A3. **An instruction from a Center the pilot hasn't called yet:** reproduced while looking at the co-pilot. Right
+    after a sector handoff the next sector's controller gave the descent on its frequency before the check-in: not
+    heard, and the readback it waits for blocks everything. Fix: a controller instructs only after the check-in.
+
+**Part B — The runway at the destination** (go-around, "number six", the incursion after landing)
+B1. **EDDM landing runway 26L while the traffic landed on 26R and departed from 26L.** The runway came from the
+    METAR; the traffic is only seen within 40 nm of our aircraft, and the landing runway froze at the first call to
+    Approach. Result: "go around, runway occupied" by a departure, and in the go-around 26R → 26L → back in 7 s.
+    Fix: change it until the ILS clearance (with "expect ILS 26R"); for arrivals the landings count, departures
+    only without landings; on a tie keep the current one (no flipping).
+B2. **"number six" / "number four":** the sequence counted the arrivals for the other, independent parallel 26R.
+    Fix: only our runway and close parallels (under 760 m).
+B3. **"traffic to follow traffic on downwind"** when the aircraft has no name: say it without the name.
+B4. **Traffic information on final:** three calls in 20 s, also traffic behind ("six o'clock") and on the parallel
+    approach. Fix: on final, no traffic information about aircraft landing or departing at the airport or behind
+    us; at most one call a minute.
+B5. **After landing: "stop immediately, runway incursion 08L/26R", and one second later "vacate runway, contact
+    Ground".** **The user landed on 26R**, with the traffic: B1 is the cause. Also: never "vacate" right after
+    "stop"; "stopping immediately" understood as an acknowledgement (it got "say again").
+
+**Part C — On the ground**
+C1. **"On holding point (runway 33)" not understood** (twice "say again"): a holding point report, like "holding
+    short runway 33".
+C2. **Ground ↔ Tower ping-pong at the holding point.** Ground's "contact Tower" (after "holding short runway 33")
+    was a plain redirect: the readback wasn't recognised ("continue taxi"), Tower sent the check-in back to Ground,
+    and two minutes later Ground handed over again. Fix: that redirect is a handoff with a readback, and Tower
+    accepts a check-in from an aircraft at or near the holding point.
+C3. **"request ground services" got no answer** (ATC always answers): "say again".
+C4. **A wrong turn right after the pushback got no reaction** (user). The watch only starts once the aircraft
+    has been on its route; turning away before that is never noticed. Fix: also off the route when it moves away
+    from the route's start without ever joining it.
+C5. **The holding point "didn't exist"** (user: it was on a taxiway that crosses runway 33). The departure holding
+    point was picked among all hold-short points near the threshold, crossing ones included. Fix: only a holding
+    point whose taxiway leads onto the runway (not across it).
+C6. **At the gate nothing more came** (user: "just a bye from ATC"). Fix: parked at the stand, Apron or Ground says
+    goodbye.
+
+**Part D — Co-pilot** ("macht gar nichts")
+D1. He had the radio from 13:14 and didn't read back Berlin's "contact Frankfurt" in 45 s. One cause found (A3);
+    the Berlin → Frankfurt case itself still to be reproduced. Fix A3, then a test of the whole flight in the live
+    loop, gate to gate, with the co-pilot on.
+
+**Part E — GSX**
+E1. **"GSX: its menu did not open"** for the pushback (12:35) and the deboarding (14:04), although the check
+    command opened it. Suspects: the menu is written from a second thread while the live loop reads SimConnect,
+    and 3 s may be too short. Fix: the menu clicks go through the live loop (one SimConnect user at a time), wait
+    up to 10 s, try once more, close the menu again after a failure, log what the menu file said.
+E2. **Deboarding while the engines still ran:** GSX started it by itself (its own automatic deboarding, user),
+    not the app. Still, the app's own request waits for the engines off and the parking brake set, at a stand
+    (any stand). Needs two more simvars (engine combustion, parking brake).
+
+**Part F — Small things**
+F1. Cabin announcements too loud next to ATC: mixer default 70 % → 50 %.
+F2. "no data from MSFS" flickered 8 times in the first minute and twice on the approach: say it only after 5 s
+    without data.
+F3. Microphone hints say "python -m atc --list-mics", which an .exe user can't run: "Settings → Audio → Microphone".
+
+**Part G — Other aircraft in the air** (the user's one addition)
+Today the other aircraft are only heard on Ground, Apron and Tower (taxi, takeoff, landing). On Departure, Approach
+and Center nobody else talks. Plan, from what the real LiveTraffic aircraft in our controller's area really do,
+nothing made up:
+G1. Center and Departure: an aircraft entering the sector checks in with its level; climbing or descending, the
+    controller clears it; leaving, it is handed over.
+G2. Approach: arrivals check in, get the descent, vectors and the ILS clearance as they really turn and descend.
+G3. Rules for all: never on top of a call to us or our readback, a pause after each exchange, the same voice
+    per callsign. **User: medium to busy.**
+
+**Part H — Approach, redone** (user: "it gives a heading several times, doesn't resolve it or give a new one; the
+whole approach phase must be redone"). Today: one heading towards a point 14 NM out, then nothing until within 3 NM
+of it; missed (wind, after the go-around) means no more instructions: 8 minutes on heading 075 after the go-around.
+Wanted: **radar vectors** (user): downwind, base, intercept, each leg with its own heading and altitude, watched
+every few seconds, with a correction when the aircraft drifts or overshoots the localizer, re-vectored after a
+go-around, until established. The descent on the way down to the approach altitude in steps.
+
+**Part I — Center without Little Navmap** (user: his friend on MSFS 2024 saw "Radar PLACEHOLDER" and stayed with
+Approach, "mine didn't either": a new solution, from VATSIM). Today the sectors come only from Little Navmap.
+Found: VATSIM's vatspy-data-project has the FIR boundaries and names worldwide (CC BY-SA 4.0, fits the GPL with
+attribution), but no frequencies. ❓ Before starting: where the Center frequencies come from (a table we write from
+public sources, or a VATSIM dataset whose licence allows it). Never show "PLACEHOLDER" to the user.
+
+**Order:** A and B first (they broke the flight), then H, C, D, E, F, G; I once its data source is settled. **To check afterwards:** the same flight
+again, with TESTFLUG.md.
+
 ### Later versions (agreed, in rough order)
 
 26. *(Moved into Milestone 4: native SimConnect is S1–S2, the traffic parts T1–T4.)* Still later: the Facilities API
