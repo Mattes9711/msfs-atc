@@ -14,6 +14,7 @@ from atc.sim.traffic import M_PER_NM, Traffic
 from atc.flightplan.route import spoken_sid
 from atc.intent.schema import Intent
 from atc.phraseology import spoken
+from atc.phraseology.farewell import farewell
 from atc.phraseology.taxi import route_hold_short, route_names, taxi_items
 from atc.sim.base import AircraftState
 from atc.controller.common import (APRON_RADIUS_M, AT_POINT_M, AT_STAND_M, FOLLOW_WITHIN_M, GIVE_WAY_AHEAD_M,
@@ -407,7 +408,18 @@ class GroundMixin:
                 and not self._off_apron(self.destination, state)):
             self.apron_in = True
             return self._ground_handoff(ground, apron, state)
-        return []
+        return self._parked_goodbye(state)
+
+    def _parked_goodbye(self, state: AircraftState) -> list[Response]:
+        """Stopped at its stand: the controller it is with says goodbye (Milestone 8, C6: nothing more came)."""
+        if (self.said_goodbye or self.call_next is not None
+                or state.ground_speed_kt > STOPPED_KT or not self._at_stand(self.destination, state)):
+            return []
+        station = self.station(self._ground_role())
+        if station is None:
+            return []
+        self.said_goodbye = True
+        return self._transmit(station, f"{self.cs}, {farewell(station.ident, station.name)}", state)
 
     def _runway_incursion(self, state: AircraftState) -> list[Response]:
         """On the ground past a holding position without a clearance for that runway: stop."""

@@ -100,6 +100,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin):
         self.apron_in = False  # Ground has handed the arrival over to Apron
         self.route_in: TaxiRoute | None = None
         self.stand_in: Parking | None = None
+        self.said_goodbye = False  # parked at the stand, the last controller has said goodbye
         self.waiting_since: tuple[str, float] | None = None  # (runway, time) stopped at its hold short
         self.hinted_crossings: set[str] = set()
         self.cleared_runways: set[tuple[str, str]] = set()  # (airport, designator) the aircraft may be on

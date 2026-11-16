@@ -1132,20 +1132,20 @@ B5. ✅ **After landing: "stop immediately, runway incursion 08L/26R", and one s
     "stop"; "stopping immediately" understood as an acknowledgement (it got "say again").
 
 **Part C — On the ground**
-C1. **"On holding point (runway 33)" not understood** (twice "say again"): a holding point report, like "holding
+C1. ✅ **"On holding point (runway 33)" not understood** (twice "say again"): a holding point report, like "holding
     short runway 33".
-C2. **Ground ↔ Tower ping-pong at the holding point.** Ground's "contact Tower" (after "holding short runway 33")
+C2. ✅ **Ground ↔ Tower ping-pong at the holding point.** Ground's "contact Tower" (after "holding short runway 33")
     was a plain redirect: the readback wasn't recognised ("continue taxi"), Tower sent the check-in back to Ground,
     and two minutes later Ground handed over again. Fix: that redirect is a handoff with a readback, and Tower
     accepts a check-in from an aircraft at or near the holding point.
-C3. **"request ground services" got no answer** (ATC always answers): "say again".
-C4. **A wrong turn right after the pushback got no reaction** (user). The watch only starts once the aircraft
+C3. ✅ **"request ground services" got no answer** (ATC always answers): "say again".
+C4. ✅ **A wrong turn right after the pushback got no reaction** (user). The watch only starts once the aircraft
     has been on its route; turning away before that is never noticed. Fix: also off the route when it moves away
     from the route's start without ever joining it.
-C5. **The holding point "didn't exist"** (user: it was on a taxiway that crosses runway 33). The departure holding
+C5. ✅ **The holding point "didn't exist"** (user: it was on a taxiway that crosses runway 33). The departure holding
     point was picked among all hold-short points near the threshold, crossing ones included. Fix: only a holding
     point whose taxiway leads onto the runway (not across it).
-C6. **At the gate nothing more came** (user: "just a bye from ATC"). Fix: parked at the stand, Apron or Ground says
+C6. ✅ **At the gate nothing more came** (user: "just a bye from ATC"). Fix: parked at the stand, Apron or Ground says
     goodbye.
 
 **Part D — Co-pilot** ("macht gar nichts")

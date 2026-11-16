@@ -3,6 +3,7 @@ destination, the sequence, traffic information and the landing; part C: on the g
 from dataclasses import replace
 
 from atc.intent.parser import parse
+from atc.phraseology.farewell import farewell
 from tests.test_air_flow import MUNICH_TOWER
 from tests.test_approach_sequence import in_pattern
 from tests.test_ground_flow import Session
@@ -184,3 +185,27 @@ def test_an_unknown_request_gets_say_again(eddh, eddm):
 
     s = taxiing(eddh, eddm)
     assert s.say(GROUND, "Lufthansa 4AB request ground services") == [f"{CS}, say again"]
+
+
+def test_parked_at_the_stand_apron_says_goodbye(eddh, eddm):
+    """C6: at the gate nothing more came (user: "just a bye from ATC")."""
+    from tests.test_apron import APRON, MUNICH_GROUND
+    from tests.test_air_flow import cleared_for_takeoff
+
+    s = cleared_for_takeoff(eddh, eddm)
+    s.atc.phase = "vacating"
+    s.atc.cleared_runways.add(s.atc._runway_key(eddm, s.atc.arrival_runway))
+    s.sim.landed(eddm, eddm.runway_end(s.atc.arrival_runway))
+    s.say(MUNICH_GROUND, "Munich Ground, Lufthansa 4AB, request taxi to the gate")
+    s.atc.pending = ()
+    stand = s.atc.stand_in
+    s.sim.update(lat=stand.lat, lon=stand.lon, ground_speed_kt=10)
+    assert s.tick() == [f"{CS}, contact Munich Apron one two one decimal seven one zero"]
+    s.say(MUNICH_GROUND, "contact Munich Apron 121.710, Lufthansa 4AB")
+    assert s.tick() == []  # not yet with Apron: nobody to say goodbye
+    s.say(APRON, "Munich Apron, Lufthansa 4AB, with you")
+    assert s.tick() == []  # still rolling onto the stand
+    s.sim.update(ground_speed_kt=0)
+    assert s.tick() == [f"{CS}, {farewell('EDDM', 'Munich Apron')}"]
+    assert s.tick() == []  # once
+
