@@ -55,3 +55,11 @@ def test_the_licence_list_covers_the_gpl_voice():
     packages = build.runtime_packages()
     assert "piper-tts" in packages and "faster-whisper" in packages and "pytest" not in packages
     assert (ROOT / "LICENSE").read_text(encoding="utf-8").lstrip().startswith("GNU GENERAL PUBLIC LICENSE")
+
+
+def test_the_window_loads_from_a_downloaded_zip():
+    # Unzipped from the download, every file is marked "from the internet"; without this .NET won't load pythonnet
+    # and the WebView2 DLLs, and the app opens in the browser instead of its window (found 2026-11-16)
+    config = (ROOT / "packaging" / "MSFS ATC.exe.config").read_text(encoding="utf-8")
+    assert '<loadFromRemoteSources enabled="true"/>' in config
+    assert '"MSFS ATC.exe.config"' in (ROOT / "packaging" / "build.py").read_text(encoding="utf-8")

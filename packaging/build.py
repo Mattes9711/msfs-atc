@@ -94,6 +94,8 @@ def main() -> int:
     internal_readme.unlink()
     (APP / "README.txt").write_text(readme, encoding="utf-8")
     shutil.copyfile(ROOT / "LICENSE", APP / "LICENSE.txt")
+    # Next to the .exe, so .NET loads the window's DLLs although the downloaded zip marked them "from the internet"
+    shutil.copyfile(ROOT / "packaging" / "MSFS ATC.exe.config", APP / "MSFS ATC.exe.config")
     (APP / "THIRD_PARTY_LICENSES.txt").write_text(third_party_licences(), encoding="utf-8")
     if args.simconnect:
         shutil.copyfile(args.simconnect, APP / "SimConnect.dll")
