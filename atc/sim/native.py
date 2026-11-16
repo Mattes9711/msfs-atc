@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from atc import paths
+from atc.sim.msfs_addons import addons, exe_xml_files
 
 # SIMCONNECT_RECV_ID: what kind of message GetNextDispatch returned
 RECV_EXCEPTION, RECV_OPEN, RECV_QUIT, RECV_SIMOBJECT_DATA, RECV_SIMOBJECT_DATA_BYTYPE = 1, 2, 3, 8, 9
@@ -39,17 +40,46 @@ HEADER = struct.Struct("<3I")  # dwSize, dwVersion, dwID
 OBJECT_DATA = struct.Struct("<3I7I")  # header + request, object, define, flags, entry, out of, define count
 SIZES = {FLOAT64: 8, STRING32: 32, STRING256: 256}
 
-NOT_FOUND = ("SimConnect.dll was not found. It comes with the MSFS SDK (free: MSFS Developer Mode → Help → SDK "
-             "Installer); or set simconnect_dll in settings.toml to its path")
+NOT_FOUND = ("SimConnect.dll was not found: not from the MSFS SDK, nor from an add-on that brings one along (GSX, "
+             "the programs MSFS starts). Install the MSFS SDK (free: MSFS Developer Mode → Help → SDK Installer), or "
+             "set its path in Settings → Simulator")
 
 
 class SimConnectError(OSError):
     pass
 
 
+SDK_FOLDERS = (Path("C:/MSFS SDK"), Path("C:/MSFS 2024 SDK"))  # the SDK installer's default folders
+PE_AMD64 = 0x8664
+
+
+def is_64bit(path: Path) -> bool:
+    """A 64-bit Windows DLL (the app is 64-bit and can't load a 32-bit one)."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(4096)
+        pe = struct.unpack_from("<I", head, 0x3C)[0]
+        return head[pe:pe + 4] == b"PE\0\0" and struct.unpack_from("<H", head, pe + 4)[0] == PE_AMD64
+    except (OSError, struct.error):
+        return False
+
+
+def known_places() -> list[Path]:
+    """SimConnect.dll copies already on the PC (2026-11-16): the SDK's default folders, and the ones other add-ons
+    bring along: the folders of the programs in MSFS's EXE.xml, GSX's Couatl. Whether the DLL may be shipped is
+    unclear (BUILD.md), so the app never ships it; it only uses a copy where it already is."""
+    places = [folder / "SimConnect SDK" / "lib" / "SimConnect.dll" for folder in SDK_FOLDERS]
+    for xml in exe_xml_files():
+        places += [program.parent / "SimConnect.dll" for _, program in addons(xml)]
+    if program_files := os.environ.get("ProgramFiles(x86)"):
+        places.append(Path(program_files) / "Addon Manager" / "couatl" / "SimConnect.dll")  # GSX
+    return places
+
+
 def find_dll(setting: Path | None = None) -> Path:
     """Where SimConnect.dll is, in this order: the settings, next to the app (a release build), the MSFS SDK (its
-    installer sets MSFS_SDK / MSFS2024_SDK), the Python-SimConnect package of older installs."""
+    installer sets MSFS_SDK / MSFS2024_SDK), the Python-SimConnect package of older developer installs, copies other
+    add-ons brought along (known_places, 64-bit only)."""
     candidates = [setting] if setting and setting != Path() else []
     if getattr(sys, "frozen", False):  # the release build: next to "MSFS ATC.exe"
         candidates.append(Path(sys.executable).parent / "SimConnect.dll")
@@ -59,6 +89,7 @@ def find_dll(setting: Path | None = None) -> Path:
             candidates.append(Path(sdk) / "SimConnect SDK" / "lib" / "SimConnect.dll")
     if (spec := importlib.util.find_spec("SimConnect")) and spec.origin:  # the package isn't imported, only found
         candidates.append(Path(spec.origin).parent / "SimConnect.dll")
+    candidates += [place for place in known_places() if place.is_file() and is_64bit(place)]
     for path in candidates:
         if path.is_file():
             return path

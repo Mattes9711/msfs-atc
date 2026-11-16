@@ -21,9 +21,10 @@ downloaded on the first start with progress and loads; push-to-talk gets ready; 
 **Open before publishing:**
 - **Where to publish:** the GPL needs the source code with it (a public repository, the release next to it).
   `--source-url` puts its address into README.txt.
-- **SimConnect.dll:** not in the build. Today the developer's comes from the old Python-SimConnect package in
-  `.venv`, which the build doesn't have: without the DLL next to the .exe (`--simconnect`), the MSFS SDK or the
-  path in Settings, the .exe can't connect to MSFS. Check the MSFS SDK licence on shipping it.
+- **SimConnect.dll:** not in the build: whether the MSFS SDK licence allows shipping it is unclear (developers
+  asked on Microsoft's own forum without an answer; an old ACES answer was no). Since 2026-11-16 `find_dll()` also
+  uses a 64-bit copy another add-on already put on the PC: the folders of the programs in MSFS's EXE.xml, GSX's
+  Couatl, the SDK's default folders.
 - **Installer** (Inno Setup, outline below) or the zip only; **code signing** against virus-scanner warnings.
 - **FFmpeg's licence text** (LGPL, its DLLs come with PyAV in `_internal/av.libs`) is not in
   THIRD_PARTY_LICENSES.txt yet.

@@ -34,7 +34,8 @@ Get `MSFS-ATC-<version>-win64.zip` from the [Releases](../../releases), unzip it
 
 - Windows 10 or 11, 64-bit, with the Microsoft Edge WebView2 Runtime
 - MSFS 2020, and Little Navmap with its MSFS database built
-- `SimConnect.dll` from the MSFS SDK (or its path in Settings > Simulator)
+- `SimConnect.dll`: found by itself in the MSFS SDK or with an add-on that brings one (GSX, or a program MSFS
+  starts with itself); otherwise install the MSFS SDK or set its path in Settings > Simulator
 - a microphone and a push-to-talk key or button
 
 On the first start it downloads the speech model (about 0.5 GB) and the voices (about 140 MB).

@@ -5,36 +5,21 @@ sim. A second copy exits by itself when one already runs (its README), so the ap
 is: the path in Settings, else the entry LiveTraffic writes into MSFS's EXE.xml ("Start with the simulator"). The
 app never ships or downloads LiveTraffic.
 """
-import os
 import subprocess
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Callable
 
 from atc.config import Config
+from atc.sim.msfs_addons import addons, exe_xml_files
 
 EXE_NAME = "LiveTraffic MSFS.exe"
 
 
-def exe_xml_files() -> list[Path]:
-    """Where MSFS keeps EXE.xml: Microsoft Store and Steam, 2020 and 2024."""
-    local, roaming = Path(os.environ.get("LOCALAPPDATA", "")), Path(os.environ.get("APPDATA", ""))
-    return [local / "Packages" / "Microsoft.FlightSimulator_8wekyb3d8bbwe" / "LocalCache" / "EXE.xml",
-            local / "Packages" / "Microsoft.Limitless_8wekyb3d8bbwe" / "LocalCache" / "EXE.xml",
-            roaming / "Microsoft Flight Simulator" / "EXE.xml",
-            roaming / "Microsoft Flight Simulator 2024" / "EXE.xml"]
-
-
 def from_exe_xml(path: Path) -> Path | None:
     """LiveTraffic's program path from one EXE.xml, or None."""
-    try:
-        root = ET.fromstring(path.read_bytes())
-    except (OSError, ET.ParseError):
-        return None
-    for addon in root.iter("Launch.Addon"):
-        exe = (addon.findtext("Path") or "").strip()
-        if exe.lower().endswith(EXE_NAME.lower()) or "livetraffic" in (addon.findtext("Name") or "").lower():
-            return Path(exe)
+    for name, program in addons(path):
+        if program.name.lower() == EXE_NAME.lower() or "livetraffic" in name.lower():
+            return program
     return None
 
 

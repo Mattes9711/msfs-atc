@@ -15,8 +15,9 @@ What you need
 - Microsoft Flight Simulator 2020.
 - Little Navmap with its MSFS database built (Little Navmap: Scenery Library > Load Scenery Library). MSFS ATC reads
   the airports, taxiways and frequencies of your own scenery from it.
-- SimConnect.dll: if it is not next to "MSFS ATC.exe", MSFS ATC looks for the MSFS SDK (free: MSFS Developer Mode >
-  Help > SDK Installer), or you set its path in Settings > Simulator.
+- SimConnect.dll (Microsoft's, not included): MSFS ATC finds it by itself in the MSFS SDK or with an add-on that
+  brings one along (GSX, or a program MSFS starts with itself). If it says it can't find one, install the MSFS SDK
+  (free: MSFS Developer Mode > Help > SDK Installer), or set its path in Settings > Simulator.
 - A microphone, and a key or joystick button for push-to-talk (Settings > Controls).
 
 

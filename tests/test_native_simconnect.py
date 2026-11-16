@@ -115,6 +115,7 @@ def nowhere(monkeypatch, tmp_path):
     """No DLL anywhere: an empty app folder, no SDK, no Python-SimConnect package."""
     monkeypatch.setattr(native.paths, "resources", lambda: tmp_path / "app")
     monkeypatch.setattr(native.importlib.util, "find_spec", lambda name: None)
+    monkeypatch.setattr(native, "known_places", lambda: [])  # nor another add-on's copy on this PC (GSX has one)
     for var in ("MSFS_SDK", "MSFS2024_SDK"):
         monkeypatch.delenv(var, raising=False)
     return tmp_path
@@ -141,3 +142,42 @@ def test_dll_search_order(nowhere, monkeypatch):
 def test_a_missing_dll_is_a_clear_message(nowhere):
     with pytest.raises(SimUnavailable, match="SimConnect.dll was not found"):
         SimConnectSource()
+
+
+def pe(path, machine):
+    """A file with just enough of a Windows DLL header to tell its bitness."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    head = bytearray(512)
+    head[:2] = b"MZ"
+    struct.pack_into("<I", head, 0x3C, 0x80)
+    head[0x80:0x84] = b"PE\0\0"
+    struct.pack_into("<H", head, 0x84, machine)
+    path.write_bytes(bytes(head))
+    return path
+
+
+def test_another_addons_64_bit_copy_is_used_last(nowhere, monkeypatch):
+    gsx32 = pe(nowhere / "couatl32" / "SimConnect.dll", 0x14C)
+    gsx = pe(nowhere / "couatl" / "SimConnect.dll", 0x8664)
+    monkeypatch.setattr(native, "known_places", lambda: [nowhere / "none" / "SimConnect.dll", gsx32, gsx])
+    assert native.is_64bit(gsx) and not native.is_64bit(gsx32)
+    assert find_dll() == gsx  # the 32-bit one is skipped: the app can't load it
+    sdk = dll_at(nowhere / "sdk" / "SimConnect SDK" / "lib" / "SimConnect.dll")
+    monkeypatch.setenv("MSFS_SDK", str(nowhere / "sdk"))
+    assert find_dll() == sdk  # the SDK comes first
+
+
+def test_the_addons_in_msfs_exe_xml(tmp_path, monkeypatch):
+    from atc.sim import msfs_addons
+
+    xml = tmp_path / "EXE.xml"
+    xml.write_text(r"""<SimBase.Document><Launch.Addon><Name>Couatl</Name>
+        <Path>C:\Addon Manager\couatl64\couatl64_boot.exe</Path></Launch.Addon>
+        <Launch.Addon><Name>Broken</Name></Launch.Addon></SimBase.Document>""", encoding="utf-8")
+    assert msfs_addons.addons(xml) == [("Couatl", native.Path(r"C:\Addon Manager\couatl64\couatl64_boot.exe"))]
+    assert msfs_addons.addons(tmp_path / "missing.xml") == []
+    monkeypatch.setattr(native, "exe_xml_files", lambda: [xml])
+    monkeypatch.setenv("ProgramFiles(x86)", r"C:\PF86")
+    places = [str(p) for p in native.known_places()]
+    assert r"C:\Addon Manager\couatl64\SimConnect.dll" in places
+    assert r"C:\PF86\Addon Manager\couatl\SimConnect.dll" in places
