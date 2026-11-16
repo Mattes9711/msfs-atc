@@ -1149,9 +1149,12 @@ C6. ✅ **At the gate nothing more came** (user: "just a bye from ATC"). Fix: pa
     goodbye.
 
 **Part D — Co-pilot** ("macht gar nichts")
-D1. He had the radio from 13:14 and didn't read back Berlin's "contact Frankfurt" in 45 s. One cause found (A3);
+D1. ✅ He had the radio from 13:14 and didn't read back Berlin's "contact Frankfurt" in 45 s. One cause found (A3);
     the Berlin → Frankfurt case itself still to be reproduced. Fix A3, then a test of the whole flight in the live
-    loop, gate to gate, with the co-pilot on.
+    loop, gate to gate, with the co-pilot on. Reproduced there (`tests/test_copilot_flight.py`): at a Center →
+    Center handoff the new sector was already "the Center", so the old one, waiting for the readback, was nobody;
+    the co-pilot saw only a check-in due on a frequency he hadn't tuned, and waited for good. The previous Center
+    is now kept.
 
 **Part E — GSX**
 E1. **"GSX: its menu did not open"** for the pushback (12:35) and the deboarding (14:04), although the check

@@ -81,6 +81,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin):
         self.descent_given = False
         self.centers = centers or CenterSectors()
         self.center: Station | None = None  # Center controller in charge while en route; None = no radar service
+        self.previous_center: Station | None = None  # the one before: it waits for the readback of its "contact"
         self.placeholder_warned: set[CenterSector] = set()
         self.pending: tuple[rb.Item, ...] = ()  # issued, not yet correctly read back
         self.pending_key: tuple[str, str] | None = None  # station that issued them
@@ -268,7 +269,9 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin):
         return self._station_by_key(self.pending_key) if self.pending and self.pending_key else None
 
     def _station_by_key(self, key) -> Station | None:
-        candidates = [self.station(role) for role in ROLES] + [self.center]
+        # The previous Center too (D1): it handed over and waits for the readback, while self.center is already the
+        # next one; without it the co-pilot saw no readback due, only a check-in, and never tuned: stuck for good
+        candidates = [self.station(role) for role in ROLES] + [self.center, self.previous_center]
         return next((s for s in candidates if s is not None and s.key == key), None)
 
     def current_airport(self) -> Airport:

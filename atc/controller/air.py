@@ -154,7 +154,7 @@ class AirMixin:
                              f"{format_khz(station.freq.khz)} for radar service", spoken=False)]
         if sender is not None and station.key == sender.key:
             return []
-        self.center = station
+        self.previous_center, self.center = self.center, station
         return self._hand_over(sender, station, "enroute", state)
 
     def _radar_service_terminated(self, sender: Station | None, state: AircraftState) -> list[Response]:
