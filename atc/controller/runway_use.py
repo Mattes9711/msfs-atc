@@ -51,7 +51,11 @@ class RunwayUse:
         departed = list(self.departures.get(airport.ident, ()))
         own, other = (departed, landed) if kind == "departure" else (landed, departed)
         if len(own) >= MIN_VOTES:
-            return _most_used(own)  # the very runway: at EDDM departures use 08L/26R, arrivals 08R/26L
+            best = _most_used(own)  # the very runway: at EDDM departures use 08L/26R, arrivals 08R/26L
+            counts = Counter(own)
+            if preferred and counts[preferred] >= counts[best]:
+                return preferred  # a tie keeps the runway (the test flight: 26R → 26L → 26R in 7 s)
+            return best
         if len(other) >= MIN_VOTES:
             end = _most_used(other)  # only its direction counts: our runway that way, if it is one
             if preferred:

@@ -18,7 +18,8 @@ INSTRUCTION_ACK = re.compile(r"\bapproved\b|\bcontinu(?:e|ing)\b|\bpushing back\
                              r"|\bident\b|\bin sight\b|\blooking (?:out)?\b|\bno contact\b"
                              r"|\bhold(?:ing)? position\b"  # "hold position, traffic passing behind"
                              r"|\bgiv(?:e|ing) way\b|\bfollow(?:ing)?\b")  # "give way to / follow the Airbus"
-ACKNOWLEDGE = re.compile(r"\b(roger|wilco|affirm|affirmative|negative|copied|standby|stand by)\b")
+ACKNOWLEDGE = re.compile(r"\b(roger|wilco|affirm|affirmative|negative|copied|standby|stand by"
+                         r"|stopping(?: immediately)?)\b")  # "Lufthansa 758 stopping immediately" (B5)
 
 
 def parse(text: str, expected_callsign: str | None = None) -> Intent:

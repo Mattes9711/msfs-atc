@@ -8,20 +8,20 @@ from atc.airspace.centers import PLACEHOLDER, CenterSector
 from atc.controller import readback as rb
 from atc.controller.give_way import traffic_name
 from atc.controller import wake
-from atc.sim.traffic import Traffic
+from atc.sim.traffic import M_PER_NM, Traffic
 from atc.flightplan.route import first_fix, spoken_star
 from atc.flightplan.track import track_to_go_nm
 from atc.intent.schema import Intent
 from atc.phraseology import spoken
 from atc.sim.base import AircraftState
 from atc.units import format_khz
-from atc.controller.common import (APPROACH_SPEED_KT, CENTER_HANDOFF_FT, CENTER_HANDOFF_NM, CLOSING_KT,
-                                   DEPARTURE_CEILING_FL, DESCENT_ALTITUDE_FT, DESCENT_FL, DESCENT_LEAD_NM,
-                                   DESCENT_MARGIN_NM,
-                                   DIRECT_MAX_NM, SHORTCUTS, SHORTCUT_MIN_NM, FINAL_CONE_DEG, FINAL_CONE_NM, FINAL_FIX_NM, FINAL_SPEED_KT,
-                                   GAP_SHRINK_NM, INTERCEPT_ANGLE, INTERCEPT_WITHIN_NM, MAX_FL, ON_COURSE_DEG,
-                                   PATTERN_AGL_FT, PATTERN_NM, SPACING_SPEED_KT, SPEED_CONTROL_UNTIL_NM,
-                                   VECTOR_POINT_NM, VFR_SQUAWK, Response, Station, center_station)
+from atc.controller.common import (APPROACH_SPEED_KT, CENTER_HANDOFF_FT, CENTER_HANDOFF_NM, CLOSE_PARALLEL_M,
+                                   CLOSING_KT, DEPARTURE_CEILING_FL, DESCENT_ALTITUDE_FT, DESCENT_FL, DESCENT_LEAD_NM,
+                                   DESCENT_MARGIN_NM, DIRECT_MAX_NM, FINAL_CONE_DEG, FINAL_CONE_NM, FINAL_FIX_NM,
+                                   FINAL_SPEED_KT, GAP_SHRINK_NM, INTERCEPT_ANGLE, INTERCEPT_WITHIN_NM, MAX_FL,
+                                   ON_COURSE_DEG, PATTERN_AGL_FT, PATTERN_NM, SHORTCUTS, SHORTCUT_MIN_NM,
+                                   SPACING_SPEED_KT, SPEED_CONTROL_UNTIL_NM, VECTOR_POINT_NM, VFR_SQUAWK, Response,
+                                   Station, center_station)
 
 
 class AirMixin:
@@ -260,7 +260,7 @@ class AirMixin:
     def _approach_clearance(self, station: Station, state: AircraftState, intercept: bool = False) -> list[Response]:
         """Cleared for the approach: after vectors with a turn onto the localizer (30 degrees to the course, from the
         side the aircraft is on) and the final speed; straight in when already on final."""
-        self.phase = "approach"
+        self.phase, self.approach_cleared = "approach", True
         end, course, _, offset = self._final_geometry(state)
         approach_type = "ILS" if end.ils else "RNAV"
         cleared = rb.Item("runway", end.name, f"cleared {approach_type} approach runway {spoken.runway(end.name)}")
@@ -306,12 +306,28 @@ class AirMixin:
                 continue
             off = math.radians(bearing_deg(end.lat, end.lon, t.lat, t.lon) - outbound)
             along, across = max(3.0, dist * math.cos(off)), abs(dist * math.sin(off))
+            if self._for_a_parallel(end, t, across):
+                continue  # flying the pattern for the other runway (B2: EDDM 26R's arrivals made us "number six")
             track = math.hypot(along - dist * math.cos(off), across) + along
             if track < ours:
                 turn = abs((t.heading_true - end.heading_true + 540) % 360 - 180)
                 where = "final" if turn <= 45 else "downwind" if turn >= 135 else "base"
                 ahead.append((track, t, where))
         return sorted(ahead, key=lambda a: -a[0])
+
+    def _for_a_parallel(self, end, t: Traffic, across_nm: float) -> bool:
+        """Nearer to the extended centreline of another runway end pointing the same way (an independent parallel,
+        not a close one under CLOSE_PARALLEL_M) than to ours: it will land there."""
+        for rwy in self.destination.runways:
+            for other in rwy.ends:
+                if other.name == end.name or abs((other.heading_true - end.heading_true + 540) % 360 - 180) > 30:
+                    continue
+                apart = _line_distance_nm(end, other.lat, other.lon) * M_PER_NM
+                if apart < CLOSE_PARALLEL_M:
+                    continue
+                if _line_distance_nm(other, t.lat, t.lon) < across_nm:
+                    return True
+        return False
 
     def _sequence(self, state: AircraftState) -> str | None:
         """"number two, traffic to follow Lufthansa Airbus on four mile final" (L6), or None with nobody ahead.
@@ -325,6 +341,8 @@ class AirMixin:
         name = traffic_name(t.callsign, t.airline, t.model).removeprefix("the ")
         number = spoken.digits(len(ahead) + 1)
         position = f"{spoken.digits(max(1, round(nm)))} mile final" if where == "final" else where
+        if name == "traffic":  # no airline or type known: not "traffic to follow traffic on downwind" (B3)
+            return f"number {number}, traffic to follow on {position}"
         return f"number {number}, traffic to follow {name} on {position}"
 
     def _speed_control(self, state: AircraftState) -> list[Response]:
@@ -356,7 +374,7 @@ class AirMixin:
         return self._transmit(station, f"{self.cs}, reduce to final approach speed, traffic ahead", state)
 
     def _direct_approach_clearance(self, station: Station, sequence: str = "") -> list[Response]:
-        self.phase = "approach"
+        self.phase, self.approach_cleared = "approach", True
         end = self.destination.runway_end(self.arrival_runway)
         approach_type = "ILS" if end.ils else "RNAV"
         altitude = -(-(int(self.destination.elevation_ft) + 3000) // 100) * 100  # round up to 100 ft
@@ -369,3 +387,10 @@ class AirMixin:
                 f"runway {spoken.runway(end.name)}, " + rb.instruction_text(items))
         self._set_pending(items, station.key)
         return [self._say(station, text)]
+
+
+def _line_distance_nm(end, lat: float, lon: float) -> float:
+    """How far (lat, lon) is beside the infinite centreline through a runway end, in nm."""
+    dist = distance_nm(end.lat, end.lon, lat, lon)
+    off = math.radians(bearing_deg(end.lat, end.lon, lat, lon) - end.heading_true)
+    return abs(dist * math.sin(off))

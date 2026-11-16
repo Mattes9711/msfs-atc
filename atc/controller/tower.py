@@ -274,7 +274,7 @@ class TowerMixin:
         handoff = approach is not None and approach.key != station.key
         if handoff:
             items.append(rb.contact(approach.name, approach.freq.khz))
-        self.phase, self.vectoring = "arrival", None
+        self.phase, self.vectoring, self.approach_cleared = "arrival", None, False  # the runway may change again
         self.lowest_agl_on_final = float("inf")
         self.cleared_runways.discard(self._runway_key(dest, self.arrival_runway))
         self._set_pending(items, station.key, handoff_to=approach.key if handoff else None)

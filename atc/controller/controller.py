@@ -132,6 +132,9 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin):
         self.runway_change: str | None = None  # landing runway changed after the STAR was given: tell the pilot (B3)
         self.copilot_on = False  # the co-pilot has the radio (C2)
         self.direct_fix: str | None = None  # the last fix ATC cleared the aircraft direct to (A1)
+        self.approach_cleared = False  # cleared for the approach: the landing runway stays (B1)
+        self.landed_on: tuple[str, str] | None = None  # the runway the aircraft touched down on (B5)
+        self.traffic_info_at: float | None = None  # when the last traffic information was given (B4)
         self.shortcuts = 0  # Center's direct-tos given so far (A2)
         self.copilot_tries: tuple[str, int] = ("", 0)  # his last call and how often he made it
         self.landing_waiting: Station | None = None

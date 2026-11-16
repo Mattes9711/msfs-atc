@@ -413,8 +413,16 @@ class GroundMixin:
         airport, zones = self._ground_zones()
         rwy = zones.runway_at(state.lat, state.lon)
         key = (airport.ident, designator(rwy)) if rwy else None
+        if self.phase == "landing" and key is not None and self.landed_on is None:
+            # Touched down: the runway it rolls out on is its own, even another than cleared (B5: the test flight
+            # landed on 26R with the traffic, cleared for 26L, and got "stop immediately" while rolling out)
+            self.landed_on = key
+            if key not in self.cleared_runways:
+                self.cleared_runways.add(key)
+                return [Response(f"landed on runway {rwy.ends[0].name}/{rwy.ends[1].name}, not the runway cleared "
+                                 f"({self.arrival_runway})", spoken=False)]
         if self._arrived() and self.destination:
-            landed_on = self._runway_key(self.destination, self.arrival_runway)
+            landed_on = self.landed_on or self._runway_key(self.destination, self.arrival_runway)
             if key != landed_on:
                 self.cleared_runways.discard(landed_on)  # vacated: going back onto it needs a clearance
         if key is None or key in self.cleared_runways or key == self.incursion:

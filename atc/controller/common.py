@@ -48,6 +48,7 @@ GIVE_WAY_AHEAD_M = 300  # how much of our taxi route ahead ATC watches for traff
 FOLLOW_WITHIN_M = 200  # "follow the …" only for an aircraft this close ahead
 TURNED_DEG = 30  # a departure this far off the runway heading has turned away: the runway is ours (L5)
 CLOSE_PARALLEL_M = 760  # ICAO: parallel runways closer than this count as one for wake turbulence (B5)
+TRAFFIC_INFO_GAP_S = 60  # traffic information at most this often (B4)
 WAKE_CAUTION_S = 300  # "caution wake turbulence" behind a heavier departure up to this long after it
 LANDING_WAKE_S = 120  # … and after a heavier landing on our runway (B5)
 # Approach sequence (L6): speed control behind the aircraft ahead on final, not closer in than ICAO's 4 NM

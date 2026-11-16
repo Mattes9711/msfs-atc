@@ -2,7 +2,7 @@
 turbulence), the runways in use taken from the traffic, traffic information and the other pilots' radio calls.
 A part of Controller (atc/controller/controller.py), split off to keep the files short; it uses the controller's
 state through self."""
-from atc.airport.geo import distance_nm
+from atc.airport.geo import bearing_deg, distance_nm
 from atc.airport.model import Airport
 from atc.controller.give_way import traffic_name
 from atc.controller import wake
@@ -10,7 +10,7 @@ from atc.controller.traffic import TRAFFIC_FORGET_NM, runway_end_for, spoken_cal
 from atc.sim.traffic import Traffic
 from atc.phraseology import spoken
 from atc.sim.base import AircraftState
-from atc.controller.common import AIR_PHASES, PHASES, Response, Station, _wind
+from atc.controller.common import AIR_PHASES, PHASES, TRAFFIC_INFO_GAP_S, Response, Station, _wind
 
 
 class TrafficMixin:
@@ -48,8 +48,9 @@ class TrafficMixin:
 
     def _runways_from_traffic(self) -> list[Response]:
         """Real aircraft land and depart on the real runway: use it too, or ATC sends the pilot head-on into them.
-        Same limits as a new METAR: the departure runway only before the clearance, the arrival runway only before
-        the approach clearance."""
+        Same limits as a new METAR: the departure runway only before the clearance, the arrival runway until the
+        approach clearance (Milestone 8, B1: it froze at the first call to Approach, before the traffic near the
+        destination could be seen, and the test flight was sent to 26L while the traffic landed on 26R)."""
         notes = []
         end = self._traffic_runway(self.airport, "departure", self.runway) if self.phase == "clearance" else None
         if end and end != self.runway:
@@ -57,7 +58,8 @@ class TrafficMixin:
             self.atis.update(self.metar, self.runway)
             notes.append(Response(f"{self.airport.ident} runway in use now {end}, as the traffic uses it "
                                   f"(ATIS information {self.atis.letter})", spoken=False))
-        before_approach = self.destination is not None and PHASES.index(self.phase) < PHASES.index("approach")
+        before_approach = (self.destination is not None and not self.approach_cleared
+                           and PHASES.index(self.phase) <= PHASES.index("approach"))
         end = self._traffic_runway(self.destination, "arrival", self.arrival_runway) if before_approach else None
         if end and end != self.arrival_runway:
             before, self.arrival_runway = self.arrival_runway, end
@@ -144,11 +146,20 @@ class TrafficMixin:
         station = self.expected_station()
         if station is None:
             return []
+        now = self.traffic_clock
+        if now is not None and self.traffic_info_at is not None and now - self.traffic_info_at < TRAFFIC_INFO_GAP_S:
+            return []  # at most one a minute (B4: three in 20 s on the test flight's final)
         heading_true = (state.heading_mag + self.current_airport().mag_var) % 360
+        near_airport = self.phase in ("final", "landing")
         for t in sorted(here, key=lambda t: distance_nm(state.lat, state.lon, t.lat, t.lon)):
             if t.object_id in self.traffic_told:
                 continue
+            behind = abs((bearing_deg(state.lat, state.lon, t.lat, t.lon) - heading_true + 540) % 360 - 180) > 110
+            s = self.picture.states.get(t.object_id)
+            if near_airport and (behind or (s and s.kind in ("final", "departing", "on_runway"))):
+                continue  # on final: not the traffic behind, nor the airport's own landing and departing traffic
             if info := traffic_information(t, state.lat, state.lon, state.alt_msl_ft, heading_true):
                 self.traffic_told.add(t.object_id)
+                self.traffic_info_at = now
                 return self._transmit(station, f"{self.cs}, {info}", state)
         return []
