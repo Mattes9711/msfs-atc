@@ -20,9 +20,11 @@ def to_go_from_each(points: list[tuple[float, float]]) -> list[float]:
 
 
 def track_to_go_nm(waypoints: tuple[Waypoint, ...], destination: tuple[float, float], lat: float,
-                   lon: float) -> float:
+                   lon: float, direct: str | None = None) -> float:
     """Nautical miles still to fly from (lat, lon) along the route to the destination; straight there without a
-    route."""
+    route. `direct`: a fix ATC cleared the aircraft direct to (Milestone 8, A1: after "proceed direct Landu" the
+    route via the points it skips no longer counts, and the descent never came): straight to it, then the route
+    from there. Whichever is shorter counts, so it also stays right once the fix is passed."""
     points = [(w.lat, w.lon) for w in waypoints] + [destination]
     if len(points) == 1:
         return distance_nm(lat, lon, *destination)
@@ -30,4 +32,8 @@ def track_to_go_nm(waypoints: tuple[Waypoint, ...], destination: tuple[float, fl
     proj = LocalProjection(lat, lon)
     here, xy = proj.xy(lat, lon), [proj.xy(*p) for p in points]
     leg = min(range(len(points) - 1), key=lambda i: point_segment_distance(here, xy[i], xy[i + 1]))
-    return distance_nm(lat, lon, *points[leg + 1]) + rest[leg + 1]
+    along = distance_nm(lat, lon, *points[leg + 1]) + rest[leg + 1]
+    fix = next((i for i, w in enumerate(waypoints) if w.ident == direct), None)
+    if fix is None:
+        return along
+    return min(along, distance_nm(lat, lon, *points[fix]) + rest[fix])

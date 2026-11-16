@@ -131,6 +131,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin):
         self.speed_gap = 0.0  # the gap to it when we were last told to slow down
         self.runway_change: str | None = None  # landing runway changed after the STAR was given: tell the pilot (B3)
         self.copilot_on = False  # the co-pilot has the radio (C2)
+        self.direct_fix: str | None = None  # the last fix ATC cleared the aircraft direct to (A1)
+        self.shortcuts = 0  # Center's direct-tos given so far (A2)
         self.copilot_tries: tuple[str, int] = ("", 0)  # his last call and how often he made it
         self.landing_waiting: Station | None = None
         self.crossing_waiting: tuple[Station, Airport, str] | None = None  # (station, airport, runway as said)
@@ -316,6 +318,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin):
         if self.phase in ("climb", "enroute"):
             role = "center" if self.phase == "enroute" else "departure"
             en_route = self.station(role)  # None after "radar service terminated"
+            if self.call_next is not None:
+                return []  # handed over, not called yet: the new controller can't instruct yet (A3)
             if (not self.descent_given and en_route
                     and self._track_to_go_nm(state) <= self._top_of_descent_nm(state)):
                 return self._descent(en_route, state)
@@ -486,6 +490,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin):
         self.pending_heard = True  # set False by _transmit when the pilot wasn't tuned to hear it
         self.handoff_to = handoff_to
         for item in items:  # the last level or altitude given, for the status display
+            if item.key == "direct":
+                self.direct_fix = item.value  # the track miles to go follow it (A1)
             if item.key == "flight_level":
                 self.cleared_level = f"FL{item.value:03d}"
             elif item.key == "altitude_ft":

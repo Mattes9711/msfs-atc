@@ -18,7 +18,7 @@ from atc.units import format_khz
 from atc.controller.common import (APPROACH_SPEED_KT, CENTER_HANDOFF_FT, CENTER_HANDOFF_NM, CLOSING_KT,
                                    DEPARTURE_CEILING_FL, DESCENT_ALTITUDE_FT, DESCENT_FL, DESCENT_LEAD_NM,
                                    DESCENT_MARGIN_NM,
-                                   DIRECT_MAX_NM, FINAL_CONE_DEG, FINAL_CONE_NM, FINAL_FIX_NM, FINAL_SPEED_KT,
+                                   DIRECT_MAX_NM, SHORTCUTS, SHORTCUT_MIN_NM, FINAL_CONE_DEG, FINAL_CONE_NM, FINAL_FIX_NM, FINAL_SPEED_KT,
                                    GAP_SHRINK_NM, INTERCEPT_ANGLE, INTERCEPT_WITHIN_NM, MAX_FL, ON_COURSE_DEG,
                                    PATTERN_AGL_FT, PATTERN_NM, SPACING_SPEED_KT, SPEED_CONTROL_UNTIL_NM,
                                    VECTOR_POINT_NM, VFR_SQUAWK, Response, Station, center_station)
@@ -77,12 +77,28 @@ class AirMixin:
         cleared, cruise = self._cleared_ft(), self.plan.cruise_ft
         if cruise and (cleared is None or cleared < cruise) and not self.descent_given:
             items.append(rb.level(cruise // 100))
-        ahead = [w for w in self._route_ahead(state) if w.leg == "route"
-                 and distance_nm(state.lat, state.lon, w.lat, w.lon) <= DIRECT_MAX_NM]
-        if ahead:
-            items.append(rb.direct(ahead[-1].ident))
+        if fix := self._shortcut(state):
+            items.append(rb.direct(fix))
         self._set_pending(items, station.key)
         return [self._say(station, ", ".join([f"{self.cs}, {station.name}, identified", *(i.phrase for i in items)]))]
+
+    def _shortcut(self, state: AircraftState) -> str | None:
+        """A direct-to Center gives on the check-in, only as a real shortcut (Milestone 8, A2, the user: "1-2 real
+        shortcuts a flight"; the test flight got one at every check-in, Zucka and Landu twice): of the route points
+        ahead within DIRECT_MAX_NM the one that saves most against the way the aircraft flies now, at least
+        SHORTCUT_MIN_NM; at most SHORTCUTS a flight, never the fix already given, never into the STAR."""
+        if self.shortcuts >= SHORTCUTS or self.destination is None:
+            return None
+        dest = (self.destination.lat, self.destination.lon)
+        now = self._track_to_go_nm(state)
+        saved = {w.ident: now - track_to_go_nm(self.plan.waypoints, dest, state.lat, state.lon, w.ident)
+                 for w in self._route_ahead(state) if w.leg == "route" and w.ident != self.direct_fix
+                 and distance_nm(state.lat, state.lon, w.lat, w.lon) <= DIRECT_MAX_NM}
+        fix = max(saved, key=saved.get, default=None)
+        if fix is None or saved[fix] < SHORTCUT_MIN_NM:
+            return None
+        self.shortcuts += 1
+        return fix
 
     def _level_request(self, intent: Intent, station: Station, state: AircraftState) -> list[Response]:
         """"request higher" (to the cruise level) or "request flight level 370" (up or down)."""
@@ -164,7 +180,7 @@ class AirMixin:
     def _track_to_go_nm(self, state: AircraftState) -> float:
         """Along the planned route (SID, airways, STAR) to the destination; straight there without one."""
         return track_to_go_nm(self.plan.waypoints, (self.destination.lat, self.destination.lon),
-                              state.lat, state.lon)
+                              state.lat, state.lon, self.direct_fix)
 
     def _top_of_descent_nm(self, state: AircraftState) -> float:
         """Track miles to go at which the descent is given: DESCENT_LEAD_NM before the top of descent.

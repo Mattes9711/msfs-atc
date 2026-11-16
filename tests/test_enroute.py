@@ -24,16 +24,78 @@ def with_departure(eddh, eddm, plan=SIMBRIEF, sectors=SECTORS):
     return s
 
 
-def test_center_gives_the_rest_of_the_climb_and_a_shortcut(eddh, eddm):
+def test_center_gives_the_rest_of_the_climb_and_a_shortcut_only_when_it_is_one(eddh, eddm):
     s = with_departure(eddh, eddm)
     assert s.atc.pending[0].value == 240  # Departure: FL240 at most
     s.say(HAMBURG_APPROACH, "climb flight level 240, direct Amluh, Lufthansa 4AB")
     next_call(s, 3, 60)  # handed to North Radar
     [check_in] = s.say(NORTH, "North Radar, Lufthansa 4AB, with you, climbing flight level 240")
-    assert check_in.startswith(f"{CS}, North Radar, identified, climb flight level tree fife zero, proceed direct ")
-    fix = s.atc.pending[1].value
-    assert fix in {w.ident for w in SIMBRIEF.route_points()} and fix not in ("DENIX", "LANDU")  # a real shortcut
+    # On the straight line to Munich (the fake sim flies it) a direct would save next to nothing (A2)
+    assert check_in == f"{CS}, North Radar, identified, climb flight level tree fife zero"
+
+
+def detour_plan():
+    """The test flight's route with a long dogleg east before ZUCKA, so a direct to ZUCKA is a real shortcut."""
+    from atc.flightplan.model import Waypoint
+
+    points = list(SIMBRIEF.waypoints)
+    i = next(i for i, w in enumerate(points) if w.ident == "ZUCKA")
+    points.insert(i, Waypoint("DOGLG", 52.6, 12.5, "route"))
+    return replace(SIMBRIEF, waypoints=tuple(points))
+
+
+def test_a_real_shortcut_is_given_but_never_twice(eddh, eddm):
+    s = with_departure(eddh, eddm, plan=detour_plan())
+    s.say(HAMBURG_APPROACH, "climb flight level 240, direct Amluh, Lufthansa 4AB")
+    next_call(s, 3, 60)
+    [check_in] = s.say(NORTH, "North Radar, Lufthansa 4AB, with you, climbing flight level 240")
+    assert ", proceed direct " in check_in
+    fix = s.atc.pending[-1].value
+    assert fix in {w.ident for w in SIMBRIEF.route_points()} and fix != "DOGLG"
     assert confirmed(s.say(NORTH, f"climb flight level 350, direct {fix}, Lufthansa 4AB"))
+    assert s.atc._shortcut(s.sim.read()) is None  # the same fix again: no
+
+
+def test_at_most_two_shortcuts_a_flight(eddh, eddm):
+    s = with_departure(eddh, eddm, plan=detour_plan())
+    s.atc.shortcuts = 2
+    assert s.atc._shortcut(s.sim.read()) is None
+
+
+def test_the_descent_after_a_direct_to(eddh, eddm):
+    """The test flight: Frankfurt cleared direct Landu, and the descent never came: the track miles still went via
+    the points the direct skips (A1)."""
+    from atc.airport.geo import bearing_deg, destination_point, distance_nm
+    from atc.airspace.centers import CenterSectors
+    from atc.flightplan.track import track_to_go_nm
+
+    s = with_departure(eddh, eddm, sectors=CenterSectors())
+    s.say(HAMBURG_APPROACH, "climb flight level 350, direct Amluh, Lufthansa 4AB")
+    landu = next(w for w in SIMBRIEF.waypoints if w.ident == "LANDU")
+    aberu = next(w for w in SIMBRIEF.waypoints if w.ident == "ABERU")  # the route bends east via LULAR from here
+    munich = (eddm.lat, eddm.lon)
+    tod = s.atc._top_of_descent_nm(s.sim.read())
+    # Direct from ABERU to LANDU, cutting the bend: where the direct way is 1 nm short of the top of descent
+    after_landu = track_to_go_nm(SIMBRIEF.waypoints, munich, landu.lat, landu.lon)
+    out = tod - 1 - after_landu
+    lat, lon = destination_point(landu.lat, landu.lon, bearing_deg(landu.lat, landu.lon, aberu.lat, aberu.lon), out)
+    s.sim.update(lat=lat, lon=lon, alt_msl_ft=35000, alt_agl_ft=33500, on_ground=False, ground_speed_kt=450)
+    assert track_to_go_nm(SIMBRIEF.waypoints, munich, lat, lon) > tod  # the old way: still far from the TOD
+    s.atc.direct_fix = "LANDU"
+    assert s.tick()[0].startswith(f"{CS}, descend flight level one hundred")
+    assert distance_nm(lat, lon, *munich) < out + after_landu
+
+
+def test_no_instruction_before_the_check_in(eddh, eddm):
+    """Right after a handoff the next controller waits for the check-in before it instructs (A3)."""
+    s = with_departure(eddh, eddm)
+    s.say(HAMBURG_APPROACH, "climb flight level 240, direct Amluh, Lufthansa 4AB")
+    next_call(s, 3, 60)  # "contact North Radar"
+    s.say(HAMBURG_APPROACH, "contact North Radar 123.450, Lufthansa 4AB")
+    assert s.atc.call_next is not None
+    s.atc.descent_given = False
+    s.atc._top_of_descent_nm = lambda state: 10_000  # as if far past the top of descent
+    assert s.tick() == []  # nothing from North Radar until the pilot has called it
 
 
 def test_a_missing_direct_to_in_the_readback_is_asked_for(eddh, eddm):
