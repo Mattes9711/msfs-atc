@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from atc.airport.json_data import JsonAirportData
+from atc.airport import lnm_files
 from atc.airport.littlenavmap import LittleNavmapAirportData
 from atc.airport.model import Airport, AirportData, RunwayEnd
 from atc.airspace.centers import CenterSectors, CentersError, load_centers, with_imported
@@ -235,8 +236,10 @@ def origin_metar(mode: str, sim: SimSource, weather: WeatherSource, icao: str, w
 def airport_sources(config: Config) -> list[AirportData]:
     """Little Navmap first (matches the installed scenery), JSON as the offline/portable fallback."""
     sources: list[AirportData] = []
-    if config.littlenavmap_db.exists():
-        sources.append(LittleNavmapAirportData(config.littlenavmap_db))
+    if (db := lnm_files.find(config.littlenavmap_db)) is not None:
+        source = LittleNavmapAirportData(db)
+        source.name = lnm_files.describe(db)  # which scenery: "Little Navmap (MSFS 2024)"
+        sources.append(source)
     sources.append(JsonAirportData(config.airports_dir))
     return sources
 
@@ -245,10 +248,10 @@ def center_sectors(config: Config) -> CenterSectors:
     """The real sectors from the user's Little Navmap database, corrected by centers.json; without the database
     only centers.json."""
     own = load_centers(config.centers_file) if config.centers_file.exists() else CenterSectors()
-    if not config.littlenavmap_db.exists():
+    if (db := lnm_files.find(config.littlenavmap_db)) is None:
         return own
     try:
-        imported = load_littlenavmap_centers(config.littlenavmap_db)
+        imported = load_littlenavmap_centers(db)
     except (OSError, sqlite3.Error) as e:
         raise CentersError(f"Center sectors from Little Navmap: {e}") from None
     return with_imported(own, imported)

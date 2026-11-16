@@ -6,6 +6,7 @@ import pytest
 
 from atc.airspace.centers import CenterSectors, with_imported
 from atc.airspace.littlenavmap import area, decode_polygon, load_littlenavmap_centers, station_name
+from atc.airport import lnm_files
 from atc.config import Config
 from atc.session import center_sectors, describe_centers
 from tests.test_centers import CS, airborne, box, check_in, contact, next_call
@@ -100,8 +101,8 @@ def test_two_sectors_with_the_same_name_are_a_handoff(eddh, eddm, db):
     assert calls == [contact("Bremen Radar", 119825)]
 
 
-@pytest.mark.skipif(not Config().littlenavmap_db.exists(), reason="no Little Navmap database on this machine")
+@pytest.mark.skipif(lnm_files.find(Config().littlenavmap_db) is None, reason="no Little Navmap database here")
 def test_real_database_has_bremen_radar_over_hamburg():
-    sectors = CenterSectors(load_littlenavmap_centers(Config().littlenavmap_db))
+    sectors = CenterSectors(load_littlenavmap_centers(lnm_files.find(Config().littlenavmap_db)))
     bremen = sectors.at(53.63, 9.99, 20000)
     assert bremen.fir == "EDWW" and bremen.name == "Bremen Radar" and bremen.khz is not None

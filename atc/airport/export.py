@@ -9,6 +9,7 @@ import argparse
 from pathlib import Path
 
 from atc.airport.json_data import JsonAirportData
+from atc.airport import lnm_files
 from atc.airport.littlenavmap import LittleNavmapAirportData
 from atc.config import load_config
 
@@ -19,10 +20,10 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("idents", nargs="+", metavar="ICAO")
     p.add_argument("--out", type=Path, default=config.airports_dir)
     args = p.parse_args(argv)
-    if not config.littlenavmap_db.exists():
-        p.error(f"Little Navmap database not found: {config.littlenavmap_db}")
+    if (db := lnm_files.find(config.littlenavmap_db)) is None:
+        p.error(f"no Little Navmap database found in {lnm_files.folder()} (or set littlenavmap_db in settings.toml)")
 
-    source, target = LittleNavmapAirportData(config.littlenavmap_db), JsonAirportData(args.out)
+    source, target = LittleNavmapAirportData(db), JsonAirportData(args.out)
     for ident in args.idents:
         airport = source.get(ident)
         if airport is None:

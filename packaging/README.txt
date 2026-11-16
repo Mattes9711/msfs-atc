@@ -12,10 +12,12 @@ What you need
 -------------
 - Windows 10 or 11, 64-bit, with the Microsoft Edge WebView2 Runtime (part of Windows 11; for Windows 10 free
   from Microsoft). Without it the app opens in your normal browser instead.
-- Microsoft Flight Simulator 2020. MSFS 2024 is not tested yet: it connects the same way, but MSFS ATC doesn't
-  read Little Navmap's MSFS 2024 database yet, so the airports, taxiways and gates would not match your scenery.
+- Microsoft Flight Simulator 2020. MSFS 2024 is not tested yet: it connects the same way, and MSFS ATC reads
+  Little Navmap's MSFS 2024 database while MSFS 2024 runs (load the scenery library for MSFS 2024 in Little
+  Navmap 3.0.14 or newer first).
 - Little Navmap with its MSFS database built (Little Navmap: Scenery Library > Load Scenery Library). MSFS ATC reads
-  the airports, taxiways and frequencies of your own scenery from it.
+  the airports, taxiways and frequencies of your own scenery from it; with both MSFS 2020 and 2024, the database of
+  the one that runs.
 - SimConnect.dll (Microsoft's, not included): MSFS ATC finds it by itself in the MSFS SDK or with an add-on that
   brings one along (GSX, or a program MSFS starts with itself). If it says it can't find one, install the MSFS SDK
   (free: MSFS Developer Mode > Help > SDK Installer), or set its path in Settings > Simulator.

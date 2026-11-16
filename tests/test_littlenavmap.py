@@ -3,6 +3,7 @@ import sqlite3
 import pytest
 
 from atc.airport.json_data import airport_from_dict, airport_to_dict
+from atc.airport import lnm_files
 from atc.airport.littlenavmap import LittleNavmapAirportData
 from atc.config import Config
 
@@ -97,7 +98,7 @@ def test_json_eddh_has_parking(eddh):
     assert eddh.default_parking().is_gate
 
 
-@pytest.mark.skipif(not Config().littlenavmap_db.exists(), reason="no Little Navmap database on this machine")
+@pytest.mark.skipif(lnm_files.find(Config().littlenavmap_db) is None, reason="no Little Navmap database here")
 def test_real_database_matches_exported_json(eddh):
-    real = LittleNavmapAirportData(Config().littlenavmap_db).get("EDDH")
+    real = LittleNavmapAirportData(lnm_files.find(Config().littlenavmap_db)).get("EDDH")
     assert airport_from_dict(airport_to_dict(real)) == eddh

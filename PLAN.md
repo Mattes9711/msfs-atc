@@ -1072,6 +1072,15 @@ D8. ✅ **Redesign** (user: the layout of SayIntentions' desktop window, all in 
     cockpit displays: green active, cyan standby and what you can press, amber to do, red warning, on graphite.
     Their look, logo and names are not copied: the app will be published.
 
+D9. ✅ **Released** on GitHub (public, GPL-3.0): 0.1.0, 0.1.1 (the window from a downloaded zip: "MSFS ATC.exe.config"
+    with loadFromRemoteSources), 0.1.2 (SimConnect.dll found where other add-ons put one: GSX, EXE.xml programs,
+    the SDKs' default folders; shipping it is unclear by licence).
+D10. ✅ **MSFS 2024 (first step, untested):** a friend on MSFS 2024 got "SimConnect.dll was not found" and "unknown
+    airport". The Little Navmap database is now found by itself (`atc/airport/lnm_files.py`): the one of the MSFS
+    that runs (FlightSimulator.exe / FlightSimulator2024.exe), else the one loaded last; a path in Settings wins.
+    The banner names it ("Little Navmap (MSFS 2024)"). SimConnect: the MSFS 2024 SDK's default folder is searched;
+    the message names the SDK of either sim. **To check with MSFS 2024:** everything.
+
 Next (user, 2026-11-16): a downloadable .exe. Still later: onboarding at the flight start (only flight information, "like VATSIM";
 paused by the user).
 

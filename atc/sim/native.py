@@ -41,8 +41,8 @@ OBJECT_DATA = struct.Struct("<3I7I")  # header + request, object, define, flags,
 SIZES = {FLOAT64: 8, STRING32: 32, STRING256: 256}
 
 NOT_FOUND = ("SimConnect.dll was not found: not from the MSFS SDK, nor from an add-on that brings one along (GSX, "
-             "the programs MSFS starts). Install the MSFS SDK (free: MSFS Developer Mode → Help → SDK Installer), or "
-             "set its path in Settings → Simulator")
+             "the programs MSFS starts). Install the SDK of your MSFS, 2020 or 2024 (free: Developer Mode → Help → "
+             "SDK Installer), or set its path in Settings → Simulator")
 
 
 class SimConnectError(OSError):
