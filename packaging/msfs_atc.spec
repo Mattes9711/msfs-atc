@@ -8,7 +8,8 @@ ROOT = Path(SPECPATH).parent
 
 datas = [
     (str(ROOT / "atc" / "app" / "static"), "atc/app/static"),  # the page, its fonts and icon
-    (str(ROOT / "data" / "centers.json"), "data"),  # our own rough Center boxes; NOT data/airports (licences)
+    (str(ROOT / "data" / "centers.json"), "data"),  # the (empty) corrections file; NOT data/airports (licences)
+    (str(ROOT / "data" / "centers_vatsim.json"), "data"),  # German Center sectors, CC BY-SA 4.0 (VATSIM data)
     (str(ROOT / "packaging" / "README.txt"), "."),
 ]
 binaries = []

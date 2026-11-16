@@ -1,6 +1,6 @@
 description: >
   En-route Center handoffs with test sectors across the route (test frequencies, not real ones): Departure to
-  North Radar, a PLACEHOLDER sector that gets no handoff, North to South Upper, the altitude band down to
+  North Radar, a sector without a known frequency that gets no handoff (and no message), North to South Upper, the altitude band down to
   South Radar, and South Radar to Munich Approach.
 plan: {callsign: DLH4AB, departure: EDDH, destination: EDDM, cruise: FL350, route: AMLU2G AMLUH M852 DENIX}
 metar:
@@ -37,8 +37,7 @@ steps:
   - North Radar, Lufthansa 4AB, with you, climbing flight level 240
   - comment: the first Center gives the rest of the climb
   - climb flight level 350, Lufthansa 4AB
-  - comment: Middle Radar's frequency is a PLACEHOLDER, so North Radar keeps us
-  - fly_until_call: [19, 330]
+  - comment: Middle Radar's frequency is not known, so North Radar keeps us, without a word
   - fly_until_call: [71, 330]
   - /com 132.600
   - South Upper Radar, Lufthansa 4AB, with you, flight level 350

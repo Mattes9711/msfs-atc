@@ -88,7 +88,7 @@ def test_the_session_reads_little_navmap_when_the_database_is_there(db, tmp_path
     with_db = center_sectors(Config(littlenavmap_db=db))
     assert with_db.source == "Little Navmap" and len(with_db.sectors) == 5
     without = center_sectors(Config(littlenavmap_db=tmp_path / "missing.sqlite"))
-    assert without.source == "centers.json" and without.placeholders  # the shipped file
+    assert without.source == "VATSIM data (Germany)" and not without.placeholders  # the shipped file
 
 
 def test_two_sectors_with_the_same_name_are_a_handoff(eddh, eddm, db):

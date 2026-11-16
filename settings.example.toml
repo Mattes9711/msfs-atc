@@ -3,7 +3,7 @@
 # API keys, if a feature ever needs one, go here too: never into the code or the repository.
 
 # airports_dir = "data/airports"
-# centers_file = "data/centers.json"   # Center sectors: name, FIR, frequency (or "PLACEHOLDER"), band, polygon
+# centers_file = "data/centers.json"   # corrections to the Center sectors: name, FIR, frequency, band, polygon
 # littlenavmap_db = "C:/Users/you/AppData/Roaming/ABarthel/little_navmap_db/little_navmap_msfs.sqlite"
 # simbrief_username = "your-simbrief-username"
 # simconnect_dll = "C:/MSFS SDK/SimConnect SDK/lib/SimConnect.dll"   # only if it is not found by itself

@@ -1200,6 +1200,12 @@ attribution), but no frequencies. ❓ Before starting: where the Center frequenc
 public sources, or a VATSIM dataset whose licence allows it). Never show "PLACEHOLDER" to the user.
 ✅ **User (2026-11-16): a VATSIM dataset** — only if its licence allows shipping or downloading it with a GPL app;
 check the licence first, and if it doesn't, come back to the user (no own table without asking).
+✅ **Done:** VATSpy (outlines) + VATGER datahub (frequencies), both CC BY-SA 4.0, joined by
+`atc/airspace/vatsim.py` into the shipped `data/centers_vatsim.json`: 32 sectors, Bremen, Langen and Munich Radar,
+"High" positions from FL245, the smallest sector first. Used when Little Navmap has no sectors; corrections in
+centers.json still win. vatglasses-data and vacs-data are CC BY-NC-SA: not usable. **Only Germany:** outside it
+radar service is terminated as before (no frequencies to be had under a compatible licence). PLACEHOLDER is gone
+from everything the user sees: the shipped centers.json is empty, unknown frequencies are dropped silently.
 
 **Order:** A and B first (they broke the flight), then H, C, D, E, F, G; I once its data source is settled. **To check afterwards:** the same flight
 again, with TESTFLUG.md.

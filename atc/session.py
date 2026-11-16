@@ -16,6 +16,8 @@ from atc.airport.littlenavmap import LittleNavmapAirportData
 from atc.airport.model import Airport, AirportData, RunwayEnd
 from atc.airspace.centers import CenterSectors, CentersError, load_centers, with_imported
 from atc.airspace.littlenavmap import load_littlenavmap_centers
+
+VATSIM_SOURCE = "VATSIM data (Germany)"
 from atc import paths
 from atc.config import Config
 from atc.controller.controller import Controller, frequency_list
@@ -245,16 +247,20 @@ def airport_sources(config: Config) -> list[AirportData]:
 
 
 def center_sectors(config: Config) -> CenterSectors:
-    """The real sectors from the user's Little Navmap database, corrected by centers.json; without the database
-    only centers.json."""
+    """The real sectors from the user's Little Navmap database (the MSFS ones, worldwide); without them the shipped
+    VATSIM sectors (Germany only, atc/airspace/vatsim.py). Corrections in centers.json come first. A sector without
+    a known frequency is never used, nor shown."""
     own = load_centers(config.centers_file) if config.centers_file.exists() else CenterSectors()
-    if (db := lnm_files.find(config.littlenavmap_db)) is None:
-        return own
-    try:
-        imported = load_littlenavmap_centers(db)
-    except (OSError, sqlite3.Error) as e:
-        raise CentersError(f"Center sectors from Little Navmap: {e}") from None
-    return with_imported(own, imported)
+    own = CenterSectors([s for s in own.sectors if not s.placeholder], source=own.source)
+    imported, source = [], "Little Navmap"
+    if (db := lnm_files.find(config.littlenavmap_db)) is not None:
+        try:
+            imported = load_littlenavmap_centers(db)
+        except (OSError, sqlite3.Error) as e:
+            raise CentersError(f"Center sectors from Little Navmap: {e}") from None
+    if not imported and config.vatsim_centers_file.exists():
+        imported, source = list(load_centers(config.vatsim_centers_file).sectors), VATSIM_SOURCE
+    return with_imported(own, imported, source)
 
 
 def find_airport(sources: list[AirportData], ident: str) -> tuple[Airport, str] | None:
@@ -283,13 +289,8 @@ def describe_plan(plan: FlightPlan) -> str:
 
 def describe_centers(centers: CenterSectors) -> str:
     if not centers:
-        return "Center sectors: none (no centers.json), so Departure keeps you until Approach"
-    text = f"Center sectors: {len(centers.sectors)} from {centers.source}"
-    if placeholders := centers.placeholders:
-        names = ", ".join(sorted({f"{s.name} ({s.fir})" for s in placeholders}))
-        text += (f". {len(placeholders)} have a PLACEHOLDER frequency and get no handoffs until you fill them in: "
-                 f"{names}")
-    return text
+        return "Center sectors: none, so Departure keeps you until Approach"
+    return f"Center sectors: {len(centers.sectors)} from {centers.source}"
 
 
 def describe_runway(end: RunwayEnd, metar: Metar | None) -> str:

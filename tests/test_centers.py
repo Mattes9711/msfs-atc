@@ -140,11 +140,8 @@ def test_missing_key_is_reported(tmp_path):
         load_centers(write(tmp_path, sector))
 
 
-def test_shipped_centers_json_loads_and_marks_unknown_frequencies():
-    centers = load_centers(ROOT / "data" / "centers.json")
-    assert centers.sectors
-    assert all(s.placeholder for s in centers.sectors)  # none of the real frequencies are filled in yet
-    assert "PLACEHOLDER frequency" in describe_centers(centers)
+def test_shipped_centers_json_is_an_empty_corrections_file():
+    assert not load_centers(ROOT / "data" / "centers.json").sectors
 
 
 def test_banner_without_sectors():
@@ -236,12 +233,9 @@ def test_placeholder_frequency_is_never_used_in_a_handoff(eddh, eddm):
     sectors = CenterSectors([box("North Radar", "TST1", None, 52.5, 55.0),
                              box("Middle Radar", "TST2", MIDDLE, 51.0, 52.5)], source="centers.json")
     s = airborne(eddh, eddm, sectors)
-    assert next_call(s, 3, 60) == (18, [
-        "(you are in North Radar airspace (TST1), but its frequency is PLACEHOLDER in centers.json: please fill in "
-        "the real frequency. No handoff, Hamburg Approach keeps you)"])
-    assert s.atc.phase == "climb"  # still with Departure
-    # Said once, and the first sector with a real frequency gets the aircraft from Departure
-    assert next_call(s, 19, 150) == (70, [contact("Middle Radar", MIDDLE)])
+    # Nothing said in the sector without a frequency (and never the word PLACEHOLDER): Departure keeps the aircraft,
+    # and the first sector with a real frequency gets it
+    assert next_call(s, 3, 150) == (70, [contact("Middle Radar", MIDDLE)])
 
 
 def test_placeholder_sector_after_a_real_one_keeps_the_current_center(eddh, eddm):
@@ -250,8 +244,7 @@ def test_placeholder_sector_after_a_real_one_keeps_the_current_center(eddh, eddm
     s = airborne(eddh, eddm, sectors)
     next_call(s, 3, 60)
     check_in(s, NORTH, "North Radar")
-    nm, [hint] = next_call(s, 20, 150)
-    assert nm == 70 and hint.startswith("(you are in Middle Radar airspace") and "North Radar keeps you" in hint
+    assert next_call(s, 20, 150) == (None, [])  # nothing said, nobody to hand over to
     assert s.atc.center.name == "North Radar"
 
 

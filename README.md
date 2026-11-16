@@ -68,4 +68,9 @@ Voices: Piper with the LibriTTS-R voice (CC BY 4.0) and the German Thorsten voic
 by Airbus and Intactile (SIL Open Font License 1.1). Design values after
 [unslop](https://github.com/heydamir/unslop) by Damir Sokolovsky (CC BY 4.0).
 
+Center sectors without Little Navmap (Germany only): made from the
+[VATSpy Data Project](https://github.com/vatsimnetwork/vatspy-data-project) and the
+[VATGER datahub](https://github.com/VATGER-Nav/datahub), both CC BY-SA 4.0; `data/centers_vatsim.json` is CC BY-SA 4.0
+too. For the simulator only.
+
 MSFS ATC is not made by or connected with Microsoft, Asobo Studio, FSDreamTeam (GSX), LiveTraffic or SimBrief.

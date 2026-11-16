@@ -48,5 +48,8 @@ The licences of the libraries it uses are in THIRD_PARTY_LICENSES.txt.
 Voices: Piper with the LibriTTS-R voice (CC BY 4.0); German cabin voice by Thorsten Mueller (CC0).
 Speech recognition: Whisper by OpenAI, faster-whisper by SYSTRAN (MIT).
 Fonts: B612 and B612 Mono by Airbus and Intactile (SIL Open Font License 1.1).
+Center sectors without Little Navmap (Germany only, data/centers_vatsim.json, CC BY-SA 4.0): made from the VATSpy
+Data Project (github.com/vatsimnetwork/vatspy-data-project) and the VATGER datahub (github.com/VATGER-Nav/datahub),
+both CC BY-SA 4.0. For the simulator only.
 Design values after unslop by Damir Sokolovsky (CC BY 4.0).
 MSFS ATC is not made by or connected with Microsoft, Asobo, FSDreamTeam (GSX) or LiveTraffic.

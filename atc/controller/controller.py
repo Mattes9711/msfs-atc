@@ -83,7 +83,6 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
         self.centers = centers or CenterSectors()
         self.center: Station | None = None  # Center controller in charge while en route; None = no radar service
         self.previous_center: Station | None = None  # the one before: it waits for the readback of its "contact"
-        self.placeholder_warned: set[CenterSector] = set()
         self.pending: tuple[rb.Item, ...] = ()  # issued, not yet correctly read back
         self.pending_key: tuple[str, str] | None = None  # station that issued them
         self.handoff_to: tuple[str, str] | None = None  # station the pending instruction sends the pilot to

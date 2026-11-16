@@ -4,7 +4,6 @@ short; it uses the controller's state through self."""
 import math
 
 from atc.airport.geo import bearing_deg, distance_nm
-from atc.airspace.centers import PLACEHOLDER, CenterSector
 from atc.controller import readback as rb
 from atc.controller.give_way import traffic_name
 from atc.controller import vectors, wake
@@ -128,7 +127,7 @@ class AirMixin:
 
     def _center_progress(self, state: AircraftState) -> list[Response]:
         """Departure -> Center once out of the terminal area, then Center -> Center at each sector boundary.
-        Meant to run every second (tick). A sector whose frequency is a placeholder never gets the aircraft."""
+        Meant to run every second (tick). A sector whose frequency is not known never gets the aircraft."""
         if self.call_next is not None or (self.pending and self.handoff_to):
             # Handed over, and the pilot hasn't checked in yet: no second handoff on top (found in the user's flight:
             # Approach → Bremen 125.100, and 12 s later Bremen 125.100 → 119.825 before the pilot was there)
@@ -146,7 +145,7 @@ class AirMixin:
                 return []  # radar service already terminated
             return self._radar_service_terminated(sender, state)
         if sector.placeholder:
-            return self._placeholder_hint(sector, sender)
+            return []  # nobody to hand over to: whoever has the aircraft keeps it
         station = center_station(sector)
         if self.phase == "enroute" and sender is None:
             self.center = station  # back inside a sector after radar service was terminated
@@ -167,15 +166,6 @@ class AirMixin:
         self.squawk = VFR_SQUAWK
         self._set_pending([item], sender.key)
         return self._transmit(sender, f"{self.cs}, {text}", state)
-
-    def _placeholder_hint(self, sector: CenterSector, keeper: Station | None) -> list[Response]:
-        if sector in self.placeholder_warned:
-            return []
-        self.placeholder_warned.add(sector)
-        keeps = f"{keeper.name} keeps you" if keeper else "no controller until then"
-        return [Response(f"you are in {sector.name} airspace ({sector.fir}), but its frequency is {PLACEHOLDER} in "
-                         f"{self.centers.source}: please fill in the real frequency. No handoff, {keeps}",
-                         spoken=False)]
 
     def _track_to_go_nm(self, state: AircraftState) -> float:
         """Along the planned route (SID, airways, STAR) to the destination; straight there without one."""

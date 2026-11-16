@@ -1,47 +1,10 @@
 {
   "_readme": [
-    "En-route Center sectors. name = station as spoken, fir = ICAO FIR/ACC code, frequency = MHz string",
-    "or exactly \"PLACEHOLDER\". ATC never hands off to a PLACEHOLDER sector: fill in the real frequency first.",
-    "lower_ft/upper_ft = MSL band (lower inclusive, upper exclusive). polygon = [lat, lon] points.",
-    "Where sectors overlap at the same altitude, the first one in this list wins.",
-    "The polygons below are ROUGH boxes for testing EDDH-EDDM, not the real sector boundaries."
+    "Your own corrections to the Center sectors. They win over the sectors from Little Navmap and over the shipped",
+    "VATSIM sectors (data/centers_vatsim.json, Germany only). Empty: no corrections.",
+    "Each sector: name = station as spoken (\"Bremen Radar\"), fir = ICAO FIR/ACC code, frequency = MHz string",
+    "(\"123.450\"), lower_ft/upper_ft = MSL band (lower inclusive, upper exclusive), polygon = [lat, lon] points.",
+    "Where sectors overlap at the same altitude, the first one in this list wins."
   ],
-  "sectors": [
-    {
-      "name": "Bremen Radar",
-      "fir": "EDWW",
-      "frequency": "PLACEHOLDER",
-      "lower_ft": 0,
-      "upper_ft": 66000,
-      "polygon": [[55.0, 6.0], [55.0, 15.0], [52.0, 15.0], [52.0, 6.0]],
-      "note": "rough box for northern Germany, not the real boundary"
-    },
-    {
-      "name": "Rhein Radar",
-      "fir": "EDUU",
-      "frequency": "PLACEHOLDER",
-      "lower_ft": 24500,
-      "upper_ft": 66000,
-      "polygon": [[52.0, 5.8], [52.0, 15.0], [47.2, 15.0], [47.2, 5.8]],
-      "note": "rough box for the upper airspace (FL245+) over central and southern Germany"
-    },
-    {
-      "name": "Langen Radar",
-      "fir": "EDGG",
-      "frequency": "PLACEHOLDER",
-      "lower_ft": 0,
-      "upper_ft": 24500,
-      "polygon": [[52.0, 5.8], [52.0, 15.0], [49.0, 15.0], [49.0, 5.8]],
-      "note": "rough box for central Germany below FL245"
-    },
-    {
-      "name": "Munich Radar",
-      "fir": "EDMM",
-      "frequency": "PLACEHOLDER",
-      "lower_ft": 0,
-      "upper_ft": 24500,
-      "polygon": [[49.0, 7.5], [49.0, 13.9], [47.2, 13.9], [47.2, 7.5]],
-      "note": "rough box for southern Germany below FL245"
-    }
-  ]
+  "sectors": []
 }

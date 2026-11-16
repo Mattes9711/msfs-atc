@@ -1,4 +1,4 @@
-# center_sectors: En-route Center handoffs with test sectors across the route (test frequencies, not real ones): Departure to North Radar, a PLACEHOLDER sector that gets no handoff, North to South Upper, the altitude band down to South Radar, and South Radar to Munich Approach.
+# center_sectors: En-route Center handoffs with test sectors across the route (test frequencies, not real ones): Departure to North Radar, a sector without a known frequency that gets no handoff (and no message), North to South Upper, the altitude band down to South Radar, and South Radar to Munich Approach.
 PILOT> /com 121.705
        (COM1 121.705: Hamburg Ground)
 PILOT> Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich, information alpha
@@ -53,9 +53,7 @@ PILOT> climb flight level 350, Lufthansa 4AB
        (understood: readback, callsign DLH4AB (yours), flight_level=350)
        (readback correct)
 ATC:   Lufthansa four Alfa Bravo, readback correct
-# Middle Radar's frequency is a PLACEHOLDER, so North Radar keeps us
-       (flew to 70 nm, 35000 ft)
-       (you are in Middle Radar airspace (TST2), but its frequency is PLACEHOLDER in center_sectors.yaml: please fill in the real frequency. No handoff, North Radar keeps you)
+# Middle Radar's frequency is not known, so North Radar keeps us, without a word
        (flew to 162 nm, 35000 ft)
 ATC:   Lufthansa four Alfa Bravo, contact South Upper Radar one tree two decimal six
 PILOT> /com 132.600

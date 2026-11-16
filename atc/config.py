@@ -72,7 +72,10 @@ class Config:
     # JSON airports: written by `python -m atc.airport.export`. The ones in data/airports are test data from the
     # developer's Little Navmap database and must not be shipped (see BUILD.md, data licences).
     airports_dir: Path = ROOT / "data" / "airports"
-    centers_file: Path = ROOT / "data" / "centers.json"  # en-route Center sectors; missing file = none
+    centers_file: Path = ROOT / "data" / "centers.json"  # corrections to the Center sectors; missing file = none
+    # Shipped: German Center sectors from VATSIM data (CC BY-SA 4.0, atc/airspace/vatsim.py), used without Little
+    # Navmap's
+    vatsim_centers_file: Path = ROOT / "data" / "centers_vatsim.json"
     # LICENCE: the user's own Little Navmap database, built from the scenery they installed (payware add-ons
     # included). It is only read on the user's machine; never ship it or data exported from it.
     # Empty = found by itself: the database of the MSFS that runs, 2020 or 2024 (atc/airport/lnm_files.py)

@@ -1,13 +1,14 @@
 """En-route Center sectors. They come from the user's Little Navmap database (atc/airspace/littlenavmap.py: the
-real MSFS sectors and frequencies) and from a hand-maintained centers.json, for corrections and for tests.
+real MSFS sectors and frequencies), without it from the shipped VATSIM sectors (data/centers_vatsim.json, Germany,
+atc/airspace/vatsim.py), and from a hand-maintained centers.json, for corrections and for tests.
 
 Format (see data/centers.json):
     {"sectors": [{"name": "Bremen Radar", "fir": "EDWW", "frequency": "123.450",
                   "lower_ft": 0, "upper_ft": 66000, "polygon": [[lat, lon], ...]}, ...]}
 
 "frequency" is MHz as a string, or exactly "PLACEHOLDER" when the real value is not known yet. A placeholder
-sector is still found by position (so ATC can say whose airspace it is), but its frequency is None and the
-controller never hands off to it: frequencies are never made up.
+sector is still found by position, but its frequency is None and the controller never hands off to it, nor says
+anything about it: frequencies are never made up. The session drops such sectors when it loads its own file.
 """
 import json
 from dataclasses import dataclass
