@@ -11,7 +11,8 @@ from atc.sim.simconnect import STATE_UNITS, SimConnectSource, SimUnavailable
 STATE = {"PLANE_LATITUDE": 53.63, "PLANE_LONGITUDE": 9.99, "PLANE_ALTITUDE": 53.0, "PLANE_ALT_ABOVE_GROUND": 9.0,
          "SIM_ON_GROUND": 1.0, "PLANE_HEADING_DEGREES_MAGNETIC": 3.0, "GROUND_VELOCITY": 0.0,
          "COM_ACTIVE_FREQUENCY:1": 121.705, "AMBIENT_WIND_DIRECTION": 220.0, "AMBIENT_WIND_VELOCITY": 7.0,
-         "LIGHT_BEACON": 0.0}
+         "LIGHT_BEACON": 0.0, "GENERAL_ENG_COMBUSTION:1": 0.0, "GENERAL_ENG_COMBUSTION:2": 0.0,
+         "BRAKE_PARKING_POSITION": 1.0}
 
 
 def data_message(request: int, values: list[float]) -> bytes:

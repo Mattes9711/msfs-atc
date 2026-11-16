@@ -3,10 +3,10 @@
 Every few seconds GSX's state is read (atc/sim/gsx.py). Its boarding finishing gives the cabin's doors-closed
 announcement; its pushback starting and finishing are noted in the log. With control on, the app asks GSX for the
 pushback once ATC's "push and start approved" has been read back, and for deboarding once the aircraft stands at
-its stand after the flight; each once, and only when GSX offers the service (state "available"), so a service the
-pilot ordered in GSX himself is left alone. The menu clicks run in a thread: they take a few seconds.
+its stand after the flight, engines off and parking brake set; each once, and only when GSX offers the service
+(state "available"), so a service the pilot ordered in GSX himself is left alone. The menu clicks take a few seconds:
+they are stepped from the live loop (GsxMenu.start/poll), so they share its SimConnect connection and never block it.
 """
-import threading
 import time
 from typing import Callable
 
@@ -22,16 +22,17 @@ STOPPED_KT = 1
 
 class GsxLink:
     def __init__(self, sim, control: bool = True, clock: Callable[[], float] = time.monotonic,
-                 menu: gsx.GsxMenu | None = None, background: Callable[[Callable[[], None]], None] | None = None):
+                 menu: gsx.GsxMenu | None = None):
         self.sim, self.control, self.clock = sim, control, clock
-        self.menu = menu or gsx.GsxMenu(sim.set_lvar)
-        self.background = background or (lambda job: threading.Thread(target=job, daemon=True).start())
+        self.menu = menu or gsx.GsxMenu(sim.set_lvar, clock=clock)
         self.state: gsx.GsxState | None = None
         self.next_read = 0.0
         self.requested: set[str] = set()
 
     def step(self, controller, aircraft, sink: Sink) -> gsx.GsxState | None:
         """GSX's state now (None while GSX isn't running), after acting on it."""
+        if (result := self.menu.poll()) is not None:  # every step: a click is a second at most late
+            sink.emit(Event("notice", result))
         if self.clock() < self.next_read:
             return self.state
         self.next_read = self.clock() + READ_EVERY_S
@@ -46,7 +47,7 @@ class GsxLink:
                 sink.emit(Event("notice", "GSX: pushback started"))
             if now.departure == gsx.COMPLETED and before.departure != gsx.COMPLETED:
                 sink.emit(Event("notice", "GSX: pushback finished"))
-        if self.control:
+        if self.control and not self.menu.busy:
             if (controller.phase == "pushback" and not controller.pending and now.departure == gsx.AVAILABLE):
                 self._request("pushback", sink)
             if (controller.phase == "taxi_in" and aircraft is not None and self._at_stand(controller, aircraft)
@@ -58,10 +59,16 @@ class GsxLink:
         if service in self.requested:
             return
         self.requested.add(service)
-        self.background(lambda: sink.emit(Event("notice", self.menu.request(service))))
+        self.menu.start(service)
 
     @staticmethod
     def _at_stand(controller, aircraft) -> bool:
-        stand = controller.stand_in
-        return (stand is not None and aircraft.ground_speed_kt < STOPPED_KT
-                and distance_nm(stand.lat, stand.lon, aircraft.lat, aircraft.lon) * M_PER_NM <= AT_STAND_M)
+        """Parked at a stand after the flight (Milestone 8, E2): any stand of the destination, not only the one
+        Ground gave (the test flight parked at another one), engines off and parking brake set."""
+        if aircraft.ground_speed_kt >= STOPPED_KT or aircraft.engines_running or not aircraft.parking_brake:
+            return False
+        destination = getattr(controller, "destination", None)
+        stands = list(destination.parking) if destination is not None else []
+        if controller.stand_in is not None:
+            stands.append(controller.stand_in)
+        return any(distance_nm(p.lat, p.lon, aircraft.lat, aircraft.lon) * M_PER_NM <= AT_STAND_M for p in stands)

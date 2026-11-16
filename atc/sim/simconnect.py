@@ -20,6 +20,7 @@ STATE_UNITS = {
     "PLANE_ALT_ABOVE_GROUND": "feet", "SIM_ON_GROUND": "bool", "PLANE_HEADING_DEGREES_MAGNETIC": "radians",
     "GROUND_VELOCITY": "knots", "COM_ACTIVE_FREQUENCY:1": "MHz",
     "AMBIENT_WIND_DIRECTION": "degrees", "AMBIENT_WIND_VELOCITY": "knots", "LIGHT_BEACON": "bool",
+    "GENERAL_ENG_COMBUSTION:1": "bool", "GENERAL_ENG_COMBUSTION:2": "bool", "BRAKE_PARKING_POSITION": "bool",
 }
 STATE_VARS = tuple(STATE_UNITS)
 NOT_RUNNING = ("MSFS is not running or SimConnect can't connect: start MSFS and load a flight, then try again "
@@ -57,6 +58,8 @@ def state_from_simvars(v: dict[str, float]) -> AircraftState:
         com1_khz=khz if COM_MIN_KHZ <= khz <= COM_MAX_KHZ else 0,
         wind_dir_true=v["AMBIENT_WIND_DIRECTION"] % 360, wind_speed_kt=v["AMBIENT_WIND_VELOCITY"],
         beacon=v.get("LIGHT_BEACON", 0.0) >= 0.5,
+        engines_running=any(v.get(f"GENERAL_ENG_COMBUSTION:{n}", 0.0) >= 0.5 for n in (1, 2)),
+        parking_brake=v.get("BRAKE_PARKING_POSITION", 0.0) >= 0.5,
     )
 
 

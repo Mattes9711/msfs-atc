@@ -24,7 +24,10 @@ STATE_LVARS = {"running": "L:FSDT_GSX_COUATL_STARTED", "boarding": "L:FSDT_GSX_B
                "deboarding": "L:FSDT_GSX_DEBOARDING_STATE", "departure": "L:FSDT_GSX_DEPARTURE_STATE"}
 MENU_OPEN, MENU_CHOICE = "L:FSDT_GSX_MENU_OPEN", "L:FSDT_GSX_MENU_CHOICE"
 SERVICE_WORDS = {"pushback": ("pushback", "push-back", "push back"), "deboarding": ("deboarding",)}
-MENU_WAIT_S = 3  # GSX rewrites the menu file within about a second
+MENU_WAIT_S = 10  # GSX rewrites the menu file within about a second, but not always (E1: 3 s were too short)
+FOLLOW_WAIT_S = 3  # after a choice: a follow-up question, if any, comes as fast as the menu
+MENU_TRIES = 2  # opening the menu once more before giving up
+CLOSE = -2  # MENU_CHOICE value that closes the menu
 
 
 def menu_file() -> Path:
@@ -54,25 +57,26 @@ def state_from_lvars(values: dict[str, float] | None) -> GsxState | None:
 
 
 class GsxMenu:
-    """Picks a service in the GSX menu. `set_lvar(name, value)` writes an L-var through SimConnect."""
+    """Picks a service in the GSX menu. `set_lvar(name, value)` writes an L-var through SimConnect.
+
+    Stepped (E1): start() opens the menu, then poll() once per live-loop step until it returns what happened. So
+    the clicks go through the live loop's own SimConnect connection, one user at a time (before 2026-11-16 a thread
+    wrote them while the loop read: "its menu did not open" twice in the test flight), and the loop never waits."""
 
     def __init__(self, set_lvar: Callable[[str, float], None], path: Path | None = None,
                  clock=time.monotonic, sleep=time.sleep):
         self.set_lvar, self.path, self.clock, self.sleep = set_lvar, path or menu_file(), clock, sleep
+        self.service: str | None = None  # being requested
+        self.stage = ""  # "open" (waiting for the menu), "chosen" (waiting for a follow-up question)
+        self.since: float | None = None  # mtime of the menu file before the last click
+        self.deadline = 0.0
+        self.tries = 0
+        self.options: list[str] = []
+        self.choice = 0
 
-    def _open(self, previous: float | None) -> list[str] | None:
-        """The menu's lines after GSX has written them anew, or None when it didn't."""
-        deadline = self.clock() + MENU_WAIT_S
-        while self.clock() < deadline:
-            try:
-                if self.path.stat().st_mtime != previous:
-                    lines = [line.strip() for line in self.path.read_text(encoding="utf-8").splitlines()]
-                    if len(lines) > 1:
-                        return lines
-            except OSError:
-                pass
-            self.sleep(0.1)
-        return None
+    @property
+    def busy(self) -> bool:
+        return self.service is not None
 
     def _mtime(self) -> float | None:
         try:
@@ -80,22 +84,70 @@ class GsxMenu:
         except OSError:
             return None
 
+    def _lines(self) -> list[str] | None:
+        try:
+            return [line.strip() for line in self.path.read_text(encoding="utf-8").splitlines()]
+        except OSError:
+            return None
+
+    def _new_menu(self) -> list[str] | None:
+        """The menu's lines once GSX has written them anew (an old file from earlier doesn't count)."""
+        if self._mtime() == self.since:
+            return None
+        lines = self._lines()
+        return lines if lines and len(lines) > 1 else None
+
+    def _click(self, name: str, value: float, stage: str, wait_s: float) -> None:
+        self.since = self._mtime()
+        self.set_lvar(name, value)
+        self.stage, self.deadline = stage, self.clock() + wait_s
+
+    def start(self, service: str) -> None:
+        """"pushback" or "deboarding"."""
+        self.service, self.tries = service, 1
+        self._click(MENU_OPEN, 1, "open", MENU_WAIT_S)
+
+    def poll(self) -> str | None:
+        """What happened, for the log, once it is over; None while still waiting."""
+        if self.service is None:
+            return None
+        service = self.service
+        lines = self._new_menu()
+        if self.stage == "open":
+            if lines is None:
+                if self.clock() < self.deadline:
+                    return None
+                if self.tries < MENU_TRIES:
+                    self.tries += 1
+                    self._click(MENU_OPEN, 1, "open", MENU_WAIT_S)
+                    return None
+                self.set_lvar(MENU_CHOICE, CLOSE)  # in case it opened after all
+                found = self._lines()
+                said = " | ".join(found) if found else "nothing"
+                return self._done(f"GSX: its menu did not open (tried {MENU_TRIES} times, {MENU_WAIT_S} s each; "
+                                  f"{self.path} said: {said})")
+            self.options = lines[1:]
+            choice = next((i for i, o in enumerate(self.options)
+                           if any(w in o.lower() for w in SERVICE_WORDS[service])), None)
+            if choice is None:
+                self.set_lvar(MENU_CHOICE, CLOSE)
+                return self._done(f"GSX: no {service} in its menu ({' | '.join(self.options)})")
+            self.choice = choice
+            self._click(MENU_CHOICE, choice, "chosen", FOLLOW_WAIT_S)
+            return None
+        if lines is not None and lines[1:] != self.options:  # GSX asks something: the pilot answers it in GSX
+            return self._done(f"GSX: {service} requested; GSX asks \"{lines[0]}\": answer it in the GSX menu")
+        if lines is None and self.clock() < self.deadline:
+            return None
+        return self._done(f"GSX: {service} requested ({self.options[self.choice]})")
+
+    def _done(self, result: str) -> str:
+        self.service, self.stage = None, ""
+        return result
+
     def request(self, service: str) -> str:
-        """"pushback" or "deboarding". Returns what happened, for the log."""
-        before = self._mtime()  # an old menu file from earlier: wait until GSX has written it anew
-        self.set_lvar(MENU_OPEN, 1)
-        lines = self._open(before)
-        if lines is None:
-            return f"GSX: its menu did not open ({self.path} not written)"
-        options = lines[1:]
-        choice = next((i for i, o in enumerate(options) if any(w in o.lower() for w in SERVICE_WORDS[service])),
-                      None)
-        if choice is None:
-            self.set_lvar(MENU_CHOICE, -2)  # close the menu again
-            return f"GSX: no {service} in its menu ({' | '.join(options)})"
-        before = self._mtime()
-        self.set_lvar(MENU_CHOICE, choice)
-        follow = self._open(before)
-        if follow is not None and follow[1:] != options:  # GSX asks something: the pilot answers it in GSX
-            return f"GSX: {service} requested; GSX asks \"{follow[0]}\": answer it in the GSX menu"
-        return f"GSX: {service} requested ({options[choice]})"
+        """The whole request at once, waiting (the tests, a one-off check)."""
+        self.start(service)
+        while (result := self.poll()) is None:
+            self.sleep(0.1)
+        return result

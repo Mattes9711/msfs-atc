@@ -1,6 +1,7 @@
 """The MSFS side without MSFS: simvar conversion, the SimConnectSource with a fake request object,
 weather from the sim, airport detection and the live loop."""
 import io
+import re
 from datetime import datetime, timezone
 
 import pytest
@@ -25,6 +26,7 @@ PARKED_EDDH = {
     "PLANE_ALT_ABOVE_GROUND": 8.763, "SIM_ON_GROUND": 1.0, "PLANE_HEADING_DEGREES_MAGNETIC": 3.9464559676033626,
     "GROUND_VELOCITY": 0.0012, "COM_ACTIVE_FREQUENCY:1": 126.85499999999999,
     "AMBIENT_WIND_DIRECTION": 199.99, "AMBIENT_WIND_VELOCITY": 9.02, "LIGHT_BEACON": 0.0,  # beacon: added later
+    "GENERAL_ENG_COMBUSTION:1": 0.0, "GENERAL_ENG_COMBUSTION:2": 0.0, "BRAKE_PARKING_POSITION": 1.0,  # later too
     "AMBIENT_TEMPERATURE": 5.98, "SEA_LEVEL_PRESSURE": 1018.0, "AMBIENT_VISIBILITY": 6500.0,
 }
 AIRPORTS = [JsonAirportData(ROOT / "data" / "airports")]
@@ -86,7 +88,7 @@ def test_every_state_var_is_known_to_python_simconnect():
     if not source.exists():
         pytest.skip("Python-SimConnect not installed in .venv")
     text = source.read_text(encoding="utf-8")
-    assert all(f'"{name.replace(":1", ":index")}"' in text for name in STATE_VARS)
+    assert all(f'"{re.sub(r":[0-9]+$", ":index", name)}"' in text for name in STATE_VARS)
 
 
 # --- --weather sim ------------------------------------------------------------------------------------------------

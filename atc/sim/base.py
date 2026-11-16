@@ -15,6 +15,8 @@ class AircraftState:
     wind_dir_true: float
     wind_speed_kt: float
     beacon: bool = False  # the red anti-collision beacon: on = ready to push and start (the co-pilot asks then)
+    engines_running: bool = False  # engine 1 or 2 burning
+    parking_brake: bool = False  # set
 
 
 class SimSource(Protocol):

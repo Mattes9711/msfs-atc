@@ -1157,13 +1157,15 @@ D1. ✅ He had the radio from 13:14 and didn't read back Berlin's "contact Frank
     is now kept.
 
 **Part E — GSX**
-E1. **"GSX: its menu did not open"** for the pushback (12:35) and the deboarding (14:04), although the check
+E1. ✅ **"GSX: its menu did not open"** for the pushback (12:35) and the deboarding (14:04), although the check
     command opened it. Suspects: the menu is written from a second thread while the live loop reads SimConnect,
     and 3 s may be too short. Fix: the menu clicks go through the live loop (one SimConnect user at a time), wait
     up to 10 s, try once more, close the menu again after a failure, log what the menu file said.
-E2. **Deboarding while the engines still ran:** GSX started it by itself (its own automatic deboarding, user),
+    Done: `GsxMenu.start/poll`, stepped once per live-loop step (no thread, never blocking).
+E2. ✅ **Deboarding while the engines still ran:** GSX started it by itself (its own automatic deboarding, user),
     not the app. Still, the app's own request waits for the engines off and the parking brake set, at a stand
     (any stand). Needs two more simvars (engine combustion, parking brake).
+    Done: `GENERAL ENG COMBUSTION:1/2` and `BRAKE PARKING POSITION` read; any stand of the destination counts.
 
 **Part F — Small things**
 F1. Cabin announcements too loud next to ATC: mixer default 70 % → 50 %.

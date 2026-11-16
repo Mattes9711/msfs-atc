@@ -78,6 +78,50 @@ def test_a_menu_that_never_opens(tmp_path):
     assert menu.request("pushback").startswith("GSX: its menu did not open")
 
 
+def test_a_menu_that_opens_on_the_second_try(tmp_path):
+    """Milestone 8, E1: twice in the test flight "its menu did not open". Now it waits 10 s, and opens it again."""
+    fake = FakeGsx(tmp_path / "menu")
+    opened = []
+    real = fake.set_lvar
+
+    def slow(name, value):
+        if name == gsx.MENU_OPEN and not opened:
+            opened.append(True)
+            fake.set.append((name, value))  # the first click is lost
+            return
+        real(name, value)
+
+    fake.set_lvar = slow
+    menu = fake.menu()
+    menu.set_lvar = slow
+    assert menu.request("pushback") == "GSX: pushback requested (Request Pushback)"
+    assert fake.set == [(gsx.MENU_OPEN, 1), (gsx.MENU_OPEN, 1), (gsx.MENU_CHOICE, 3)]
+
+
+def test_a_menu_that_never_opens_is_closed_and_its_file_logged(tmp_path):
+    (tmp_path / "menu").write_text("Loading...", encoding="utf-8")
+    clock, set_ = [0.0], []
+    menu = gsx.GsxMenu(lambda n, v: set_.append((n, v)), tmp_path / "menu", clock=lambda: clock[0],
+                       sleep=lambda s: clock.__setitem__(0, clock[0] + s))
+    result = menu.request("pushback")
+    assert "tried 2 times" in result and result.endswith("said: Loading...)")
+    assert set_ == [(gsx.MENU_OPEN, 1), (gsx.MENU_OPEN, 1), (gsx.MENU_CHOICE, -2)]
+    assert 20 <= clock[0] < 21  # 10 s each
+
+
+def test_the_menu_is_stepped_without_waiting(tmp_path):
+    """The live loop polls it: no call blocks."""
+    fake = FakeGsx(tmp_path / "menu")
+    clock = [0.0]
+    menu = gsx.GsxMenu(fake.set_lvar, fake.path, clock=lambda: clock[0], sleep=lambda s: 1 / 0)
+    menu.start("pushback")
+    assert menu.busy and fake.set == [(gsx.MENU_OPEN, 1)]
+    assert menu.poll() is None and fake.set[-1] == (gsx.MENU_CHOICE, 3)  # the menu was there: chosen
+    assert menu.poll() is None  # a follow-up question could still come
+    clock[0] = 4
+    assert menu.poll() == "GSX: pushback requested (Request Pushback)" and not menu.busy
+
+
 class Sim:
     def __init__(self, values):
         self.values = values
@@ -90,17 +134,27 @@ class Sim:
 
 
 class Menu:
-    def __init__(self):
-        self.asked = []
+    """Done one poll after the start."""
 
-    def request(self, service):
+    def __init__(self):
+        self.asked, self.service = [], None
+
+    @property
+    def busy(self):
+        return self.service is not None
+
+    def start(self, service):
         self.asked.append(service)
-        return f"GSX: {service} requested"
+        self.service = service
+
+    def poll(self):
+        service, self.service = self.service, None
+        return f"GSX: {service} requested" if service else None
 
 
 def link(values, control=True):
     clock, menu = [0.0], Menu()
-    return GsxLink(Sim(values), control, clock=lambda: clock[0], menu=menu, background=lambda job: job()), menu, clock
+    return GsxLink(Sim(values), control, clock=lambda: clock[0], menu=menu), menu, clock
 
 
 def test_pushback_requested_once_after_the_approval_is_read_back():
@@ -122,12 +176,37 @@ def test_a_pushback_the_pilot_ordered_himself_is_left_alone():
     assert menu.asked == []
 
 
+def parked(**kw):
+    return SimpleNamespace(**{"lat": 48.35, "lon": 11.78, "ground_speed_kt": 0, "engines_running": False,
+                              "parking_brake": True, **kw})
+
+
+def arrived(stand_in, *stands):
+    return SimpleNamespace(phase="taxi_in", pending=(), stand_in=stand_in,
+                           destination=SimpleNamespace(parking=stands))
+
+
 def test_deboarding_at_the_stand_after_the_flight():
     stand = SimpleNamespace(lat=48.35, lon=11.78)
     gsx_link, menu, _ = link(lvars(deboarding=gsx.AVAILABLE))
-    here = SimpleNamespace(lat=48.35, lon=11.78, ground_speed_kt=0)
-    gsx_link.step(SimpleNamespace(phase="taxi_in", pending=(), stand_in=stand), here, Collector())
+    gsx_link.step(arrived(stand, stand), parked(), Collector())
     assert menu.asked == ["deboarding"]
+
+
+def test_deboarding_at_another_stand_than_ground_gave():
+    """Milestone 8, E2: parked at another stand, GSX never deboarded."""
+    gsx_link, menu, _ = link(lvars(deboarding=gsx.AVAILABLE))
+    given, other = SimpleNamespace(lat=48.36, lon=11.79), SimpleNamespace(lat=48.35, lon=11.78)
+    gsx_link.step(arrived(given, given, other), parked(), Collector())
+    assert menu.asked == ["deboarding"]
+
+
+def test_no_deboarding_before_the_engines_are_off_and_the_brake_set():
+    stand = SimpleNamespace(lat=48.35, lon=11.78)
+    for aircraft in (parked(engines_running=True), parked(parking_brake=False)):
+        gsx_link, menu, _ = link(lvars(deboarding=gsx.AVAILABLE))
+        gsx_link.step(arrived(stand, stand), aircraft, Collector())
+        assert menu.asked == []
 
 
 def test_without_control_only_reading_and_notes():
