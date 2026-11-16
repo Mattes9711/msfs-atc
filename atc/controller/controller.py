@@ -123,6 +123,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin):
         self.give_way_told: set[tuple[str, str]] = set()  # (callsign, "crossing" | "follow" | "opposite") (L4)
         self.taxi_hold: str | None = None  # held for this aircraft coming towards us: "continue taxi" when clear
         self.route_joined = False  # on the cleared taxi route once: leaving it from then on gets a new route (27)
+        self.route_start_off_m: float | None = None  # how far off the route when the watch began (C4)
         self.speeding = False  # "reduce taxi speed" said, until slower again
         self.progressive: str | None = None  # the phase ("taxi", "taxi_in") with progressive taxi: turns called
         self.turns_told: set[int] = set()  # progressive taxi: route edges whose turn was called

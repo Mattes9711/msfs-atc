@@ -54,7 +54,18 @@ def test_off_the_cleared_route_gets_where_it_is_and_a_new_route():
 def test_leaving_the_stand_towards_the_route_is_not_off_it():
     s = cleared()
     s.atc.route_joined = False  # as right after the clearance, before the aircraft has reached its route
-    assert at(s, 1100, 300) == []  # 100 m off it, but never on it yet
+    s.atc.route_start_off_m = 70  # cleared 70 m beside it (pushed back elsewhere)
+    assert at(s, 1100, 300) == []  # 100 m off it, but never on it yet and not much farther than at the start
+
+
+def test_turning_away_before_ever_joining_the_route_is_off_it():
+    """Milestone 8, C4: a wrong turn right after the pushback got no reaction: the watch began only once the
+    aircraft had been on its route."""
+    s = cleared()
+    s.atc.route_joined, s.atc.route_start_off_m = False, None  # as right after a clearance given after the pushback
+    assert at(s, 1000, 440, gs=0) == []  # pushed back 40 m beside the lead-in, not yet on the route
+    [call] = at(s, 1000, 520)  # and now taxiing away from it
+    assert call.startswith(f"{CS}, you are off your cleared route, new route, taxi to holding point")
 
 
 def test_near_the_holding_point_and_on_the_runway_nobody_reroutes():

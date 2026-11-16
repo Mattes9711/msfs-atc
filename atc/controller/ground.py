@@ -125,7 +125,7 @@ class GroundMixin:
 
     def _taxi_out(self, station: Station, state: AircraftState) -> list[Response]:
         self.route_out = self.taxi_route(state)
-        self.route_joined, self.turns_told = False, set()
+        self.route_joined, self.turns_told, self.route_start_off_m = False, set(), None
         items = taxi_items(self.route_out, self.runway)
         if not self.qnh_given and self.metar and self.metar.qnh_hpa:
             items.append(rb.qnh(self.metar.qnh_hpa))
@@ -220,9 +220,13 @@ class GroundMixin:
             self.speeding = True
             return self._transmit(station, f"{self.cs}, reduce taxi speed", state)
         off = taxi_watch.off_route_m(graph, route, state.lat, state.lon)
+        if self.route_start_off_m is None:
+            self.route_start_off_m = off
         if off <= taxi_watch.ON_ROUTE_M:
             self.route_joined = True  # before: still leaving the stand towards the route
-        elif (self.route_joined and off > taxi_watch.OFF_ROUTE_M and state.ground_speed_kt > STOPPED_KT
+        elif ((off > taxi_watch.OFF_ROUTE_M if self.route_joined
+               else off > self.route_start_off_m + taxi_watch.OFF_ROUTE_M)  # moved away without joining it (C4)
+              and state.ground_speed_kt > STOPPED_KT
               and not taxi_watch.near_route_end(graph, route, state.lat, state.lon)):
             return self._reroute(station, state, graph)
         if self.progressive == self.phase and (turn := taxi_watch.next_turn(graph, route, state.lat, state.lon)):
@@ -238,7 +242,7 @@ class GroundMixin:
         name = taxi_watch.taxiway_at(graph, state.lat, state.lon)
         where = f"you appear to be on {spoken.spell(name)}" if name else "you are off your cleared route"
         start = graph.nearest_node(state.lat, state.lon)
-        self.route_joined, self.turns_told = False, set()
+        self.route_joined, self.turns_told, self.route_start_off_m = False, set(), None
         if self.phase == "taxi":
             self.route_out = graph.route_to_runway(start, self.runway)
             items = taxi_items(self.route_out, self.runway)
@@ -371,7 +375,7 @@ class GroundMixin:
         goal = graph.nearest_node(stand.lat, stand.lon) if stand else None
         route = graph.route(start, goal) if start is not None and goal is not None else None
         self.route_in, self.stand_in = route, stand
-        self.route_joined, self.turns_told, self.speeding = False, set(), False
+        self.route_joined, self.turns_told, self.speeding, self.route_start_off_m = False, set(), False, None
         items = rb.taxi_to_stand(route_names(route), route_hold_short(route))
         where = f"stand {spoken.spell(stand.name)}" if stand else "the apron"
         text = f"{self.cs}, taxi to {where}" + (", " + rb.instruction_text(items) if items else "")
