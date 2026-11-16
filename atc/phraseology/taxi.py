@@ -20,7 +20,7 @@ def holding_point(route: TaxiRoute | None) -> str | None:
     whole taxiway."""
     if route is None or not route.edges:
         return None
-    last = route.edges[-1].name
+    last = route.edges[-1].name or route.point
     return last if last and STUB.fullmatch(last) else None
 
 

@@ -58,7 +58,7 @@ def test_full_ground_departure(s):
     assert s.say(GROUND, "Lufthansa 4AB, request push and start") == ["Lufthansa four Alfa Bravo, push and start approved, facing west"]
 
     [taxi] = s.say(GROUND, "Lufthansa 4AB, request taxi")
-    assert taxi == "Lufthansa four Alfa Bravo, taxi to holding point runway two tree"
+    assert taxi == "Lufthansa four Alfa Bravo, taxi to holding point Alfa tree runway two tree"
     assert confirmed(s.say(GROUND, "taxi to holding point runway 23, Lufthansa 4AB"))
 
     assert s.say(TOWER, "Hamburg Tower, Lufthansa 4AB, holding point runway 23, ready for departure") == \

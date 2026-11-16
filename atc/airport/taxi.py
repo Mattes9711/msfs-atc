@@ -11,6 +11,8 @@ NAME_CHANGE_PENALTY_M = 150  # so "via A, B" beats a slightly shorter "via A, A3
 RUNWAY_CROSSING_PENALTY_M = 1500  # avoid crossings unless the detour is long
 HOLD_SHORT_MAX_FROM_CENTERLINE_M = 200
 HOLDING_POINT_SLACK_M = 300  # consider all holding points this close to the best one near the threshold
+CROSSING_STEPS = 10  # how far a hold-short point's taxiway is followed to find the other side of a crossing
+STRIP_MARGIN_M = 10  # … within its hold lines, give or take this
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,7 @@ class Edge:
 class TaxiRoute:
     edges: tuple[Edge, ...]
     cost: float
+    point: str = ""  # the holding point's name when the route reaches it on an unnamed piece (EDDH B1)
 
     @property
     def length_m(self) -> float:
@@ -116,9 +119,38 @@ class TaxiGraph:
                   if point_segment_distance(self.nodes[n], r1, r2) <= HOLD_SHORT_MAX_FROM_CENTERLINE_M]
         return sorted(beside, key=lambda n: distance(self.nodes[n], threshold))
 
+    def leads_across(self, node: int, runway_end: str) -> bool:
+        """A hold-short point of a runway crossing, not of an entry: within the runway's strip its taxiway leads to
+        another hold-short point on the other side (Milestone 8, C5: at EDDH the departure "holding point" for 33
+        was G, which crosses 33 to B3; the user stood at a holding point that didn't exist for a departure). There
+        are no runway segments in the data, so an entry's way ends on the runway."""
+        _, _, r1, r2 = next(r for r in self._runways if runway_end in r[1])
+
+        def side(n: int) -> float:
+            (x, y) = self.nodes[n]
+            return (r2[0] - r1[0]) * (y - r1[1]) - (r2[1] - r1[1]) * (x - r1[0])
+
+        start, seen, frontier = side(node), {node}, [node]
+        # Only the strip between the hold lines: a parallel taxiway is farther out than the hold-short point
+        strip = point_segment_distance(self.nodes[node], r1, r2) + STRIP_MARGIN_M
+        for _ in range(CROSSING_STEPS):
+            following = []
+            for n in frontier:
+                for e in self.adjacent[n]:
+                    if e.b in seen or point_segment_distance(self.nodes[e.b], r1, r2) > strip:
+                        continue
+                    seen.add(e.b)
+                    following.append(e.b)
+                    if e.b in self.hold_short and side(e.b) * start < 0:
+                        return True
+            frontier = following
+        return False
+
     def route_to_runway(self, start: int, runway_end: str) -> TaxiRoute | None:
-        """Cheapest route to any holding point near the departure threshold."""
+        """Cheapest route to a holding point near the departure threshold: one that leads onto the runway, not
+        across it (only if the runway has no other, any)."""
         candidates = self.holding_points(runway_end)
+        candidates = [n for n in candidates if not self.leads_across(n, runway_end)] or candidates
         if not candidates:
             return None
         end = self.airport.runway_end(runway_end)
@@ -126,7 +158,12 @@ class TaxiGraph:
         best = distance(self.nodes[candidates[0]], threshold)
         near = [n for n in candidates if distance(self.nodes[n], threshold) <= best + HOLDING_POINT_SLACK_M]
         routes = [r for r in (self.route(start, goal) for goal in near) if r is not None]
-        return min(routes, key=lambda r: r.cost, default=None)
+        best = min(routes, key=lambda r: r.cost, default=None)
+        if best is not None and best.edges and not best.edges[-1].name:
+            beyond = {e.name for e in self.adjacent[best.edges[-1].b] if e.name}
+            if len(beyond) == 1:
+                best = TaxiRoute(best.edges, best.cost, beyond.pop())
+        return best
 
     def route(self, start: int, goal: int) -> TaxiRoute | None:
         # State includes the taxiway we arrived on, because changing names costs extra

@@ -124,4 +124,28 @@ def test_ambiguous_chain_end_stays_unnamed():
 def test_eddh_gate_has_a_route_to_runway_23(eddh):
     route = route_from_gate(eddh, "23")
     assert route is not None and route.length_m > 0
-    assert taxi_clearance(route, "23").startswith("taxi to holding point runway two tree")
+    assert taxi_clearance(route, "23").startswith("taxi to holding point Alfa tree runway two tree")
+
+
+def test_departure_holding_point_is_an_entry_not_a_crossing():
+    """Milestone 8, C5: G at EDDH is the hold-short of a crossing of 33 (to B3), not a holding point for it."""
+    a = airport([RWY_09_27], [
+        path((300, 400), (300, 150), "", type="P", start="P"),
+        path((300, 150), (900, 150), "A"),
+        path((300, 150), (300, 90), "G", end="HSND"),  # nearest to the 09 threshold, but it goes on across
+        path((300, 90), (300, -90), "G", start="HSND", end="HSND"),
+        path((300, -90), (300, -300), "G", start="HSND"),
+        path((900, 150), (900, 90), "A2", end="HSND"),  # an entry: ends on the runway
+    ], gate=(300, 400))
+    graph = TaxiGraph(a)
+    g = graph.nearest_node(*ll(300, 90))
+    assert graph.leads_across(g, "09") and not graph.leads_across(graph.nearest_node(*ll(900, 90)), "09")
+    assert route_from_gate(a, "09").taxiways == ["A", "A2"]
+
+
+def test_eddh_33_holding_point_is_not_the_crossing_g(eddh):
+    graph = TaxiGraph(eddh)
+    route = route_from_gate(eddh, "33")
+    assert route is not None and not graph.leads_across(route.edges[-1].b, "33")
+    # The route reaches B1 on unnamed pieces; the holding point still has its name
+    assert taxi_clearance(route, "33").startswith("taxi to holding point Bravo one runway tree tree")

@@ -92,7 +92,7 @@ def test_tuning_the_atis_frequency_plays_the_atis(monkeypatch, capsys):
 
 def test_taxi_command_shows_the_ground_clearance(monkeypatch, capsys):
     out = run_session(monkeypatch, capsys, ["/taxi"])
-    assert "Ground would say: Lufthansa four Alfa Bravo, taxi to holding point runway two tree" in out
+    assert "Ground would say: Lufthansa four Alfa Bravo, taxi to holding point Alfa tree runway two tree" in out
     assert "unnamed, crossings" in out
 
 
