@@ -78,7 +78,8 @@ def _load(con: sqlite3.Connection, ident: str) -> Airport | None:
     )
     parking = tuple(
         Parking(
-            name=" ".join(part for part in (p["name"], f"{p['number'] or ''}{p['suffix'] or ''}") if part),
+            name=" ".join(part for part in (_parking_name(p["name"]), f"{p['number'] or ''}{p['suffix'] or ''}")
+                          if part),
             type=p["type"], lat=p["laty"], lon=p["lonx"], heading=p["heading"],
             airline_codes=tuple(c for c in (p["airline_codes"] or "").split(",") if c),
         )
@@ -93,6 +94,11 @@ def _load(con: sqlite3.Connection, ident: str) -> Airport | None:
         ident=ident, name=name, lat=a["laty"], lon=a["lonx"], elevation_ft=a["altitude"], mag_var=a["mag_var"],
         frequencies=frequencies, runways=runways, parking=parking, taxi_paths=taxi_paths,
     )
+
+
+def _parking_name(name: str | None) -> str:
+    """Little Navmap's short parking names ("G" gate, "P" parking); "NONE" is a spot without one: just its number."""
+    return "" if not name or name.upper() == "NONE" else name
 
 
 def _station_name(com_name: str | None, ident: str, airport_name: str) -> str:

@@ -47,6 +47,8 @@ def build_parser() -> argparse.ArgumentParser:
     fp.add_argument("--cruise", type=parse_level, help="e.g. FL240 or 5000")
     fp.add_argument("--route", default="", help='e.g. "AMLU2G AMLUH M852 DENIX"')
     fp.add_argument("--aircraft", help="ICAO type, e.g. A20N")
+    fp.add_argument("--rules", type=str.upper, choices=("IFR", "VFR"),
+                    help="flight rules (default: SimBrief's, else IFR); VFR: no clearance, squawk 7000, no pushback")
     return p
 
 
@@ -61,7 +63,7 @@ def main(argv: list[str] | None = None, weather: WeatherSource | None = None,
         return
     request = PlanRequest(simbrief=args.simbrief, callsign=args.callsign, departure=args.departure,
                           destination=args.destination, cruise_ft=args.cruise, route=args.route,
-                          aircraft=args.aircraft)
+                          aircraft=args.aircraft, rules=args.rules)
     options = SessionOptions(nosim=args.nosim, weather=args.weather, strict_freq=args.strict_freq)
     try:
         config = load_config(args.config)
@@ -93,7 +95,7 @@ def main(argv: list[str] | None = None, weather: WeatherSource | None = None,
             run(session.sim, inputs[0], sink, session.controller, session.cabin())
         else:
             run_live(session.sim, inputs, sink, session.controller, refresh=session.refresh_weather,
-                     winds=session.winds if options.weather == "sim" else None, cabin=session.cabin(),
+                     winds=session.winds if session.sim_wind else None, cabin=session.cabin(),
                      gsx=session.gsx())
     except KeyboardInterrupt:
         pass

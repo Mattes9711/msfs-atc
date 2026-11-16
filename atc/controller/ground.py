@@ -19,7 +19,18 @@ from atc.phraseology.taxi import route_hold_short, route_names, taxi_items
 from atc.sim.base import AircraftState
 from atc.controller.common import (APRON_RADIUS_M, AT_POINT_M, AT_STAND_M, FOLLOW_WITHIN_M, GIVE_WAY_AHEAD_M,
                                    HOLD_SHORT_HINT_S, INITIAL_CLIMB_FT, PHASES, PUSH_BEHIND_M, STOPPED_BEHIND_M,
-                                   STOPPED_KT, Response, Station)
+                                   STOPPED_KT, VFR_SQUAWK, Response, Station)
+
+
+def stand_words(stand: Parking | None) -> str:
+    """How a controller names the stand: "stand Golf two zero one" for a gate, "parking one two" for a spot on a GA
+    ramp (its letters, "P" for parking, aren't said), "the apron" when there is none or it has no number."""
+    if stand is None:
+        return "the apron"
+    if not stand.is_ga:
+        return f"stand {spoken.spell(stand.name)}"
+    number = stand.name.split()[-1] if stand.name else ""
+    return f"parking {spoken.spell(number)}" if any(c.isdigit() for c in number) else "the apron"
 
 
 class GroundMixin:
@@ -42,6 +53,12 @@ class GroundMixin:
             self.phase = "cleared"
         self._set_pending(items, station.key, self._after_clearance)
         return [self._say(station, f"{self.cs}, " + ", ".join(phrases))]
+
+    def _vfr_no_clearance(self, station: Station) -> list[Response]:
+        """A VFR flight asking for a clearance: it needs none to taxi (Milestone 9, A1)."""
+        item = rb.squawk(VFR_SQUAWK)
+        self._set_pending([item], station.key)
+        return [self._say(station, f"{self.cs}, VFR, no clearance required, {item.phrase}, report ready to taxi")]
 
     def _cleared_to(self) -> str:
         dest = self.destination.name if self.destination else (
@@ -68,6 +85,8 @@ class GroundMixin:
         """called: ATC calls by itself after holding the push (heard only when tuned)."""
         if self._arrived():
             return [self._say(station, f"{self.cs}, say again")]
+        if self.vfr:  # a small aircraft at a GA ramp: no tug, it taxis out by itself (A3)
+            return [self._say(station, f"{self.cs}, no pushback required, report ready to taxi")]
         if self._traffic_behind(state):
             # LiveTraffic doesn't listen to us, so it goes first (the user's rule): no push into it
             self.push_waiting = station
@@ -253,7 +272,7 @@ class GroundMixin:
             goal = graph.nearest_node(stand.lat, stand.lon) if stand else None
             self.route_in = graph.route(start, goal) if goal is not None else None
             items = rb.taxi_to_stand(route_names(self.route_in), route_hold_short(self.route_in))
-            text = (f"taxi to stand {spoken.spell(stand.name)}" if stand else "taxi to the apron") + (
+            text = f"taxi to {stand_words(stand)}" + (
                 ", " + rb.instruction_text(items) if items else "")
             after = self._after_taxi_in
         self._set_pending(items, station.key, after)
@@ -378,7 +397,7 @@ class GroundMixin:
         self.route_in, self.stand_in = route, stand
         self.route_joined, self.turns_told, self.speeding, self.route_start_off_m = False, set(), False, None
         items = rb.taxi_to_stand(route_names(route), route_hold_short(route))
-        where = f"stand {spoken.spell(stand.name)}" if stand else "the apron"
+        where = stand_words(stand)
         text = f"{self.cs}, taxi to {where}" + (", " + rb.instruction_text(items) if items else "")
         self._set_pending(items, station.key, self._after_taxi_in)
         return [self._say(station, text)]
@@ -387,11 +406,14 @@ class GroundMixin:
         return [Response("flight complete", spoken=False)]
 
     def _stand(self) -> Parking | None:
-        """A gate of our airline if the scenery assigns one, else any gate, else any parking spot."""
+        """A gate of our airline if the scenery assigns one, else any gate, else any parking spot. A VFR flight gets
+        a GA ramp: a small aircraft doesn't park at an airliner's gate."""
         parking = self.destination.parking
         airline = self.plan.callsign[:3]
         gates = [p for p in parking if p.is_gate]
-        for choice in ([p for p in gates if airline in p.airline_codes], gates, list(parking)):
+        choices = ([p for p in parking if p.is_ga], list(parking)) if self.vfr else (
+            [p for p in gates if airline in p.airline_codes], gates, list(parking))
+        for choice in choices:
             if choice:
                 return min(choice, key=lambda p: p.name)
         return None

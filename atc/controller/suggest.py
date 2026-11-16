@@ -21,10 +21,18 @@ GROUP_ROLE = {"Clearance": "clearance", "Ground": "ground", "Tower": "tower", "D
               "Approach": "approach", "Arrival Tower and Ground": "arrival_tower"}
 
 
-def written_callsign(callsign: str) -> str:
-    """'DLH4AB' → 'Lufthansa 4AB', as the pilot says it (the parser reads both forms)."""
+def written_callsign(callsign: str, short: bool = False) -> str:
+    """'DLH4AB' → 'Lufthansa 4AB', as the pilot says it (the parser reads both forms). A registration in phonetic
+    words, 'Delta Mike Alfa Bravo Charlie', or with `short` 'Delta Bravo Charlie' (only once the controller used
+    it: Controller.short_form_used)."""
+    if spoken.registration(callsign):
+        return spoken.short_callsign(callsign) if short else spoken.callsign(callsign)
     m = re.fullmatch(r"([A-Z]{3})(\d[A-Z0-9]*)", callsign.upper())
     return f"{TELEPHONY[m[1]]} {m[2]}" if m and m[1] in TELEPHONY else callsign.upper()
+
+
+def _callsign_for(atc, station) -> str:
+    return written_callsign(atc.plan.callsign, atc.short_form_used(station))
 
 
 def readback_part(item: rb.Item) -> str:
@@ -66,13 +74,14 @@ def readback_part(item: rb.Item) -> str:
 def suggestion(atc) -> dict | None:
     """{"title", "text", "station", "khz"} or None when nothing is due (e.g. taxiing, cruising). `station` is who
     to say it to: a readback goes to the controller who gave the instruction, even a "contact …"."""
-    cs = written_callsign(atc.plan.callsign)
     if atc.pending and (waiting := atc.readback_station()):
+        cs = _callsign_for(atc, waiting)
         return {"title": "Read back", "text": ", ".join(readback_part(i) for i in atc.pending) + f", {cs}",
                 "station": waiting.name, "khz": waiting.freq.khz}
     station = atc.expected_station()
     if station is None:
         return None
+    cs = _callsign_for(atc, station)
     name, phase, state = station.name, atc.phase, atc.state
 
     def call(title: str, text: str) -> dict:
@@ -97,6 +106,11 @@ def suggestion(atc) -> dict | None:
         return call("Request IFR clearance",
                     f"request IFR clearance to {to}, information {letter}" if to else
                     f"request IFR clearance, information {letter}")
+    if phase == "cleared" and atc.vfr:  # VFR: no clearance, no pushback; the first call says who we are (A3)
+        to = atc.destination.name if atc.destination else atc.plan.destination
+        letter = spoken.ALPHABET[atc.atis.letter].lower()
+        parts = [atc.plan.aircraft, f"VFR to {to}" if to else "VFR", f"information {letter}", "request taxi"]
+        return call("Request taxi", ", ".join(p for p in parts if p))
     if phase == "cleared":
         return call("Request pushback", "request push and start")
     if phase == "pushback":

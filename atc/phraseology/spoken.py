@@ -40,6 +40,20 @@ def callsign(text: str) -> str:
     return spell(cs)
 
 
+def registration(text: str) -> str | None:
+    """'D-MABC' -> 'DMABC': a callsign that is an aircraft's registration (letters only, no airline and flight
+    number), or None."""
+    cs = text.upper().replace("-", "").replace(" ", "")
+    return cs if re.fullmatch(r"[A-Z]{4,}", cs) else None
+
+
+def short_callsign(text: str) -> str | None:
+    """ICAO abbreviation of a registration: its first character and the last two, 'D-MABC' -> 'Delta Bravo
+    Charlie'. Only after the controller used it first (atc/controller/controller.py). None for airlines."""
+    reg = registration(text)
+    return spell(reg[0] + reg[-2:]) if reg else None
+
+
 def flight_level(feet: int) -> str:
     """12000 -> 'flight level one two zero'; whole hundreds are said as such: 10000 -> 'flight level one hundred'."""
     if feet % 100:

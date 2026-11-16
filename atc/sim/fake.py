@@ -17,9 +17,9 @@ class FakeSim:
         self.state = state
 
     @classmethod
-    def parked_at(cls, airport: Airport) -> "FakeSim":
+    def parked_at(cls, airport: Airport, ga: bool = False) -> "FakeSim":
         # The airport reference point can be on a runway, so prefer a real parking spot
-        spot = airport.default_parking()
+        spot = airport.default_parking(ga)
         lat, lon = (spot.lat, spot.lon) if spot else (airport.lat, airport.lon)
         return cls(AircraftState(
             lat=lat, lon=lon, alt_msl_ft=airport.elevation_ft + 9, alt_agl_ft=9.0, on_ground=True, heading_mag=0.0,

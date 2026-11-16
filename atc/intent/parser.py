@@ -5,6 +5,7 @@ import re
 from atc.intent.normalize import PHONETIC, tokenize
 from atc.intent.schema import Intent
 from atc.phraseology.airlines import TELEPHONY
+from atc.phraseology.spoken import registration
 from atc.units import parse_mhz
 
 TELEPHONY_TO_CODE = {name.lower(): code for code, name in TELEPHONY.items()}
@@ -24,7 +25,9 @@ ACKNOWLEDGE = re.compile(r"\b(roger|wilco|affirm|affirmative|negative|copied|sta
 
 def parse(text: str, expected_callsign: str | None = None) -> Intent:
     tokens = tokenize(text)
-    callsign, span = find_callsign(tokens, expected_callsign)
+    callsign, span = registration_callsign(tokens, expected_callsign) if expected_callsign else (None, set())
+    if callsign is None:
+        callsign, span = find_callsign(tokens, expected_callsign)
     if callsign is None and expected_callsign:  # "it turns out, two for one": the airline misheard, the number not
         callsign, span = flight_number_only(tokens, expected_callsign)
     rest = [PHONETIC.get(tok, tok) for i, tok in enumerate(tokens) if i not in span]
@@ -60,6 +63,31 @@ def flight_number_only(tokens: list[str], expected: str) -> tuple[str | None, se
         if built == wanted:
             return expected.upper(), set(range(i, j))
     return None, set()
+
+
+def registration_callsign(tokens: list[str], expected: str) -> tuple[str | None, set[int]]:
+    """Our registration callsign (Milestone 9, A2), in full ("Delta Mike Alfa Bravo Charlie", "D-MABC", "DMABC") or
+    in the short form ("Delta Bravo Charlie"), from phonetic words, single letters or letters run together. One
+    misheard letter is forgiven in the full form, none in the short one (three letters are too easily a taxi
+    route). None if `expected` is no registration."""
+    reg = registration(expected)
+    if reg is None:
+        return None, set()
+    short = reg[0] + reg[-2:]
+    best: tuple[int, set[int]] | None = None
+    for i in range(len(tokens)):
+        built, j = "", i
+        while j < len(tokens) and len(built) < len(reg):
+            letters = PHONETIC.get(tokens[j], tokens[j])  # "mike" -> "m"; "d", "mabc" stay
+            if not re.fullmatch(r"[a-z]+", letters) or (len(letters) > 1 and letters not in reg.lower()):
+                break
+            built += letters.upper()
+            j += 1
+            if built == short and best is None:
+                best = (3, set(range(i, j)))
+        if len(built) == len(reg) and difflib.SequenceMatcher(None, built, reg).ratio() >= 0.8:
+            return expected.upper(), set(range(i, j))
+    return (expected.upper(), best[1]) if best else (None, set())
 
 
 def callsign_matches(heard: str, expected: str) -> bool:

@@ -549,7 +549,7 @@ function startBody() {  // the plan and options, the same for the briefing and t
   return {
     simbrief: form.simbrief.value.trim() || null,
     callsign: form.callsign.value, departure: form.departure.value, destination: form.destination.value,
-    cruise: form.cruise.value, route: form.route.value,
+    cruise: form.cruise.value, route: form.route.value, rules: form.rules.value,
     nosim: form.nosim.checked, weather: form.weather.value, strict_freq: form.strict_freq.checked,
   };
 }
@@ -603,7 +603,7 @@ function briefAirport(box, a, role) {  // one airport of the briefing: ident, na
 function showBriefing(b) {
   text("b-callsign", b.callsign);
   text("b-spoken", b.spoken_callsign);
-  text("b-meta", [b.aircraft, b.cruise_ft ? level(b.cruise_ft) : "", b.source].filter(Boolean).join(" · "));
+  text("b-meta", [b.aircraft, b.rules, b.cruise_ft ? level(b.cruise_ft) : "", b.source].filter(Boolean).join(" · "));
   briefAirport($("b-dep"), b.departure, "From");
   briefAirport($("b-dest"), b.destination, "To");
   const procedures = [b.sid && `SID ${b.sid}`, b.star && `STAR ${b.star}`].filter(Boolean).join(" · ");

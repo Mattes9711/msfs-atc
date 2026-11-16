@@ -78,5 +78,20 @@ def parse_metar(raw: str) -> Metar:
     return Metar(raw=raw.strip(), station=station, time=time, clouds=tuple(clouds), weather=tuple(weather), **fields)
 
 
+def borrowed(raw: str, icao: str, wind: str | None = None) -> str:
+    """Another station's METAR for a field that has none (Milestone 9, A4): our ident instead of theirs, and with
+    `wind` (a group like "24009KT", from the sim at the field) instead of theirs. The remark says where it came
+    from: "EDHE 161650Z 24012KT 9999 FEW029 08/04 Q0998 RMK FROM EDHI"."""
+    tokens = raw.split()
+    if tokens and tokens[0] in ("METAR", "SPECI"):
+        tokens = tokens[1:]
+    source, tokens = tokens[0], [icao.upper()] + tokens[1:]
+    if wind:
+        tokens = [wind if WIND.fullmatch(t) else t for t in tokens if not re.fullmatch(r"\d{3}V\d{3}", t)]
+    if "RMK" in tokens:
+        tokens = tokens[:tokens.index("RMK")]
+    return " ".join(tokens + ["RMK", "FROM", source] + (["WIND", "MSFS"] if wind else []))
+
+
 def _celsius(text: str) -> int:
     return -int(text[1:]) if text.startswith("M") else int(text)

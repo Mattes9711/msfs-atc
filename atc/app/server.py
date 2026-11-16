@@ -318,7 +318,7 @@ class App:
         try:
             run_live(session.sim, [self.input, self.push_to_talk], sink, session.controller,
                      refresh=session.refresh_weather,
-                     winds=session.winds if session.options.weather == "sim" else None, stop=self.stop_event,
+                     winds=session.winds if session.sim_wind else None, stop=self.stop_event,
                      cabin=session.cabin(), gsx=session.gsx())
         except Exception as e:  # shown in the window instead of a silent dead thread
             sink.emit(Event("system", f"the session stopped because of an error: {e}"))
@@ -360,7 +360,8 @@ def parse_start(body: dict) -> tuple[PlanRequest, SessionOptions]:
     simbrief = body.get("simbrief")
     request = PlanRequest(simbrief=simbrief.strip() if isinstance(simbrief, str) else None,
                           callsign=text("callsign"), departure=text("departure"), destination=text("destination"),
-                          cruise_ft=cruise_ft, route=text("route") or "", aircraft=text("aircraft"))
+                          cruise_ft=cruise_ft, route=text("route") or "", aircraft=text("aircraft"),
+                          rules=text("rules"))
     weather = body.get("weather", "live")
     if weather not in ("live", "sim"):
         raise SetupError(f"weather {weather!r}: live or sim")

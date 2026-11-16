@@ -87,7 +87,7 @@ def test_readbacks_are_written_like_a_pilot_says_them():
     assert parts == ["taxi to holding point runway 23", "via A, B", "hold short runway 05", "descend flight level 120",
                      "turn left heading 230", "speed 180 knots", "QNH 1018", "contact Bremen Radar 125.100",
                      "runway 08R", "cleared to land"]
-    assert written_callsign("DLH4AB") == "Lufthansa 4AB" and written_callsign("DEABC") == "DEABC"
+    assert written_callsign("DLH4AB") == "Lufthansa 4AB" and written_callsign("DEABC") == "Delta Echo Alfa Bravo Charlie"
 
 
 def test_the_status_carries_the_suggestion(eddh):

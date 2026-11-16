@@ -33,10 +33,10 @@ from atc.weather.metar import Metar
 from atc.weather.runway_choice import choose_runway
 from atc.controller.common import (AIRBORNE_AGL_FT, APPROACH_HANDOFF_NM, CALL_KINDS, NEAR_HOLDING_POINT_M, PHASES,
                                    PHASE_ROLE, READBACK_REMINDER_S, RESERVED_SQUAWKS, ROLES, SECTOR_NEAR_DEG,
-                                   TOWER_HANDOFF_NM,
+                                   TOWER_HANDOFF_NM, VFR_SQUAWK,
                                    VACATE_SPEED_KT, Response, Station, _wind, center_station, describe_intent,
                                    frequency_list, wrong_frequency_hint)  # frequency_list: for atc.session
-from atc.controller.ground import GroundMixin
+from atc.controller.ground import GroundMixin, stand_words
 from atc.controller.tower import TowerMixin
 from atc.controller.air import AirMixin
 from atc.controller.traffic_calls import TrafficMixin
@@ -72,12 +72,17 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
         self.atis = Atis(airport)
         self.atis.update(metar, self.runway)
         self.cs = spoken.callsign(plan.callsign)
+        self.cs_short = spoken.short_callsign(plan.callsign)  # registrations only (A2)
+        self.abbreviated: set[tuple[str, str]] = set()  # controllers who have called us: from then on the short form
 
         self.zones = RunwayZones(airport, self.taxi)
         self._arrival_zones: RunwayZones | None = None
 
-        self.phase = "clearance"
-        self.squawk: str | None = None
+        # VFR (Milestone 9, A1) has its own sequence: no IFR clearance (squawk 7000 from the start) and no
+        # pushback, so its first call is the taxi request. In the air it still flies like IFR until parts B-E.
+        self.vfr = plan.rules == "VFR"
+        self.phase = "cleared" if self.vfr else "clearance"
+        self.squawk: str | None = VFR_SQUAWK if self.vfr else None
         self.qnh_given = False
         self.descent_given = False
         self.centers = centers or CenterSectors()
@@ -403,7 +408,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
 
         kind = intent.kind
         if kind == "request_clearance":
-            return self._clearance(intent, station)
+            return self._vfr_no_clearance(station) if self.vfr else self._clearance(intent, station)
         if self.phase == "clearance" and kind not in ("checkin", "acknowledge"):  # a first call gets "go ahead"
             return [self._no_clearance(station)]
         if kind == "request_pushback":
@@ -493,7 +498,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
             return [self._say(station, f"{self.cs}, {station.name}, continue taxi to holding point runway "
                                        f"{spoken.runway(self.runway)}")]
         if self.phase == "taxi_in" and self.stand_in is not None:
-            return [self._say(station, f"{self.cs}, {station.name}, continue to stand {spoken.spell(self.stand_in.name)}")]
+            return [self._say(station, f"{self.cs}, {station.name}, continue to {stand_words(self.stand_in)}")]
         if self.phase == "approach" and re.search(r"\bestablished\b", intent.text):
             tower = self.station("arrival_tower")
             if tower is not None and tower.key != station.key:
@@ -650,15 +655,33 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
         return (south - SECTOR_NEAR_DEG <= lat <= north + SECTOR_NEAR_DEG
                 and west - SECTOR_NEAR_DEG <= lon <= east + SECTOR_NEAR_DEG)
 
+    def _abbreviate(self, station: Station, text: str, heard: bool = True) -> str:
+        """A registration callsign (A2, ICAO): each controller says it in full in its first call to us, and in the
+        short form "Delta Bravo Charlie" from then on. Only after that may the pilot use it too."""
+        if self.cs_short is None:
+            return text
+        if station.key in self.abbreviated:
+            return text.replace(self.cs, self.cs_short)
+        if heard and self.cs in text:
+            self.abbreviated.add(station.key)
+        return text
+
+    def short_form_used(self, station: Station | None) -> bool:
+        """This controller has used the short callsign, so the pilot may (for the suggestions)."""
+        return self.cs_short is not None and station is not None and station.key in self.abbreviated
+
     def _say(self, station: Station, text: str) -> Response:
+        text = self._abbreviate(station, text)
         self.last_said[station.key] = text
         return Response(text, spoken=True, station=station.name)
 
     def _transmit(self, station: Station, text: str, state: AircraftState) -> list[Response]:
         """An ATC-initiated call: only heard if the pilot is tuned to that controller."""
-        self.last_said[station.key] = text
         tuned = self.station_at(state.com1_khz)
-        if tuned is not None and tuned.key == station.key:
+        heard = tuned is not None and tuned.key == station.key
+        text = self._abbreviate(station, text, heard)
+        self.last_said[station.key] = text
+        if heard:
             return [Response(text, spoken=True, station=station.name)]
         if self.pending and self.pending_key == station.key:
             self.pending_heard = False  # a missed call: strict readbacks must not wait for its readback

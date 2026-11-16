@@ -65,6 +65,10 @@ class Parking:
     def is_gate(self) -> bool:
         return self.type.startswith("G")
 
+    @property
+    def is_ga(self) -> bool:
+        return self.type.startswith("RGA")
+
 
 @dataclass(frozen=True)
 class TaxiPath:
@@ -101,9 +105,9 @@ class Airport:
     def frequency_at(self, khz: int) -> Frequency | None:
         return next((f for f in self.frequencies if f.khz == khz), None)
 
-    def default_parking(self) -> Parking | None:
-        """A gate if there is one, so the fake sim starts somewhere an airliner would."""
-        return min(self.parking, key=lambda p: (not p.is_gate, p.name), default=None)
+    def default_parking(self, ga: bool = False) -> Parking | None:
+        """A gate if there is one, so the fake sim starts somewhere an airliner would; with ga a spot on a GA ramp."""
+        return min(self.parking, key=lambda p: (not (p.is_ga if ga else p.is_gate), p.name), default=None)
 
 
 class AirportData(Protocol):

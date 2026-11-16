@@ -23,11 +23,15 @@ def average_wind(samples: Sequence[tuple[float, float]]) -> tuple[int, int]:
     return direction, speed
 
 
+def wind_group(winds: Sequence[tuple[float, float]]) -> str:
+    """The averaged sim wind as a METAR group: "24009KT", "00000KT" when calm."""
+    direction, speed = average_wind(winds)
+    return "00000KT" if speed < CALM_KT else f"{direction:03d}{speed:02d}KT"
+
+
 def metar_from_sim(icao: str, when: datetime, winds: Sequence[tuple[float, float]], weather: SimWeather | None) -> str:
     """No clouds or dew point: MSFS doesn't report them as simvars, so the ATIS leaves them out."""
-    direction, speed = average_wind(winds)
-    groups = [icao.upper(), when.strftime("%d%H%MZ"),
-              "00000KT" if speed < CALM_KT else f"{direction:03d}{speed:02d}KT"]
+    groups = [icao.upper(), when.strftime("%d%H%MZ"), wind_group(winds)]
     if weather is not None:
         groups += [f"{min(9999, int(weather.visibility_m) // 100 * 100):04d}", f"Q{round(weather.sea_level_hpa)}"]
     return " ".join(groups + ["RMK", "MSFS"])

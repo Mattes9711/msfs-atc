@@ -1229,15 +1229,20 @@ What the data already has (Little Navmap, the user's scenery), checked at EDHE, 
   spoken "November one", "Delta".
 
 **Part A — The basis** (nothing new on the radio yet)
-A1. Flight rules VFR: from SimBrief (already read, `atc/flight_rules` "V"), `--rules VFR` on the command line and in
-    the app (❓ UI: one more field in the flight plan card, needs the user's OK). VFR picks its own phase sequence;
-    IFR stays exactly as it is.
-A2. Registration callsigns: "D-MABC" spoken "Delta Mike Alfa Bravo Charlie"; the short form "Delta Bravo Charlie"
-    only after the controller used it first (ICAO), then by both.
-A3. Small aircraft: no cabin announcements, no pushback, no GSX for a VFR flight in a GA aircraft; the aircraft type
-    in the first call ("ultralight" / "C42"), from the flight plan or the sim's `ATC MODEL`.
-A4. Weather at a field without a METAR: the nearest METAR within 25 NM for the QNH, the sim's wind at the field.
-A5. Stands: GA ramps get a plain name ("apron", "parking 12"), never "NONE 27".
+A1. ✅ Flight rules VFR: from SimBrief (already read, `atc/flight_rules` "V"), `--rules VFR` on the command line and
+    in the app (Rules field in the flight plan card, OK'd by the user). A VFR flight starts "cleared" with squawk
+    7000; "request clearance" gets "VFR, no clearance required". IFR stays exactly as it is.
+A2. ✅ Registration callsigns: "D-MABC" spoken "Delta Mike Alfa Bravo Charlie"; the short form "Delta Bravo Charlie"
+    only after that controller used it first (ICAO), then by both; each controller starts in full. The parser
+    hears it spelled, phonetic, as "DMABC" or "d m a b c", short, or with one letter misheard.
+A3. ✅ Small aircraft: no cabin announcements, no pushback ("no pushback required, report ready to taxi"), no GSX
+    for a VFR flight; the aircraft type in the first call ("C172, VFR to Munich, information alfa, request taxi").
+    Not done: the type comes only from the flight plan (`--aircraft`, SimBrief), not yet from the sim's `ATC MODEL`.
+A4. ✅ Weather at a field without a METAR: the nearest METAR within 25 NM (aviationweather.gov by bounding box,
+    cached for offline) for the QNH, marked "RMK FROM EDHI"; with MSFS the wind is the sim's at the field
+    ("WIND MSFS"). Beyond 25 NM: no METAR, as before.
+A5. ✅ Stands: GA ramps get a plain name ("parking two seven", "the apron" without a number), never "NONE 27";
+    a VFR flight is sent to a GA ramp, not an airliner's gate, and the fake sim starts it there.
 
 **Part B — The small field's Info station** (e.g. "Uetersen Info": information only, never a clearance)
 B1. Radio check and taxi information: "Uetersen Info, Delta Mike Alfa Bravo Charlie, ultralight, at the apron, VFR

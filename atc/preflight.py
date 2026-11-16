@@ -11,7 +11,7 @@ from atc.flightplan.route import spoken_sid, spoken_star
 from atc.flightplan.simbrief import SimbriefError, load_simbrief
 from atc.phraseology import spoken
 from atc.session import (PlanRequest, SessionOptions, SetupError, SimbriefLoader, airport_sources, build_plan,
-                         describe_runway, find_airport, load_metar)
+                         airport_metar, describe_runway, find_airport)
 from atc.weather.runway_choice import choose_runway
 from atc.weather.source import LiveWeather, WeatherSource
 
@@ -33,7 +33,7 @@ def brief(request: PlanRequest, options: SessionOptions, config: Config, *, weat
         notes.append("The departure weather will come from MSFS at the start; shown here is the real METAR.")
     return {
         "callsign": plan.callsign, "spoken_callsign": _spoken_callsign(plan.callsign),
-        "aircraft": plan.aircraft, "cruise_ft": plan.cruise_ft, "route": plan.route, "source": source,
+        "aircraft": plan.aircraft, "rules": plan.rules, "cruise_ft": plan.cruise_ft, "route": plan.route, "source": source,
         "sid": plan.sid or _procedure(plan.route, 0, spoken_sid),
         "star": plan.star or _procedure(plan.route, -1, spoken_star),
         "departure": _airport(sources, weather, plan.departure) if plan.departure else None,
@@ -61,7 +61,7 @@ def _airport(sources: list[AirportData], weather: WeatherSource, ident: str) -> 
         return {"ident": ident, "name": None, "metar": None, "runway": None,
                 "note": "no airport data: ATC has no ground or arrival phases there"}
     airport, _ = found
-    metar = load_metar(weather, airport.ident)
+    metar = airport_metar(weather, airport)
     end = choose_runway(airport, metar) if airport.runways else None
     return {"ident": airport.ident, "name": airport.name, "metar": metar.raw if metar else None,
             "runway": end.name if end else None, "wind": describe_runway(end, metar) if end else None,

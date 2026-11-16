@@ -26,10 +26,10 @@ from atc.flightplan.simbrief import SimbriefError, load_simbrief
 from atc.sim.base import SimSource
 from atc.sim.fake import FakeSim
 from atc.sim.simconnect import SimConnectSource, SimUnavailable
-from atc.weather.metar import Metar, parse_metar
+from atc.weather.metar import Metar, borrowed, parse_metar
 from atc.weather.runway_choice import wind_components
-from atc.weather.sim_weather import metar_from_sim
-from atc.weather.source import LiveWeather, WeatherSource
+from atc.weather.sim_weather import metar_from_sim, wind_group
+from atc.weather.source import LiveWeather, WeatherSource, nearest_report
 
 DETECT_AIRPORT_NM = 5  # the aircraft is "at" the nearest airport within this distance
 SIM_WIND_SAMPLES, SIM_WIND_INTERVAL_S = 6, 0.5  # averaged at startup for weather "sim"
@@ -52,6 +52,7 @@ class PlanRequest:
     cruise_ft: int | None = None
     route: str = ""
     aircraft: str | None = None
+    rules: str | None = None  # "IFR" or "VFR"; None = SimBrief's, else IFR
 
 
 @dataclass(frozen=True)
@@ -79,16 +80,23 @@ class Session:
     notices: list[str] = field(default_factory=list)
     winds: deque = field(default_factory=lambda: deque(maxlen=60))  # last minute of sim wind
 
+    @property
+    def sim_wind(self) -> bool:
+        """The sim's wind at the aircraft is used: for --weather sim, and for a field that borrows another one's
+        METAR (A4). The runtime then keeps `winds` up to date."""
+        return self.options.weather == "sim" or (not self.options.nosim and borrows(self.metar))
+
     def refresh_weather(self) -> tuple[Metar | None, Metar | None]:
-        return (origin_metar(self.options.weather, self.sim, self.weather, self.airport.ident, self.winds),
-                load_metar(self.weather, self.destination.ident) if self.destination else None)
+        return (origin_metar(self.options.weather, self.sim, self.weather, self.airport,
+                             self.winds if self.sim_wind else None),
+                airport_metar(self.weather, self.destination) if self.destination else None)
 
     def banner(self) -> list[str]:
         """What the console prints before the first transmission."""
         plan, airport, metar, c = self.plan, self.airport, self.metar, self.controller
         lines = list(self.notices)
         if isinstance(self.sim, FakeSim):
-            parking = airport.default_parking()
+            parking = airport.default_parking(ga=plan.rules == "VFR")
             lines.append(f"{plan.callsign} parked at {airport.ident} {airport.name}" + (
                 f", {parking.name}" if parking else "") + f" (fake sim, airport data: {self.source_name}). "
                                                           "COM1 not tuned.")
@@ -115,18 +123,20 @@ class Session:
         return lines
 
     def cabin(self):
-        """The cabin crew for this flight (C1), or None when switched off in Settings."""
+        """The cabin crew for this flight (C1), or None when switched off in Settings or for VFR (Milestone 9, A3:
+        a small aircraft has no cabin crew)."""
         from atc.cabin import Cabin
 
-        if not self.config.cabin.announcements:
+        if not self.config.cabin.announcements or self.plan.rules == "VFR":
             return None
         return Cabin.for_flight(self.plan.callsign, self.destination.name if self.destination else None)
 
     def gsx(self):
-        """The link to GSX Pro (C3/C4): only with MSFS, and when reading GSX is on in Settings."""
+        """The link to GSX Pro (C3/C4): only with MSFS, when reading GSX is on in Settings, and not for VFR (A3: no
+        ground handling at a GA ramp)."""
         from atc.gsx_link import GsxLink
 
-        if not self.config.gsx.read or not hasattr(self.sim, "gsx_values"):
+        if not self.config.gsx.read or not hasattr(self.sim, "gsx_values") or self.plan.rules == "VFR":
             return None
         return GsxLink(self.sim, control=self.config.gsx.control)
 
@@ -166,20 +176,26 @@ def build_session(request: PlanRequest, options: SessionOptions, config: Config,
     if found is None:
         raise SetupError(f"no airport data for {plan.departure} (searched: {', '.join(s.name for s in sources)})")
     airport, source_name = found
-    sim = sim or FakeSim.parked_at(airport)
+    sim = sim or FakeSim.parked_at(airport, ga=plan.rules == "VFR")
     weather = weather or LiveWeather(paths.cache_dir("metar"))
     winds: deque = deque(maxlen=60)
     if options.weather == "sim":
         winds.extend(sample_wind(sim, SIM_WIND_SAMPLES, SIM_WIND_INTERVAL_S))
-    metar = origin_metar(options.weather, sim, weather, airport.ident, winds)
+    metar = origin_metar(options.weather, sim, weather, airport, winds)
+    if borrows(metar) and not options.nosim:  # another field's METAR: the wind from the sim at ours (A4)
+        winds.extend(sample_wind(sim, SIM_WIND_SAMPLES, SIM_WIND_INTERVAL_S))
+        metar = origin_metar(options.weather, sim, weather, airport, winds)
     found_dest = find_airport(sources, plan.destination) if plan.destination else None
     destination = found_dest[0] if found_dest else None
-    dest_metar = load_metar(weather, destination.ident) if destination else None
+    dest_metar = airport_metar(weather, destination) if destination else None
     controller = Controller(airport, plan, metar, strict_freq=options.strict_freq, destination=destination,
                             destination_metar=dest_metar, centers=centers, chatter=config.traffic.chatter,
                             strict_readback=config.atc.strict_readback)
     return Session(config, options, plan, plan_source, airport, source_name, destination, metar, dest_metar,
                    centers, sim, controller, weather, notices, winds)
+
+
+RULES = ("IFR", "VFR")
 
 
 def build_plan(request: PlanRequest, options: SessionOptions, config: Config,
@@ -192,7 +208,10 @@ def build_plan(request: PlanRequest, options: SessionOptions, config: Config,
         "cruise_ft": request.cruise_ft,
         "route": request.route,
         "aircraft": request.aircraft and request.aircraft.upper(),
+        "rules": request.rules and request.rules.upper(),
     }.items() if value}
+    if overrides.get("rules", "IFR") not in RULES:
+        raise SetupError(f"flight rules {request.rules!r}: IFR or VFR")
     if request.simbrief is None:
         if "callsign" not in overrides:
             raise SetupError("--callsign is required (or use --simbrief)")
@@ -228,11 +247,30 @@ def sample_wind(sim: SimSource, n: int, interval_s: float, sleep: Callable[[floa
     return samples
 
 
-def origin_metar(mode: str, sim: SimSource, weather: WeatherSource, icao: str, winds) -> Metar | None:
+def origin_metar(mode: str, sim: SimSource, weather: WeatherSource, airport: Airport, winds) -> Metar | None:
     if mode == "sim":
-        raw = metar_from_sim(icao, datetime.now(timezone.utc), list(winds), getattr(sim, "weather", lambda: None)())
+        raw = metar_from_sim(airport.ident, datetime.now(timezone.utc), list(winds),
+                             getattr(sim, "weather", lambda: None)())
         return parse_metar(raw)
-    return load_metar(weather, icao)
+    return airport_metar(weather, airport, winds)
+
+
+def airport_metar(weather: WeatherSource, airport: Airport, winds=None) -> Metar | None:
+    """The field's METAR; a small field without one borrows the nearest within NEARBY_NM (Milestone 9, A4): its
+    QNH, clouds and visibility, and the sim's wind at the field when there are `winds` samples."""
+    if (metar := load_metar(weather, airport.ident)) is not None:
+        return metar
+    found = nearest_report(weather, airport.lat, airport.lon, airport.ident)
+    if found is None:
+        return None
+    try:
+        return parse_metar(borrowed(found[0].raw, airport.ident, wind_group(list(winds)) if winds else None))
+    except ValueError:
+        return None
+
+
+def borrows(metar: Metar | None) -> bool:
+    return metar is not None and " RMK FROM " in metar.raw
 
 
 def airport_sources(config: Config) -> list[AirportData]:
