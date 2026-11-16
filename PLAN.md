@@ -1198,6 +1198,8 @@ Approach, "mine didn't either": a new solution, from VATSIM). Today the sectors 
 Found: VATSIM's vatspy-data-project has the FIR boundaries and names worldwide (CC BY-SA 4.0, fits the GPL with
 attribution), but no frequencies. ❓ Before starting: where the Center frequencies come from (a table we write from
 public sources, or a VATSIM dataset whose licence allows it). Never show "PLACEHOLDER" to the user.
+✅ **User (2026-11-16): a VATSIM dataset** — only if its licence allows shipping or downloading it with a GPL app;
+check the licence first, and if it doesn't, come back to the user (no own table without asking).
 
 **Order:** A and B first (they broke the flight), then H, C, D, E, F, G; I once its data source is settled. **To check afterwards:** the same flight
 again, with TESTFLUG.md.
@@ -1267,12 +1269,16 @@ E3. Crossing a control zone ("request crossing of the control zone from November
 1. Language: English only, as today (BZF I phraseology), or German too (BZF II, what most ultralight pilots use at
    small fields)? German needs German voices, German speech recognition and a German parser: a big step of its
    own. Proposal: English first, German maybe later.
+   ✅ **User (2026-11-16): English first.** German stays a later step of its own.
 2. Which parts and in which order: proposal A → B → C first (Uetersen to another uncontrolled field, e.g. Itzehoe),
    then E (Lübeck), D last.
+   ✅ **User: A → B → C, then E, D last.**
 3. Langen Information: the MSFS data has 125.100 for every German field, the real FIS has sectors with their own
    frequencies. Use the data as it is, or a small table of our own?
+   ✅ **User: the data as it is** (125.100, what the sim has).
 4. Which aircraft you will test with in MSFS (an ultralight add-on or a default type), for A3 and the speeds in C1.
 5. The flight plan field for VFR in the app (A1): OK?
+   ✅ **User: yes, an IFR/VFR field in the flight plan card** (set by SimBrief when it has one).
 
 ### Later versions (agreed, in rough order)
 
