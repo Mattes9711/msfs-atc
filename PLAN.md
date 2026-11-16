@@ -1202,6 +1202,78 @@ public sources, or a VATSIM dataset whose licence allows it). Never show "PLACEH
 **Order:** A and B first (they broke the flight), then H, C, D, E, F, G; I once its data source is settled. **To check afterwards:** the same flight
 again, with TESTFLUG.md.
 
+### Milestone 9 — VFR from small airfields (planned 2026-11-16, not started, after Milestone 8 part I)
+
+The user: "can we fly ultralights from small fields like Uetersen yet?" Not yet: tried `--from EDHE --to EDHL
+--callsign DMABC` offline. The app starts there, but no station at Uetersen ("Frequencies:" empty, its Info is not a
+controller type), the flight is IFR (clearance, SID, squawk, pushback, Departure, Center, vectors, ILS), a cabin
+announcement in an ultralight, the stand is "NONE 27", no METAR at the field so "calm wind".
+
+What the data already has (Little Navmap, the user's scenery), checked at EDHE, EDHL, EDHF, EDXM, EDHI, EDDH:
+- the small field's own station: com type `FSS` ("UETERSEN" 122.705, "ITZEHOE" 127.110) = "Uetersen Info";
+- `UC` "LANGEN" 125.100 at every German field = Langen Information (FIS). One frequency for all of Germany, not
+  the real FIS sectors: ❓ see below;
+- runways with surface (grass "G") and the circuit side per runway end (`runway_end.is_pattern` "L"/"R"); GA ramps
+  and taxi paths (EDHE: 36 parking, 118 paths);
+- airspaces with floor and ceiling: control zones (class D, `CD`: "HAMBURG CTR 1 HAMBURG", 0–2500 ft), airspace C
+  (`CC`: "HAMBURG A (C)" 2500–10000 ft …), E; restricted areas (`R`);
+- VFR reporting points (`waypoint.type = 'VFR'`, by airport): EDDH has N1, N2, S1, S2, T1, T2, P1, P2, W1, DELTA —
+  spoken "November one", "Delta".
+
+**Part A — The basis** (nothing new on the radio yet)
+A1. Flight rules VFR: from SimBrief (already read, `atc/flight_rules` "V"), `--rules VFR` on the command line and in
+    the app (❓ UI: one more field in the flight plan card, needs the user's OK). VFR picks its own phase sequence;
+    IFR stays exactly as it is.
+A2. Registration callsigns: "D-MABC" spoken "Delta Mike Alfa Bravo Charlie"; the short form "Delta Bravo Charlie"
+    only after the controller used it first (ICAO), then by both.
+A3. Small aircraft: no cabin announcements, no pushback, no GSX for a VFR flight in a GA aircraft; the aircraft type
+    in the first call ("ultralight" / "C42"), from the flight plan or the sim's `ATC MODEL`.
+A4. Weather at a field without a METAR: the nearest METAR within 25 NM for the QNH, the sim's wind at the field.
+A5. Stands: GA ramps get a plain name ("apron", "parking 12"), never "NONE 27".
+
+**Part B — The small field's Info station** (e.g. "Uetersen Info": information only, never a clearance)
+B1. Radio check and taxi information: "Uetersen Info, Delta Mike Alfa Bravo Charlie, ultralight, at the apron, VFR
+    to Lübeck, request taxi information" → runway in use, wind, QNH, circuit side. Read back runway and QNH.
+B2. Ready for departure: wind and "runway free" / the traffic on the runway or on final (LiveTraffic); leaving the
+    circuit: "leaving the frequency".
+B3. Arrival: the inbound call ("10 miles north, 1500 feet, for landing") → runway, wind, QNH, circuit side, traffic
+    in the circuit; "on final 27" → wind, "runway free"; "runway vacated".
+B4. A field with no Info station (only `UC`): blind calls "Uetersen traffic, …" are logged, nobody answers.
+
+**Part C — The circuit**
+C1. Where the aircraft is in the circuit (crosswind, downwind, base, final) from its position relative to the runway
+    in use and the circuit side; for B3 and for the traffic information.
+C2. Traffic in the circuit: LiveTraffic aircraft near the field, said by position ("traffic, one aircraft on left
+    downwind runway 27"); the other aircraft's own position reports as chatter (like Milestone 8 G).
+C3. Touch-and-go and full stop; going round in the circuit again.
+
+**Part D — On the way: Langen Information (FIS)** (optional for the pilot, as in reality)
+D1. Initial call with position, level and destination → "identified" with a squawk, QNH; "squawk 7000" and "leaving
+    the frequency" at the end.
+D2. Traffic information from LiveTraffic within a few miles and 1000 ft.
+D3. Airspace watch (a notice, and FIS says it): heading into a control zone or airspace C without a clearance, into
+    a restricted area. Floors and ceilings from the `boundary` table.
+
+**Part E — Controlled airports** (e.g. Lübeck, Hamburg: Tower and Ground give VFR clearances)
+E1. Departure: Ground "taxi to holding point runway 25"; Tower "leave the control zone via November, 1500 feet or
+    below, squawk 7000", cleared for takeoff, "report November" → "leaving the control zone, frequency change
+    approved".
+E2. Arrival: the inbound call with the ATIS letter → "enter the control zone via Sierra, 1500 feet or below, report
+    Sierra" → "join right downwind runway 25, report downwind" → cleared to land. The reporting points and the
+    "via" from the VFR waypoints of that airport; watched like the taxi conformance (passing the point, staying low).
+E3. Crossing a control zone ("request crossing of the control zone from November to Sierra").
+
+**Open questions (❓, answers first):**
+1. Language: English only, as today (BZF I phraseology), or German too (BZF II, what most ultralight pilots use at
+   small fields)? German needs German voices, German speech recognition and a German parser: a big step of its
+   own. Proposal: English first, German maybe later.
+2. Which parts and in which order: proposal A → B → C first (Uetersen to another uncontrolled field, e.g. Itzehoe),
+   then E (Lübeck), D last.
+3. Langen Information: the MSFS data has 125.100 for every German field, the real FIS has sectors with their own
+   frequencies. Use the data as it is, or a small table of our own?
+4. Which aircraft you will test with in MSFS (an ultralight add-on or a default type), for A3 and the speeds in C1.
+5. The flight plan field for VFR in the app (A1): OK?
+
 ### Later versions (agreed, in rough order)
 
 26. *(Moved into Milestone 4: native SimConnect is S1–S2, the traffic parts T1–T4.)* Still later: the Facilities API
@@ -1218,7 +1290,7 @@ again, with TESTFLUG.md.
     - **To check in MSFS:** whether 50 m off the route is right with real taxiing (wide aprons, cut corners).
 28. *(Radar vectors moved into P5.)*
 29. **Procedures:** SIDs, published missed approaches (STARs are in P5).
-30. **VFR** phase sequence.
+30. *(VFR moved into Milestone 9.)*
 31. **LLM fallback** (parked in step 24): revisit if a small model fits next to MSFS, or with a cloud API. Reuse the spike's checks.
 32. **`.PLN` import.**
 33. **GitHub Actions CI.**
@@ -1282,5 +1354,5 @@ again, with TESTFLUG.md.
 - VATSIM / IVAO, multiplayer
 - MSFS 2024
 - Emergencies (MAYDAY / PAN PAN), weather deviations, holding patterns
-- Untowered airports, CTAF / UNICOM
+- Untowered airports outside Germany's Info stations, CTAF / UNICOM (German Info stations: Milestone 9)
 - FAA phraseology (ICAO only)
