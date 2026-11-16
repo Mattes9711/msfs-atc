@@ -1,0 +1,198 @@
+"""C3/C4: GSX Pro read through its L-vars and controlled through its menu, against a fake GSX."""
+import struct
+from types import SimpleNamespace
+
+from atc.events import Collector
+from atc.gsx_link import GsxLink
+from atc.sim import gsx
+from atc.sim.native import NativeSimConnect, Var
+from atc.sim.simconnect import GSX_TRIES, SimConnectSource
+
+MAIN = ["Ground services at gate A12", "Request Deboarding", "Request Catering", "Request Boarding",
+        "Request Pushback"]
+
+
+def lvars(running=1, boarding=gsx.AVAILABLE, deboarding=gsx.NOT_AVAILABLE, departure=gsx.AVAILABLE):
+    return {gsx.STATE_LVARS["running"]: running, gsx.STATE_LVARS["boarding"]: boarding,
+            gsx.STATE_LVARS["deboarding"]: deboarding, gsx.STATE_LVARS["departure"]: departure}
+
+
+class FakeGsx:
+    """Writes its menu file like GSX does when the L-vars are set."""
+
+    def __init__(self, path, after_choice=None):
+        self.path, self.after_choice, self.set = path, after_choice, []
+        self.time = [100.0]
+
+    def set_lvar(self, name, value):
+        self.set.append((name, value))
+        self.time[0] += 1
+        if name == gsx.MENU_OPEN:
+            self._write(MAIN)
+        elif name == gsx.MENU_CHOICE and self.after_choice:
+            self._write(self.after_choice)
+
+    def _write(self, lines):
+        import os
+
+        self.path.write_text("\n".join(lines), encoding="utf-8")
+        os.utime(self.path, (self.time[0], self.time[0]))
+
+    def menu(self):
+        clock = [0.0]
+        return gsx.GsxMenu(self.set_lvar, self.path, clock=lambda: clock[0],
+                           sleep=lambda s: clock.__setitem__(0, clock[0] + s))
+
+
+def test_the_state_from_its_lvars():
+    assert gsx.state_from_lvars(lvars(running=0)) is None and gsx.state_from_lvars(None) is None
+    state = gsx.state_from_lvars(lvars(boarding=gsx.COMPLETED, departure=gsx.PERFORMING))
+    assert state.boarding_done and state.pushing
+
+
+def test_the_menu_picks_the_pushback(tmp_path):
+    fake = FakeGsx(tmp_path / "menu")
+    assert fake.menu().request("pushback") == "GSX: pushback requested (Request Pushback)"
+    assert fake.set == [(gsx.MENU_OPEN, 1), (gsx.MENU_CHOICE, 3)]  # the fourth option line
+
+
+def test_a_follow_up_question_is_left_to_the_pilot(tmp_path):
+    fake = FakeGsx(tmp_path / "menu", after_choice=["Select pushback direction", "Nose left", "Nose right"])
+    line = fake.menu().request("pushback")
+    assert "GSX asks \"Select pushback direction\"" in line
+    assert fake.set == [(gsx.MENU_OPEN, 1), (gsx.MENU_CHOICE, 3)]  # nothing picked for the pilot
+
+
+def test_no_such_service_closes_the_menu_and_says_so(tmp_path):
+    fake = FakeGsx(tmp_path / "menu")
+    MAIN_WITHOUT = [line for line in MAIN if "Deboarding" not in line]
+    fake._write = lambda lines, w=fake._write: w(MAIN_WITHOUT)
+    assert fake.menu().request("deboarding").startswith("GSX: no deboarding in its menu")
+    assert fake.set[-1] == (gsx.MENU_CHOICE, -2)
+
+
+def test_a_menu_that_never_opens(tmp_path):
+    clock = [0.0]
+    menu = gsx.GsxMenu(lambda n, v: None, tmp_path / "menu", clock=lambda: clock[0],
+                       sleep=lambda s: clock.__setitem__(0, clock[0] + s))
+    assert menu.request("pushback").startswith("GSX: its menu did not open")
+
+
+class Sim:
+    def __init__(self, values):
+        self.values = values
+
+    def gsx_values(self):
+        return self.values
+
+    def set_lvar(self, name, value):
+        pass
+
+
+class Menu:
+    def __init__(self):
+        self.asked = []
+
+    def request(self, service):
+        self.asked.append(service)
+        return f"GSX: {service} requested"
+
+
+def link(values, control=True):
+    clock, menu = [0.0], Menu()
+    return GsxLink(Sim(values), control, clock=lambda: clock[0], menu=menu, background=lambda job: job()), menu, clock
+
+
+def test_pushback_requested_once_after_the_approval_is_read_back():
+    gsx_link, menu, clock = link(lvars())
+    atc = SimpleNamespace(phase="pushback", pending=("pushback",), stand_in=None)
+    sink = Collector()
+    gsx_link.step(atc, None, sink)
+    assert menu.asked == []  # the readback first
+    atc.pending, clock[0] = (), 10
+    gsx_link.step(atc, None, sink)
+    clock[0] = 20
+    gsx_link.step(atc, None, sink)
+    assert menu.asked == ["pushback"] and sink.events[-1].text == "GSX: pushback requested"
+
+
+def test_a_pushback_the_pilot_ordered_himself_is_left_alone():
+    gsx_link, menu, _ = link(lvars(departure=gsx.REQUESTED))
+    gsx_link.step(SimpleNamespace(phase="pushback", pending=(), stand_in=None), None, Collector())
+    assert menu.asked == []
+
+
+def test_deboarding_at_the_stand_after_the_flight():
+    stand = SimpleNamespace(lat=48.35, lon=11.78)
+    gsx_link, menu, _ = link(lvars(deboarding=gsx.AVAILABLE))
+    here = SimpleNamespace(lat=48.35, lon=11.78, ground_speed_kt=0)
+    gsx_link.step(SimpleNamespace(phase="taxi_in", pending=(), stand_in=stand), here, Collector())
+    assert menu.asked == ["deboarding"]
+
+
+def test_without_control_only_reading_and_notes():
+    gsx_link, menu, clock = link(lvars(), control=False)
+    atc = SimpleNamespace(phase="pushback", pending=(), stand_in=None)
+    sink = Collector()
+    gsx_link.step(atc, None, sink)
+    gsx_link.sim.values = lvars(boarding=gsx.COMPLETED, departure=gsx.PERFORMING)
+    clock[0] = 10
+    assert gsx_link.step(atc, None, sink).boarding_done
+    assert [e.text for e in sink.events] == ["GSX: boarding completed", "GSX: pushback started"]
+    assert menu.asked == []
+
+
+def test_the_doors_wait_for_gsx_boarding():
+    from atc.cabin import Cabin
+    from atc.runtime import announce
+
+    cabin = Cabin.for_flight("DLH241", "Munich")
+    cabin.said.add("boarding")
+    state = SimpleNamespace(on_ground=True, alt_msl_ft=50)
+    atc = SimpleNamespace(phase="pushback", descent_given=False)
+    sink = Collector()
+    announce(cabin, atc, state, sink, gsx.state_from_lvars(lvars()), with_gsx=True)
+    assert sink.events == []
+    announce(cabin, atc, state, sink, gsx.state_from_lvars(lvars(boarding=gsx.COMPLETED)), with_gsx=True)
+    assert sink.events[0].text.startswith("Meine Damen und Herren, die Türen sind geschlossen")
+
+
+def test_lvars_keep_their_names_and_are_written_as_doubles():
+    assert Var(gsx.MENU_OPEN, "number").simvar == "L:FSDT_GSX_MENU_OPEN"
+
+    class Dll:
+        def __init__(self):
+            self.added, self.written = [], []
+
+        def add(self, define, name, units, kind):
+            self.added.append((define, name))
+
+        def set_data(self, define, data):
+            self.written.append((define, data))
+
+    dll = Dll()
+    native = NativeSimConnect(dll, {"gsx_menu_open": (Var(gsx.MENU_OPEN, "number"),)})
+    native.set(gsx.MENU_OPEN, 1)
+    assert dll.added == [(1, "L:FSDT_GSX_MENU_OPEN")] and dll.written == [(1, struct.pack("<d", 1.0))]
+
+
+def test_reading_gives_up_when_the_sim_never_answers():
+    class Requests:
+        calls = 0
+
+        def get(self, name):
+            Requests.calls += 1
+            return None
+
+    sim = SimConnectSource(Requests())
+    for _ in range(GSX_TRIES + 3):
+        assert sim.gsx_values() is None
+    assert Requests.calls == GSX_TRIES * len(gsx.STATE_LVARS)
+
+
+def test_an_old_menu_file_is_not_read_as_the_new_one(tmp_path):
+    fake = FakeGsx(tmp_path / "menu")
+    fake._write(["Old menu", "Request Pushback"])  # left from earlier
+    fake.time[0] += 5
+    assert fake.menu().request("pushback") == "GSX: pushback requested (Request Pushback)"
+    assert fake.set[-1] == (gsx.MENU_CHOICE, 3)  # chosen from the new menu, not the old one's 0

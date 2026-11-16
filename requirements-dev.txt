@@ -1,0 +1,4 @@
+# For development: the app's requirements plus the test tools.
+-r requirements.txt
+pytest==9.2.0
+PyYAML==6.0.3             # scenario scripts in tests/scenarios

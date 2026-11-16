@@ -1,0 +1,29 @@
+# Copy to %APPDATA%\MSFS ATC\settings.toml and adjust (or pass any file with --config).
+# Every key is optional; missing keys use the defaults shown here. Relative paths are relative to this file.
+# API keys, if a feature ever needs one, go here too: never into the code or the repository.
+
+# airports_dir = "data/airports"
+# centers_file = "data/centers.json"   # Center sectors: name, FIR, frequency (or "PLACEHOLDER"), band, polygon
+# littlenavmap_db = "C:/Users/you/AppData/Roaming/ABarthel/little_navmap_db/little_navmap_msfs.sqlite"
+# simbrief_username = "your-simbrief-username"
+# simconnect_dll = "C:/MSFS SDK/SimConnect SDK/lib/SimConnect.dll"   # only if it is not found by itself
+
+[whisper]
+# model = "small.en"     # base.en is 3x faster but made dangerous errors in testing
+# device = "cpu"         # "cuda" needs cuBLAS 12 + cuDNN 9 DLLs
+# beam_size = 5          # beam 1 saved 0.8 s but misheard "four alpha" as "5"
+# mic = 3                # input device index, see: python spikes/s3_whisper.py --list-mics
+# ptt_key = "right ctrl"     # also: left ctrl, right shift, right alt, caps lock, scroll lock, pause, insert
+# save_recordings = false    # true keeps every transmission in recordings/
+
+[atc]
+# strict_readback = true # every instruction read back (pushback and frequency changes too) before you go on
+
+[traffic]
+# chatter = true         # the AI aircraft's (FSLTL / MSFS traffic) radio calls on your Tower or Ground frequency
+
+[tts]
+# engine = "piper"       # "piper": a voice of its own per controller (downloaded once, 79 MB); "sapi": Windows voice
+# voice = "Zira"         # substring of an installed English Windows voice name (also used if Piper can't start)
+# rate = 200             # words per minute
+# radio_effect = true    # Piper only: narrow band, a little hiss and the squelch at the end, like VHF radio

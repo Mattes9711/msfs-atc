@@ -1,0 +1,70 @@
+# wrong_readback: Readback mistakes the controller must catch: wrong altitude and squawk in the clearance, a wrong runway in the taxi clearance, a takeoff readback without the runway, and a wrong flight level in the climb.
+PILOT> /com 121.705
+       (COM1 121.705: Hamburg Ground)
+PILOT> Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich, information alpha
+       (understood: request_clearance, callsign DLH4AB (yours), atis=a)
+ATC:   Lufthansa four Alfa Bravo, cleared to Munich via Amluh two Golf departure, runway two tree, climb altitude fife thousand feet, squawk tree two six zero
+# wrong altitude and wrong squawk
+PILOT> cleared to Munich, runway 23, climb 4000 feet, squawk 1234, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), altitude_ft=4000 squawk=1234 runway=23)
+ATC:   Lufthansa four Alfa Bravo, negative, I say again, climb altitude fife thousand feet, squawk tree two six zero
+# still missing the squawk
+PILOT> climb 5000 feet, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), altitude_ft=5000)
+ATC:   Lufthansa four Alfa Bravo, read back squawk
+PILOT> squawk 3260, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), squawk=3260)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+PILOT> Lufthansa 4AB, request taxi
+       (understood: request_taxi, callsign DLH4AB (yours))
+ATC:   Lufthansa four Alfa Bravo, taxi to holding point runway two tree
+# wrong runway
+PILOT> taxi to holding point runway 05, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), runway=05)
+ATC:   Lufthansa four Alfa Bravo, negative, I say again, taxi to holding point runway two tree
+PILOT> taxi to holding point runway 23, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), runway=23)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+PILOT> /goto holding
+       (position: holding)
+ATC:   Lufthansa four Alfa Bravo, contact Hamburg Tower one two one decimal two eight zero
+PILOT> /com 121.280
+       (COM1 121.280: Hamburg Tower)
+PILOT> Hamburg Tower, Lufthansa 4AB, ready for departure
+       (understood: ready_departure, callsign DLH4AB (yours))
+ATC:   Lufthansa four Alfa Bravo, wind two two zero degrees seven knots, runway two tree, cleared for takeoff
+# runway missing in the takeoff readback
+PILOT> cleared for takeoff, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), cleared_takeoff=True)
+ATC:   Lufthansa four Alfa Bravo, read back runway
+PILOT> runway 23, cleared for takeoff, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), runway=23 cleared_takeoff=True)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+PILOT> /fly 2
+       (position: 322 nm to EDDM, 2000 ft)
+ATC:   Lufthansa four Alfa Bravo, contact Hamburg Approach one one eight decimal two zero fife
+PILOT> /com 118.205
+       (COM1 118.205: Hamburg Approach)
+PILOT> Hamburg Approach, Lufthansa 4AB, passing 3000 climbing 5000
+       (understood: checkin, callsign DLH4AB (yours), altitude_ft=5000)
+ATC:   Lufthansa four Alfa Bravo, Hamburg Approach, radar contact, climb flight level tree fife zero, proceed direct Amluh
+# wrong flight level; no new instruction comes until it is right
+PILOT> climb flight level 340, direct Amluh, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), flight_level=340 direct=AMLUH)
+ATC:   Lufthansa four Alfa Bravo, negative, I say again, climb flight level tree fife zero
+# flying on past the top of descent (219 nm) without the descent, because the level is not read back
+       (flew to 240 nm: no call)
+PILOT> climb flight level 350, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), flight_level=350)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+ATC:   Lufthansa four Alfa Bravo, descend flight level one hundred
+PILOT> descend flight level 100, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), flight_level=100)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+       (flew to 284 nm, 13300 ft)
+ATC:   Lufthansa four Alfa Bravo, contact Munich Approach one one eight decimal eight tree zero

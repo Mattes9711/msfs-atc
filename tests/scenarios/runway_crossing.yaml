@@ -1,0 +1,24 @@
+description: >
+  EDDH departure from runway 15: the taxi route crosses runway 05/23. The pilot reports holding short, gets the
+  crossing clearance, reads it back and is handed to Tower at the holding point (found in the first real flight).
+plan: {callsign: DLH4AB, departure: EDDH, destination: EDDM, cruise: FL350, route: AMLU2G AMLUH M852 DENIX,
+       aircraft: A20N}
+metar:
+  EDDH: METAR EDDH 141450Z AUTO 15010KT 9999 SCT035 07/04 Q1018 NOSIG
+  EDDM: METAR EDDM 141450Z AUTO 08008KT CAVOK 06/00 Q1019 NOSIG
+seed: 7
+steps:
+  - /com 121.705
+  - Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich, information alpha
+  - cleared to Munich, runway 15, climb 5000 feet, squawk {squawk}, Lufthansa 4AB
+  - Lufthansa 4AB, request push and start
+  - Lufthansa 4AB, request taxi
+  - taxi to holding point runway 15 via A5, E1, hold short runway 05, Lufthansa 4AB
+  - comment: at the hold short of runway 05/23, ATC waits for the report
+  - /goto crossing
+  - Hamburg Ground, Lufthansa 4AB, holding short runway 05
+  - crossing runway 05, Lufthansa 4AB
+  - /goto holding
+  - /com 121.280
+  - Hamburg Tower, Lufthansa 4AB, holding short runway 15, ready for departure
+  - runway 15, cleared for takeoff, Lufthansa 4AB

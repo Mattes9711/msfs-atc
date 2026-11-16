@@ -1,0 +1,10 @@
+# What the app needs to run, pinned to the versions it was tested with (start.bat installs these).
+# pyproject.toml has the minimum versions; update both together and run the tests.
+faster-whisper==1.2.1     # speech recognition
+huggingface_hub==2.4.0    # finds a whisper model that is already in the Hugging Face cache
+comtypes==1.5.0           # ATC voice: Windows SAPI through COM (the fallback)
+piper-tts==1.8.0          # ATC voice: Piper, one speaker per controller (GPL-3.0, see BUILD.md)
+sounddevice==0.5.6        # microphone
+numpy==2.5.4
+pywebview==6.2.1          # the app window (Microsoft WebView2)
+pythonnet==3.2.1          # used by pywebview on Windows; 3.2 is the first with Python 3.14 support

@@ -1,0 +1,86 @@
+# center_sectors: En-route Center handoffs with test sectors across the route (test frequencies, not real ones): Departure to North Radar, a PLACEHOLDER sector that gets no handoff, North to South Upper, the altitude band down to South Radar, and South Radar to Munich Approach.
+PILOT> /com 121.705
+       (COM1 121.705: Hamburg Ground)
+PILOT> Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich, information alpha
+       (understood: request_clearance, callsign DLH4AB (yours), atis=a)
+ATC:   Lufthansa four Alfa Bravo, cleared to Munich via Amluh two Golf departure, runway two tree, climb altitude fife thousand feet, squawk tree two six zero
+PILOT> cleared to Munich, runway 23, climb 5000 feet, squawk 3260, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), altitude_ft=5000 squawk=3260 runway=23)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+PILOT> Lufthansa 4AB, request taxi
+       (understood: request_taxi, callsign DLH4AB (yours))
+ATC:   Lufthansa four Alfa Bravo, taxi to holding point runway two tree
+PILOT> taxi to holding point runway 23, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), runway=23)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+PILOT> /goto holding
+       (position: holding)
+ATC:   Lufthansa four Alfa Bravo, contact Hamburg Tower one two one decimal two eight zero
+PILOT> /com 121.280
+       (COM1 121.280: Hamburg Tower)
+PILOT> Hamburg Tower, Lufthansa 4AB, ready for departure
+       (understood: ready_departure, callsign DLH4AB (yours))
+ATC:   Lufthansa four Alfa Bravo, wind two two zero degrees seven knots, runway two tree, cleared for takeoff
+PILOT> runway 23, cleared for takeoff, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), runway=23 cleared_takeoff=True)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+PILOT> /fly 2
+       (position: 322 nm to EDDM, 2000 ft)
+ATC:   Lufthansa four Alfa Bravo, contact Hamburg Approach one one eight decimal two zero fife
+PILOT> /com 118.205
+       (COM1 118.205: Hamburg Approach)
+PILOT> Hamburg Approach, Lufthansa 4AB, passing 3000 climbing 5000
+       (understood: checkin, callsign DLH4AB (yours), altitude_ft=5000)
+ATC:   Lufthansa four Alfa Bravo, Hamburg Approach, radar contact, climb flight level two four zero, proceed direct Amluh
+# with Center sectors, Departure climbs only to FL240
+PILOT> climb flight level 240, direct Amluh, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), flight_level=240 direct=AMLUH)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+# passing FL100, Departure hands off to the sector we are in
+       (flew to 18 nm, 10000 ft)
+ATC:   Lufthansa four Alfa Bravo, contact North Radar one two tree decimal four fife zero
+PILOT> /com 123.450
+       (COM1 123.450: North Radar)
+PILOT> North Radar, Lufthansa 4AB, with you, climbing flight level 240
+       (understood: checkin, callsign DLH4AB (yours), flight_level=240)
+ATC:   Lufthansa four Alfa Bravo, North Radar, identified, climb flight level tree fife zero
+# the first Center gives the rest of the climb
+PILOT> climb flight level 350, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), flight_level=350)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+# Middle Radar's frequency is a PLACEHOLDER, so North Radar keeps us
+       (flew to 70 nm, 35000 ft)
+       (you are in Middle Radar airspace (TST2), but its frequency is PLACEHOLDER in center_sectors.yaml: please fill in the real frequency. No handoff, North Radar keeps you)
+       (flew to 162 nm, 35000 ft)
+ATC:   Lufthansa four Alfa Bravo, contact South Upper Radar one tree two decimal six
+PILOT> /com 132.600
+       (COM1 132.600: South Upper Radar)
+PILOT> South Upper Radar, Lufthansa 4AB, with you, flight level 350
+       (understood: checkin, callsign DLH4AB (yours), flight_level=350)
+ATC:   Lufthansa four Alfa Bravo, South Upper Radar, identified
+       (flew to 219 nm, 34900 ft)
+ATC:   Lufthansa four Alfa Bravo, descend flight level one hundred
+PILOT> descend flight level 100, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), flight_level=100)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+# descending through FL245 into the lower sector
+       (flew to 251 nm, 24300 ft)
+ATC:   Lufthansa four Alfa Bravo, contact South Radar one two niner decimal one
+PILOT> /com 129.100
+       (COM1 129.100: South Radar)
+PILOT> South Radar, Lufthansa 4AB, with you, descending 5000
+       (understood: checkin, callsign DLH4AB (yours), altitude_ft=5000)
+ATC:   Lufthansa four Alfa Bravo, South Radar, identified
+       (flew to 284 nm, 13300 ft)
+ATC:   Lufthansa four Alfa Bravo, contact Munich Approach one one eight decimal eight tree zero
+PILOT> /com 118.830
+       (COM1 118.830: Munich Approach)
+PILOT> Munich Approach, Lufthansa 4AB, with you
+       (understood: checkin, callsign DLH4AB (yours))
+ATC:   Lufthansa four Alfa Bravo, Munich Approach, descend altitude four thousand fife hundred feet, QNH one zero one niner, speed two two zero knots, fly heading one eight fife, vectors ILS approach runway zero eight right

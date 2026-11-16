@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MSFS ATC</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div class="app">
+    <!-- The rail: one place for every view, like the sim's own panels -->
+    <nav class="rail" aria-label="Views">
+      <button type="button" class="rail-item" id="tab-atc" aria-selected="true" aria-controls="view-atc">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2"></path><rect x="3" y="14" width="4" height="6" rx="1"></rect><rect x="17" y="14" width="4" height="6" rx="1"></rect></svg>
+        <span>Flight</span>
+      </button>
+      <button type="button" class="rail-item" id="tab-map" aria-selected="false" aria-controls="map">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"></path><path d="M9 4v14M15 6v14"></path></svg>
+        <span>Map</span>
+      </button>
+      <button type="button" class="rail-item" id="tab-phrases" aria-selected="false" aria-controls="phrases">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 5h11a3 3 0 0 1 3 3v11H7a3 3 0 0 1-3-3V5z"></path><path d="M8 9h6M8 13h6"></path></svg>
+        <span>Phrases</span>
+      </button>
+      <button type="button" class="rail-item rail-bottom" id="settings-button" aria-selected="false" aria-controls="settings">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+
+    <div class="main">
+      <!-- The radio bar: the numbers you check most, then who and where -->
+      <header class="topbar">
+        <div class="radios" aria-label="Radios">
+          <span class="radio active"><span class="key">COM1</span><span class="num" id="st-com">---.---</span></span>
+          <span class="radio standby"><span class="key">NEXT</span><span class="num" id="st-next">---.---</span><span class="sub" id="st-next-name"></span></span>
+          <span class="radio active"><span class="key">XPDR</span><span class="num" id="st-squawk">----</span><span class="sub">ALT</span></span>
+        </div>
+        <div class="who">
+          <span class="flight"><span class="callsign" id="flight-callsign">MSFS ATC</span><span class="route" id="flight-route"></span></span>
+          <span class="link" id="link" title="Connection to the app"><span class="dot" aria-hidden="true"></span><span id="link-text">…</span></span>
+          <span class="utc num" id="utc">----Z</span>
+        </div>
+      </header>
+
+      <!-- New flight -->
+      <main id="setup" class="screen" hidden>
+        <form id="start-form" class="setup" autocomplete="off">
+          <h1>New flight</h1>
+          <!-- 1. Where the plan comes from -->
+          <section class="card">
+            <h2>Flight plan</h2>
+            <div class="load-row">
+              <label class="field">
+                <span>SimBrief username</span>
+                <input name="simbrief" placeholder="empty: enter the plan by hand">
+              </label>
+              <button type="button" class="secondary" id="load-button">Load flight</button>
+            </div>
+            <details class="manual" id="manual">
+              <summary>Enter by hand, or change the loaded plan</summary>
+              <div class="row">
+                <label class="field"><span>Callsign</span><input class="code" name="callsign" placeholder="DLH4AB"></label>
+                <label class="field"><span>From</span><input class="code" name="departure" placeholder="EDDH" maxlength="4"></label>
+                <label class="field"><span>To</span><input class="code" name="destination" placeholder="EDDM" maxlength="4"></label>
+                <label class="field"><span>Cruise</span><input class="code" name="cruise" placeholder="FL350"></label>
+              </div>
+              <label class="field wide"><span>Route</span><input class="code" name="route" placeholder="AMLU2G AMLUH M852 DENIX"></label>
+            </details>
+          </section>
+
+          <!-- 2. The briefing: what ATC will work with -->
+          <section class="card briefing" id="briefing" aria-label="Briefing" hidden>
+            <div class="brief-head">
+              <span class="brief-callsign num" id="b-callsign"></span>
+              <span class="brief-say"><span class="key">Say</span> <span id="b-spoken"></span></span>
+              <span class="soft" id="b-meta"></span>
+            </div>
+            <div class="brief-airports">
+              <div class="brief-airport" id="b-dep"></div>
+              <span class="brief-arrow soft" aria-hidden="true">→</span>
+              <div class="brief-airport" id="b-dest"></div>
+            </div>
+            <div class="brief-route"><span class="key">Route</span><span class="num" id="b-route"></span></div>
+            <ul class="brief-notes hint" id="b-notes"></ul>
+          </section>
+
+          <!-- 3. How to fly it -->
+          <section class="card">
+            <h2>Simulator</h2>
+            <label class="check"><input type="checkbox" name="nosim" checked> Without MSFS (practice mode)</label>
+            <div class="choice">
+              <span>Weather</span>
+              <label><input type="radio" name="weather" value="live" checked> Live METAR</label>
+              <label><input type="radio" name="weather" value="sim"> From MSFS</label>
+            </div>
+            <label class="check"><input type="checkbox" name="strict_freq"> Strict frequencies (no hints on a wrong frequency)</label>
+          </section>
+          <p class="error" id="start-error" hidden></p>
+          <div class="actions">
+            <button type="submit" class="primary" id="start-button">Start flight</button>
+          </div>
+        </form>
+      </main>
+
+      <!-- The flight -->
+      <main id="flight" class="screen" hidden>
+        <div class="view" id="view-atc">
+          <!-- What you can say now: the call that is due first -->
+          <div class="chips" aria-label="Calls">
+            <button type="button" class="chip suggested" id="next" hidden title="Put it in the text box"><span class="key">Next call</span> <span class="num" id="next-text"></span></button>
+            <button type="button" class="chip" data-call="say again">Say again</button>
+            <button type="button" class="chip" data-call="wind check">Wind check</button>
+            <button type="button" class="chip" data-call="radio check">Radio check</button>
+            <button type="button" class="chip" id="copilot-button" aria-pressed="false" title="The co-pilot reads back, tunes and checks in, and makes the calls as you go; also: say &quot;copilot, you have the radio&quot;">Co-pilot radio: off</button>
+            <button type="button" class="chip" id="copilot-next" hidden title="The co-pilot makes the call that is due">Co-pilot: next call</button>
+          </div>
+
+          <!-- The board: where you are and its frequencies, beside the flight -->
+          <section class="board" aria-label="Airport and flight">
+            <div class="board-airport">
+              <div class="airport-head">
+                <span class="icao" id="ap-ident">----</span>
+                <span id="ap-name"></span>
+              </div>
+              <span class="soft ap-info" id="ap-info"></span>
+              <div class="freqs" id="ap-freqs"></div>
+            </div>
+            <div class="facts" aria-label="Flight">
+              <span class="fact"><span class="key">Phase</span><span id="st-phase">-</span></span>
+              <span class="fact"><span class="key">Runway</span><span class="num live" id="st-runway">--</span></span>
+              <span class="fact"><span class="key">SID</span><span class="num live" id="st-sid">-</span></span>
+              <span class="fact"><span class="key">Cleared</span><span class="num live" id="st-cleared">-</span></span>
+              <span class="fact"><span class="key">Dest</span><span class="num" id="st-dest">-</span></span>
+              <span class="fact"><span class="key">STAR</span><span class="num" id="st-star">-</span></span>
+            </div>
+          </section>
+
+          <!-- Only when something has to be done -->
+          <div class="banner" id="banner" role="status" hidden><span class="banner-title" id="banner-title"></span><span class="banner-text" id="banner-text"></span></div>
+
+          <ol class="log" id="log" aria-label="Radio log"></ol>
+        </div>
+
+        <div class="view map" id="map" hidden>
+          <canvas id="map-canvas" aria-label="Map: your aircraft, the route, taxiways, Center sectors and traffic"></canvas>
+          <div class="map-zoom">
+            <button type="button" class="icon-button" id="zoom-in" aria-label="Zoom in">+</button>
+            <button type="button" class="icon-button" id="zoom-out" aria-label="Zoom out">−</button>
+          </div>
+          <span class="map-scale" id="map-scale"></span>
+        </div>
+
+        <div class="view phrases" id="phrases" hidden>
+          <div class="groups" role="tablist" aria-label="Phrase groups" id="phrase-groups"></div>
+          <div class="phrase-list" id="phrase-list"></div>
+        </div>
+
+        <!-- Speak or type -->
+        <form class="say" id="say-form" autocomplete="off">
+          <span class="ptt" id="ptt" title="Push-to-talk"><span class="dot" aria-hidden="true"></span><span id="ptt-text">PTT</span></span>
+          <label class="say-field">
+            <span class="visually-hidden">Transmission</span>
+            <input name="text" id="say-input" placeholder="Hold push-to-talk, or type here">
+          </label>
+          <button type="submit" class="primary">Send</button>
+          <button type="button" class="secondary quiet" id="stop-button">End flight</button>
+        </form>
+      </main>
+
+      <!-- Settings: sections on the left, one at a time on the right -->
+      <main id="settings" class="screen" hidden>
+        <div class="settings-head">
+          <div>
+            <h1>Settings</h1>
+            <p class="soft" id="settings-file">Saved in settings.toml</p>
+          </div>
+          <button type="button" class="secondary" id="settings-close">Back</button>
+        </div>
+        <div class="settings-body">
+          <nav class="side" role="tablist" aria-label="Settings sections">
+            <button type="button" class="tab" role="tab" data-section="general">General</button>
+            <button type="button" class="tab" role="tab" data-section="audio">Audio</button>
+            <button type="button" class="tab" role="tab" data-section="controls">Controls</button>
+            <button type="button" class="tab" role="tab" data-section="traffic">Traffic</button>
+            <button type="button" class="tab" role="tab" data-section="simulator">Simulator</button>
+            <button type="button" class="tab" role="tab" data-section="about">About</button>
+          </nav>
+          <div class="settings-pane">
+            <form class="settings-content" id="settings-form" autocomplete="off">
+              <section class="card" data-section="general">
+                <h2>General</h2>
+                <label class="field"><span>SimBrief username</span><input name="simbrief_username" placeholder="to load your flight plan"></label>
+                <p class="hint">Filled in on the New flight screen, so a SimBrief plan is one click.</p>
+                <h2>Training</h2>
+                <label class="check"><input type="checkbox" name="atc.strict_readback"> Strict readbacks: read back every instruction, the pushback and frequency changes too, before you switch or go on</label>
+                <p class="hint">After 20 seconds without a readback ATC asks for it.</p>
+              </section>
+
+              <section class="card" data-section="audio">
+                <h2>ATC voice</h2>
+                <label class="field"><span>Voice</span>
+                  <select name="tts.engine">
+                    <option value="piper">Piper: a voice of its own for each controller</option>
+                    <option value="sapi">Windows voice: one voice for all</option>
+                  </select>
+                </label>
+                <label class="field"><span>Windows voice (also used when Piper can't start)</span><input name="tts.voice" placeholder="Zira"></label>
+                <label class="field"><span>Speaking rate, words per minute</span><input name="tts.rate" type="text" inputmode="numeric" placeholder="default (about 170)"></label>
+                <label class="check"><input type="checkbox" name="tts.radio_effect"> Radio effect: narrow band, a little hiss, the squelch at the end</label>
+                <h2>Sound mixer</h2>
+                <p class="hint">Saved with "Save", heard at once, also during a flight.</p>
+                <label class="field mixer"><span>All voices</span><input type="range" name="mixer.master" min="0" max="100" step="5"><output></output></label>
+                <label class="field mixer"><span>ATC and ATIS</span><input type="range" name="mixer.atc" min="0" max="100" step="5"><output></output></label>
+                <label class="field mixer"><span>Other aircraft on your frequency</span><input type="range" name="mixer.traffic" min="0" max="100" step="5"><output></output></label>
+                <label class="field mixer"><span>Co-pilot</span><input type="range" name="mixer.copilot" min="0" max="100" step="5"><output></output></label>
+                <label class="field mixer"><span>Cabin announcements</span><input type="range" name="mixer.cabin" min="0" max="100" step="5"><output></output></label>
+                <h2>Cabin</h2>
+                <label class="check"><input type="checkbox" name="cabin.announcements"> Cabin announcements: boarding, doors closed, take-off, descent, landing, arrival; in the airline's language (German for Lufthansa, Eurowings, Condor, …) and English</label>
+                <h2>Microphone</h2>
+                <label class="field"><span>Input</span><select name="whisper.mic" id="mic-select"></select></label>
+              </section>
+
+              <section class="card" data-section="controls">
+                <h2>Push-to-talk</h2>
+                <div class="binding">
+                  <span class="binding-label">Push-to-talk</span>
+                  <span class="binding-name num" id="ptt-name-ptt_key">-</span>
+                  <button type="button" class="secondary" data-bind="ptt_key">Set</button>
+                  <input type="hidden" name="whisper.ptt_key">
+                </div>
+                <div class="binding">
+                  <span class="binding-label">Spare</span>
+                  <span class="binding-name num" id="ptt-name-ptt_key2">none</span>
+                  <button type="button" class="secondary" data-bind="ptt_key2">Set</button>
+                  <button type="button" class="secondary" data-clear="ptt_key2">Clear</button>
+                  <input type="hidden" name="whisper.ptt_key2">
+                </div>
+                <p class="hint" id="bind-hint">Set: then press the key, mouse side button or joystick / yoke button you want, within 10 seconds. Hold it while you speak; it works while MSFS has the focus.</p>
+              </section>
+
+              <section class="card" data-section="traffic">
+                <h2>AI traffic</h2>
+                <label class="check"><input type="checkbox" name="traffic.chatter"> Radio calls of the other aircraft (LiveTraffic, FSLTL or MSFS traffic) on your Tower and Ground frequency</label>
+                <p class="hint">Runway checks with traffic and traffic information stay on either way.</p>
+                <h2>LiveTraffic</h2>
+                <label class="check"><input type="checkbox" name="traffic.start_livetraffic"> Start LiveTraffic together with MSFS ATC (it closes by itself if it already runs)</label>
+                <label class="field"><span>LiveTraffic program</span><input name="traffic.livetraffic_exe" placeholder="found by itself (LiveTraffic's entry in MSFS's EXE.xml)"></label>
+                <p class="hint">Applies from the next start of MSFS ATC. Switch off MSFS's own AI traffic, so only LiveTraffic flies.</p>
+              </section>
+
+              <section class="card" data-section="simulator">
+                <h2>Simulator</h2>
+                <label class="field"><span>SimConnect.dll</span><input name="simconnect_dll" placeholder="found by itself (MSFS SDK)"></label>
+                <label class="field"><span>Little Navmap database</span><input name="littlenavmap_db" placeholder="Little Navmap's MSFS database"></label>
+                <p class="hint">Airports, taxiways and Center frequencies come from your own Little Navmap database, built from your installed scenery.</p>
+                <h2>GSX Pro</h2>
+                <label class="check"><input type="checkbox" name="gsx.read"> Follow GSX: the doors-closed announcement after its boarding, a note when its pushback starts</label>
+                <label class="check"><input type="checkbox" name="gsx.control"> Request the GSX pushback after ATC's "push and start approved", and deboarding at the stand</label>
+              </section>
+
+              <section class="card" data-section="about">
+                <h2>About</h2>
+                <dl class="about" id="about-folders"></dl>
+                <h2>Credits</h2>
+                <ul class="credits">
+                  <li>Fonts B612 and B612 Mono by Airbus and Intactile, SIL Open Font License 1.1</li>
+                  <li>ATC voice: Piper (GPL-3.0) with the LibriTTS-R voice (CC BY 4.0); German cabin voice: Thorsten Müller (CC0)</li>
+                  <li>Speech recognition: Whisper by OpenAI, faster-whisper by SYSTRAN (MIT)</li>
+                  <li>Design values after unslop by Damir Sokolovsky (CC BY 4.0)</li>
+                </ul>
+              </section>
+            </form>
+            <div class="settings-actions">
+              <span class="soft" id="settings-status" role="status"></span>
+              <button type="button" class="primary" id="settings-save">Save</button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

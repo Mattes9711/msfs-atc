@@ -1,0 +1,42 @@
+# runway_crossing: EDDH departure from runway 15: the taxi route crosses runway 05/23. The pilot reports holding short, gets the crossing clearance, reads it back and is handed to Tower at the holding point (found in the first real flight).
+PILOT> /com 121.705
+       (COM1 121.705: Hamburg Ground)
+PILOT> Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich, information alpha
+       (understood: request_clearance, callsign DLH4AB (yours), atis=a)
+ATC:   Lufthansa four Alfa Bravo, cleared to Munich via Amluh two Golf departure, runway one fife, climb altitude fife thousand feet, squawk tree two six zero
+PILOT> cleared to Munich, runway 15, climb 5000 feet, squawk 3260, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), altitude_ft=5000 squawk=3260 runway=15)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+PILOT> Lufthansa 4AB, request push and start
+       (understood: request_pushback, callsign DLH4AB (yours))
+ATC:   Lufthansa four Alfa Bravo, push and start approved, facing west
+PILOT> Lufthansa 4AB, request taxi
+       (understood: request_taxi, callsign DLH4AB (yours))
+ATC:   Lufthansa four Alfa Bravo, taxi to holding point runway one fife, via Alfa fife, Echo one, hold short runway zero fife
+PILOT> taxi to holding point runway 15 via A5, E1, hold short runway 05, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), runway=15 hold_short=05 taxiways=['A5', 'E1'])
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+# at the hold short of runway 05/23, ATC waits for the report
+PILOT> /goto crossing
+       (position: crossing)
+PILOT> Hamburg Ground, Lufthansa 4AB, holding short runway 05
+       (understood: holding_short, callsign DLH4AB (yours), hold_short=05)
+ATC:   Lufthansa four Alfa Bravo, cross runway zero fife
+PILOT> crossing runway 05, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), runway=05)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+PILOT> /goto holding
+       (position: holding)
+ATC:   Lufthansa four Alfa Bravo, contact Hamburg Tower one two one decimal two eight zero
+PILOT> /com 121.280
+       (COM1 121.280: Hamburg Tower)
+PILOT> Hamburg Tower, Lufthansa 4AB, holding short runway 15, ready for departure
+       (understood: holding_short, callsign DLH4AB (yours), hold_short=15)
+ATC:   Lufthansa four Alfa Bravo, wind one fife zero degrees one zero knots, runway one fife, cleared for takeoff
+PILOT> runway 15, cleared for takeoff, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), runway=15 cleared_takeoff=True)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct

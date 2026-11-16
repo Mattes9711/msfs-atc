@@ -1,0 +1,149 @@
+"""What the pilot could say next (step P2, was A5), and the phrase book with the flight's own values.
+
+Both only read the controller's state and are deterministic, like the controller itself:
+- suggestion(): after an instruction, the readback with exactly the values to read back; otherwise the next call
+  of the flight in standard phraseology ("Hamburg Ground, Lufthansa 4AB, request taxi").
+- phrase_book(): the catalogue (atc/phraseology/catalog.py) with the flight's stations, runway, ATIS letter, ...
+  filled in, and the group of the current phase marked.
+The texts are what the pilot *writes or says*, so numbers are digits ("flight level 350"), not "tree fife zero".
+tests/test_suggest.py flies a whole flight by saying only the suggestions.
+"""
+import re
+
+from atc.controller import readback as rb
+from atc.phraseology import spoken
+from atc.phraseology.airlines import TELEPHONY
+from atc.phraseology.catalog import EXAMPLE, GROUPS, PHRASES
+
+SPOKEN_DIGIT = r"(?:zero|one|two|tree|three|four|fife|five|six|seven|eight|niner|nine)"
+# Which controller "{station}" is in each group of the phrase book
+GROUP_ROLE = {"Clearance": "clearance", "Ground": "ground", "Tower": "tower", "Departure and Center": "departure",
+              "Approach": "approach", "Arrival Tower and Ground": "arrival_tower"}
+
+
+def written_callsign(callsign: str) -> str:
+    """'DLH4AB' → 'Lufthansa 4AB', as the pilot says it (the parser reads both forms)."""
+    m = re.fullmatch(r"([A-Z]{3})(\d[A-Z0-9]*)", callsign.upper())
+    return f"{TELEPHONY[m[1]]} {m[2]}" if m and m[1] in TELEPHONY else callsign.upper()
+
+
+def readback_part(item: rb.Item) -> str:
+    """One instruction item as the pilot reads it back."""
+    key, value, phrase = item.key, item.value, item.phrase
+    if key == "runway":
+        before = phrase.split("runway")[0].strip()  # "taxi to holding point", "cross", "cleared ILS approach", ""
+        before = {"cross": "crossing"}.get(before, before)
+        if before.startswith("taxi to holding point"):
+            before = "taxi to holding point"  # its name is spoken in the phrase; the runway is enough
+        return f"{before} runway {value}".strip()
+    if key == "hold_short":
+        return f"hold short runway {value}"
+    if key == "taxiways":
+        return "via " + ", ".join(value)
+    if key == "flight_level":
+        return f"{phrase.split()[0]} flight level {value:03d}"
+    if key == "altitude_ft":
+        return f"{phrase.split()[0]} {value} feet"
+    if key == "heading":
+        return f"{phrase.split('heading')[0].strip()} heading {value:03d}".strip()
+    if key == "pushback":
+        return item.phrase  # "push and start approved, facing west": nothing spelled out in it
+    if key == "direct":
+        return f"direct {value}"
+    if key == "speed_kt":
+        return f"speed {value} knots"
+    if key == "squawk":
+        return f"squawk {value}"
+    if key == "frequency_khz":
+        m = re.match(rf"contact (.+?) {SPOKEN_DIGIT}\b", phrase)
+        return f"contact {m[1] if m else 'the next controller'} {value / 1000:.3f}"
+    if key == "qnh":
+        return f"QNH {value}"
+    return {"cleared_takeoff": "cleared for takeoff", "cleared_land": "cleared to land",
+            "line_up": "line up and wait"}[key]
+
+
+def suggestion(atc) -> dict | None:
+    """{"title", "text", "station", "khz"} or None when nothing is due (e.g. taxiing, cruising). `station` is who
+    to say it to: a readback goes to the controller who gave the instruction, even a "contact …"."""
+    cs = written_callsign(atc.plan.callsign)
+    if atc.pending and (waiting := atc.readback_station()):
+        return {"title": "Read back", "text": ", ".join(readback_part(i) for i in atc.pending) + f", {cs}",
+                "station": waiting.name, "khz": waiting.freq.khz}
+    station = atc.expected_station()
+    if station is None:
+        return None
+    name, phase, state = station.name, atc.phase, atc.state
+
+    def call(title: str, text: str) -> dict:
+        return {"title": title, "text": f"{name}, {cs}, {text}", "station": name, "khz": station.freq.khz}
+
+    if atc.call_next is not None and atc.call_next.key == station.key:  # just handed over: check in
+        if phase in ("climb", "airborne") and state:
+            passing = f"passing {round(state.alt_msl_ft, -2):.0f} feet"
+            return call("Check in", f"{passing}, climbing {_level_text(atc)}" if atc.cleared_level else passing)
+        if phase == "enroute":
+            return call("Check in", _level_text(atc))
+        if phase == "arrival":
+            return call("Check in", f"descending {_level_text(atc)}")
+        if phase == "final":
+            return call("Check in", f"established ILS runway {atc.arrival_runway}")
+        if phase == "vacating":
+            return call("Request taxi", "request taxi to the gate")
+        return call("Check in", "with you")
+    if phase == "clearance":
+        letter = spoken.ALPHABET[atc.atis.letter].lower()
+        to = atc.destination.name if atc.destination else atc.plan.destination
+        return call("Request IFR clearance",
+                    f"request IFR clearance to {to}, information {letter}" if to else
+                    f"request IFR clearance, information {letter}")
+    if phase == "cleared":
+        return call("Request pushback", "request push and start")
+    if phase == "pushback":
+        return call("Request taxi", "request taxi")
+    if phase == "taxi":
+        if crossing := atc.next_crossing_here():
+            return call("At the crossing", f"holding short runway {crossing}")
+        if atc.at_holding_point or atc.at_departure_holding_point() or atc.lined_up:
+            return call("Ready for departure", f"holding point runway {atc.runway}, ready for departure")
+        return None
+    if phase == "arrival":
+        return call("Check in", f"descending {_level_text(atc)}")
+    if phase == "final":
+        return call("Check in", f"established ILS runway {atc.arrival_runway}")
+    if phase == "vacating":
+        return call("Request taxi", "request taxi to the gate")
+    return None
+
+
+def _level_text(atc) -> str:
+    level = atc.cleared_level or ""
+    if level.startswith("FL"):
+        return f"flight level {level[2:]}"
+    return level.replace(" FT", " feet")
+
+
+def phrase_book(atc) -> list[dict]:
+    """The catalogue by group, filled with this flight's values; the current phase's group first."""
+    values = {"callsign": written_callsign(atc.plan.callsign), "runway": atc.runway,
+              "atis": spoken.ALPHABET[atc.atis.letter].lower()}
+    if atc.destination:
+        values["destination"] = atc.destination.name
+    if atc.squawk:
+        values["squawk"] = atc.squawk
+    if atc.cleared_level:
+        values["level"] = _level_text(atc) if atc.cleared_level.startswith("FL") else EXAMPLE["level"]
+    if atc.metar and atc.metar.qnh_hpa:
+        values["qnh"] = str(atc.metar.qnh_hpa)
+    groups = []
+    for group, phases in GROUPS.items():
+        role = GROUP_ROLE.get(group)
+        station = atc.station(role) if role else atc.expected_station()
+        filled = {**values, "station": station.name} if station else values
+        if group in ("Approach", "Arrival Tower and Ground") and atc.arrival_runway:
+            filled = {**filled, "runway": atc.arrival_runway}
+        groups.append({
+            "group": group, "current": atc.phase in phases,
+            "phrases": [{"title": p.title, "pilot": p.text(filled), "atc": p.atc.format(**{**EXAMPLE, **filled}),
+                         "note": p.note} for p in PHRASES if p.group == group]})
+    return sorted(groups, key=lambda g: not g["current"])  # stable: the rest keep the flight's order

@@ -1,0 +1,36 @@
+description: >
+  Readback mistakes the controller must catch: wrong altitude and squawk in the clearance, a wrong runway in
+  the taxi clearance, a takeoff readback without the runway, and a wrong flight level in the climb.
+plan: {callsign: DLH4AB, departure: EDDH, destination: EDDM, cruise: FL350, route: AMLU2G AMLUH M852 DENIX}
+metar:
+  EDDH: METAR EDDH 141450Z AUTO 22007KT 9999 SCT035 07/04 Q1018 NOSIG
+  EDDM: METAR EDDM 141450Z AUTO 08008KT CAVOK 06/00 Q1019 NOSIG
+seed: 7
+steps:
+  - /com 121.705
+  - Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich, information alpha
+  - comment: wrong altitude and wrong squawk
+  - cleared to Munich, runway 23, climb 4000 feet, squawk 1234, Lufthansa 4AB
+  - comment: still missing the squawk
+  - climb 5000 feet, Lufthansa 4AB
+  - squawk {squawk}, Lufthansa 4AB
+  - Lufthansa 4AB, request taxi
+  - comment: wrong runway
+  - taxi to holding point runway 05, Lufthansa 4AB
+  - taxi to holding point runway 23, Lufthansa 4AB
+  - /goto holding
+  - /com 121.280
+  - Hamburg Tower, Lufthansa 4AB, ready for departure
+  - comment: runway missing in the takeoff readback
+  - cleared for takeoff, Lufthansa 4AB
+  - runway 23, cleared for takeoff, Lufthansa 4AB
+  - /fly 2
+  - /com 118.205
+  - Hamburg Approach, Lufthansa 4AB, passing 3000 climbing 5000
+  - comment: wrong flight level; no new instruction comes until it is right
+  - climb flight level 340, direct Amluh, Lufthansa 4AB
+  - comment: flying on past the top of descent (219 nm) without the descent, because the level is not read back
+  - fly_until_call: [3, 240]
+  - climb flight level 350, Lufthansa 4AB
+  - descend flight level 100, Lufthansa 4AB
+  - fly_until_call: [241, 330]

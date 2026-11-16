@@ -1,0 +1,77 @@
+# wrong_frequency: Frequency mistakes: transmitting with COM1 not tuned, on the ATIS, on an empty frequency, asking Tower for the clearance, calling Tower instead of Departure after takeoff, and missing an ATC call while on Ground.
+# COM1 not tuned yet
+PILOT> Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich
+       (COM1 is not tuned. EDDH frequencies: Hamburg Ground 121.705, 121.805, 121.980 | Hamburg Tower 121.280, 126.855 | Hamburg Approach 118.205 | ATIS 124.325. Tune with /com <MHz>.)
+PILOT> /com 124.325
+       (COM1 124.325: ATIS)
+ATC:   Hamburg information Alfa, time one four fife zero. Runway in use two tree. Wind two two zero degrees seven knots, visibility one zero kilometres or more, scattered tree thousand fife hundred feet, temperature seven, dew point four, QNH one zero one eight. Advise on initial contact you have information Alfa.
+PILOT> Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich
+       (124.325 is EDDH ATIS, not a controller. EDDH frequencies: Hamburg Ground 121.705, 121.805, 121.980 | Hamburg Tower 121.280, 126.855 | Hamburg Approach 118.205 | ATIS 124.325. Tune with /com <MHz>.)
+PILOT> /com 122.800
+       (COM1 122.800)
+PILOT> Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich
+       (Nobody on 122.800. EDDH frequencies: Hamburg Ground 121.705, 121.805, 121.980 | Hamburg Tower 121.280, 126.855 | Hamburg Approach 118.205 | ATIS 124.325. Tune with /com <MHz>.)
+# the right airport, the wrong controller
+PILOT> /com 121.280
+       (COM1 121.280: Hamburg Tower)
+PILOT> Hamburg Tower, Lufthansa 4AB, request IFR clearance to Munich
+       (understood: request_clearance, callsign DLH4AB (yours))
+ATC:   Lufthansa four Alfa Bravo, contact Hamburg Ground one two one decimal seven zero fife
+PILOT> /com 121.705
+       (COM1 121.705: Hamburg Ground)
+PILOT> Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich, information alpha
+       (understood: request_clearance, callsign DLH4AB (yours), atis=a)
+ATC:   Lufthansa four Alfa Bravo, cleared to Munich via Amluh two Golf departure, runway two tree, climb altitude fife thousand feet, squawk tree two six zero
+PILOT> cleared to Munich, runway 23, climb 5000 feet, squawk 3260, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), altitude_ft=5000 squawk=3260 runway=23)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+PILOT> Lufthansa 4AB, request taxi
+       (understood: request_taxi, callsign DLH4AB (yours))
+ATC:   Lufthansa four Alfa Bravo, taxi to holding point runway two tree
+PILOT> taxi to holding point runway 23, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), runway=23)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+PILOT> /goto holding
+       (position: holding)
+ATC:   Lufthansa four Alfa Bravo, contact Hamburg Tower one two one decimal two eight zero
+PILOT> /com 121.280
+       (COM1 121.280: Hamburg Tower)
+PILOT> Hamburg Tower, Lufthansa 4AB, ready for departure
+       (understood: ready_departure, callsign DLH4AB (yours))
+ATC:   Lufthansa four Alfa Bravo, wind two two zero degrees seven knots, runway two tree, cleared for takeoff
+PILOT> runway 23, cleared for takeoff, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), runway=23 cleared_takeoff=True)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+PILOT> /fly 2
+       (position: 322 nm to EDDM, 2000 ft)
+ATC:   Lufthansa four Alfa Bravo, contact Hamburg Approach one one eight decimal two zero fife
+# stays on Tower instead of switching to Approach
+PILOT> Hamburg Tower, Lufthansa 4AB, passing 3000 climbing 5000
+       (understood: checkin, callsign DLH4AB (yours), altitude_ft=5000)
+ATC:   Lufthansa four Alfa Bravo, contact Hamburg Approach one one eight decimal two zero fife
+PILOT> /com 118.205
+       (COM1 118.205: Hamburg Approach)
+PILOT> Hamburg Approach, Lufthansa 4AB, passing 3000 climbing 5000
+       (understood: checkin, callsign DLH4AB (yours), altitude_ft=5000)
+ATC:   Lufthansa four Alfa Bravo, Hamburg Approach, radar contact, climb flight level tree fife zero, proceed direct Amluh
+PILOT> climb flight level 350, direct Amluh, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), flight_level=350 direct=AMLUH)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct
+# back on Ground by mistake, so the descent is only a hint
+PILOT> /com 121.705
+       (COM1 121.705: Hamburg Ground)
+       (flew to 219 nm, 34900 ft)
+       (Hamburg Approach is calling you on 118.205: Lufthansa four Alfa Bravo, descend flight level one hundred)
+PILOT> /com 118.205
+       (COM1 118.205: Hamburg Approach)
+PILOT> Hamburg Approach, Lufthansa 4AB, say again
+       (understood: say_again, callsign DLH4AB (yours))
+ATC:   Lufthansa four Alfa Bravo, descend flight level one hundred
+PILOT> descend flight level 100, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), flight_level=100)
+       (readback correct)
+ATC:   Lufthansa four Alfa Bravo, readback correct

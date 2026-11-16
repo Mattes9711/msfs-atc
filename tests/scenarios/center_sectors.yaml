@@ -1,0 +1,53 @@
+description: >
+  En-route Center handoffs with test sectors across the route (test frequencies, not real ones): Departure to
+  North Radar, a PLACEHOLDER sector that gets no handoff, North to South Upper, the altitude band down to
+  South Radar, and South Radar to Munich Approach.
+plan: {callsign: DLH4AB, departure: EDDH, destination: EDDM, cruise: FL350, route: AMLU2G AMLUH M852 DENIX}
+metar:
+  EDDH: METAR EDDH 141450Z AUTO 22007KT 9999 SCT035 07/04 Q1018 NOSIG
+  EDDM: METAR EDDM 141450Z AUTO 08008KT CAVOK 06/00 Q1019 NOSIG
+seed: 7
+centers:
+  - {name: North Radar, fir: TST1, frequency: "123.450", lower_ft: 0, upper_ft: 66000,
+     polygon: [[55.0, 8.0], [55.0, 13.0], [52.5, 13.0], [52.5, 8.0]]}
+  - {name: Middle Radar, fir: TST2, frequency: PLACEHOLDER, lower_ft: 0, upper_ft: 66000,
+     polygon: [[52.5, 8.0], [52.5, 13.0], [51.0, 13.0], [51.0, 8.0]]}
+  - {name: South Upper Radar, fir: TST3, frequency: "132.600", lower_ft: 24500, upper_ft: 66000,
+     polygon: [[51.0, 8.0], [51.0, 13.0], [47.5, 13.0], [47.5, 8.0]]}
+  - {name: South Radar, fir: TST3, frequency: "129.100", lower_ft: 0, upper_ft: 24500,
+     polygon: [[51.0, 8.0], [51.0, 13.0], [47.5, 13.0], [47.5, 8.0]]}
+steps:
+  - /com 121.705
+  - Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich, information alpha
+  - cleared to Munich, runway 23, climb 5000 feet, squawk {squawk}, Lufthansa 4AB
+  - Lufthansa 4AB, request taxi
+  - taxi to holding point runway 23, Lufthansa 4AB
+  - /goto holding
+  - /com 121.280
+  - Hamburg Tower, Lufthansa 4AB, ready for departure
+  - runway 23, cleared for takeoff, Lufthansa 4AB
+  - /fly 2
+  - /com 118.205
+  - Hamburg Approach, Lufthansa 4AB, passing 3000 climbing 5000
+  - comment: with Center sectors, Departure climbs only to FL240
+  - climb flight level 240, direct Amluh, Lufthansa 4AB
+  - comment: passing FL100, Departure hands off to the sector we are in
+  - fly_until_call: [3, 330]
+  - /com 123.450
+  - North Radar, Lufthansa 4AB, with you, climbing flight level 240
+  - comment: the first Center gives the rest of the climb
+  - climb flight level 350, Lufthansa 4AB
+  - comment: Middle Radar's frequency is a PLACEHOLDER, so North Radar keeps us
+  - fly_until_call: [19, 330]
+  - fly_until_call: [71, 330]
+  - /com 132.600
+  - South Upper Radar, Lufthansa 4AB, with you, flight level 350
+  - fly_until_call: [163, 330]
+  - descend flight level 100, Lufthansa 4AB
+  - comment: descending through FL245 into the lower sector
+  - fly_until_call: [220, 330]
+  - /com 129.100
+  - South Radar, Lufthansa 4AB, with you, descending 5000
+  - fly_until_call: [252, 330]
+  - /com 118.830
+  - Munich Approach, Lufthansa 4AB, with you

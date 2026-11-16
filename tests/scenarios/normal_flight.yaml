@@ -1,0 +1,46 @@
+description: >
+  EDDH to EDDM gate to gate with no mistakes: ATIS, clearance, pushback, taxi, takeoff, climb, descent,
+  ILS approach, landing and taxi to a Lufthansa gate.
+plan: {callsign: DLH4AB, departure: EDDH, destination: EDDM, cruise: FL350, route: AMLU2G AMLUH M852 DENIX,
+       aircraft: A20N}
+metar:
+  EDDH: METAR EDDH 141450Z AUTO 22007KT 9999 SCT035 07/04 Q1018 NOSIG
+  EDDM: METAR EDDM 141450Z AUTO 08008KT CAVOK 06/00 Q1019 NOSIG
+seed: 7
+steps:
+  - comment: at the gate in Hamburg
+  - /com 124.325
+  - /com 121.705
+  - Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich, information alpha
+  - cleared to Munich, Amluh 2G, runway 23, climb 5000 feet, squawk {squawk}, Lufthansa 4AB
+  - Lufthansa 4AB, request push and start
+  - Lufthansa 4AB, request taxi
+  - taxi to holding point runway 23, Lufthansa 4AB
+  - /goto holding
+  - /com 121.280
+  - Hamburg Tower, Lufthansa 4AB, holding point runway 23, ready for departure
+  - runway 23, cleared for takeoff, Lufthansa 4AB
+
+  - comment: departure
+  - /fly 2
+  - /com 118.205
+  - Hamburg Approach, Lufthansa 4AB, passing 3000 climbing 5000
+  - climb flight level 350, direct Amluh, Lufthansa 4AB
+  - fly_until_call: [3, 330]
+  - descend flight level 100, Lufthansa 4AB
+  - fly_until_call: [220, 330]
+
+  - comment: arrival
+  - /com 118.830
+  - Munich Approach, Lufthansa 4AB, descending flight level 100
+  - descend 4500 feet, QNH 1019, speed 220 knots, heading {heading}, Lufthansa 4AB
+  - comment: radar vectors, flown onto a 10 nm final
+  - /final 10
+  - cleared ILS runway {arrival_runway}, speed 180 knots, Lufthansa 4AB
+  - /com 118.705
+  - Munich Tower, Lufthansa 4AB, established ILS {arrival_runway}
+  - cleared to land runway {arrival_runway}, Lufthansa 4AB
+  - /landed
+  - /com 121.750
+  - Munich Ground, Lufthansa 4AB, request taxi to the gate
+  - taxi to stand Golf 201 via Bravo 6, Sierra, Sierra 7, Whiskey 2, Lufthansa 4AB
