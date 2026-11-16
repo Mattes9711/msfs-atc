@@ -158,6 +158,7 @@ def run(sim: SimSource, speech_in: SpeechInput, sink: Sink, controller: Controll
         announce(cabin, controller, sim.read(), sink)
 
 
+STALE_NOTICE_S = 5  # SimConnect misses a read now and then: "no data" only once it lasts (Milestone 8, F2)
 TRAFFIC_EVERY_S = 3  # reading all aircraft around costs a SimConnect request; every few seconds is enough
 
 
@@ -173,7 +174,8 @@ class LiveSession:
         self.gsx = gsx  # GsxLink (C3/C4), only with MSFS
         self.next_traffic = 0.0  # when to read the other aircraft again
         self.last_com: int | None = None
-        self.was_stale = False
+        self.was_stale = False  # "no data from MSFS" was said
+        self.stale_since: float | None = None
         self.state = None  # last state read, so one tick reads the sim once (a read takes ~0.3 s)
         self.still_since: float | None = None  # the co-pilot's eye: since when the aircraft stands still
         self.pushed = False  # it has moved since the pushback was approved
@@ -191,10 +193,18 @@ class LiveSession:
         """Returns False when the user wants to quit."""
         state = self.sim.read()
         stale = getattr(self.sim, "stale", False)
-        if stale != self.was_stale:
-            self.sink.emit(Event("notice", "no data from MSFS, using the last known position" if stale
-                                 else "MSFS data is back"))
-            self.was_stale = stale
+        now = self.clock() if self.clock else None
+        if not stale:
+            self.stale_since = None
+        elif self.stale_since is None:
+            self.stale_since = now
+        lasting = stale and (now is None or self.stale_since is None or now - self.stale_since >= STALE_NOTICE_S)
+        if lasting and not self.was_stale:
+            self.sink.emit(Event("notice", "no data from MSFS, using the last known position"))
+            self.was_stale = True
+        elif not stale and self.was_stale:
+            self.sink.emit(Event("notice", "MSFS data is back"))
+            self.was_stale = False
         if state.com1_khz != self.last_com:
             self.last_com = state.com1_khz
             describe_tuning(self.controller, state.com1_khz, self.sink)

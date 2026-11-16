@@ -218,6 +218,26 @@ def test_lost_sim_data_is_shown_once(eddh):
         "       (no data from MSFS, using the last known position)", "       (MSFS data is back)"]
 
 
+def test_a_short_gap_in_the_sim_data_is_not_shown(eddh):
+    """Milestone 8, F2: "no data from MSFS" flickered 8 times in the first minute. Only after 5 s now."""
+    sim, out, t = StaleFakeSim.parked_at(eddh), Collect(), [0.0]
+    session = LiveSession(sim, ConsoleSink(out, out.show), Session(eddh).atc, clock=lambda: t[0])
+    session.step()
+    sim.stale = True
+    for _ in range(4):
+        t[0] += 1
+        session.step()
+    sim.stale = False
+    session.step()
+    assert not [line for line in out.lines if "MSFS" in line]  # 4 s: nothing
+    sim.stale = True
+    for _ in range(6):
+        t[0] += 1
+        session.step()
+    assert [line for line in out.lines if "MSFS" in line] == [
+        "       (no data from MSFS, using the last known position)"]
+
+
 class Lines:
     def __init__(self, *lines):
         self.lines = list(lines)

@@ -77,7 +77,7 @@ class WhisperInput:
             try:
                 audio = self.recorder.record()
             except Exception as e:  # e.g. the microphone was unplugged
-                self._show("notice", f"microphone error: {e}; check [whisper] mic (python -m atc --list-mics)")
+                self._show("notice", f"microphone error: {e}; check Settings → Audio → Microphone")
                 time.sleep(2)
                 continue
             if audio is None:
@@ -88,7 +88,7 @@ class WhisperInput:
             peak = float(np.abs(audio).max())
             if peak < QUIET_PEAK:
                 self._show("notice", f"nearly silent recording, peak {peak:.3f}: wrong microphone? "
-                                     "see python -m atc --list-mics")
+                                     "check Settings → Audio → Microphone")
             if self.save_dir:
                 save_wav(audio, self.save_dir)
             start = self.clock()

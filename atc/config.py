@@ -50,7 +50,7 @@ class MixerConfig:
     atc: int = 100  # the controllers and the ATIS
     traffic: int = 80  # the other aircraft and their controllers on your frequency
     copilot: int = 100
-    cabin: int = 70  # the purser's announcements and the chime
+    cabin: int = 50  # the purser's announcements and the chime (70 was too loud next to ATC: Milestone 8, F1)
 
 
 @dataclass

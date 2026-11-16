@@ -1168,10 +1168,10 @@ E2. ✅ **Deboarding while the engines still ran:** GSX started it by itself (it
     Done: `GENERAL ENG COMBUSTION:1/2` and `BRAKE PARKING POSITION` read; any stand of the destination counts.
 
 **Part F — Small things**
-F1. Cabin announcements too loud next to ATC: mixer default 70 % → 50 %.
-F2. "no data from MSFS" flickered 8 times in the first minute and twice on the approach: say it only after 5 s
+F1. ✅ Cabin announcements too loud next to ATC: mixer default 70 % → 50 %.
+F2. ✅ "no data from MSFS" flickered 8 times in the first minute and twice on the approach: say it only after 5 s
     without data.
-F3. Microphone hints say "python -m atc --list-mics", which an .exe user can't run: "Settings → Audio → Microphone".
+F3. ✅ Microphone hints say "python -m atc --list-mics", which an .exe user can't run: "Settings → Audio → Microphone".
 
 **Part G — Other aircraft in the air** (the user's one addition)
 Today the other aircraft are only heard on Ground, Apron and Tower (taxi, takeoff, landing). On Departure, Approach
