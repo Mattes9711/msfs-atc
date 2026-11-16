@@ -25,6 +25,7 @@ APPROACH_SPEED_KT, FINAL_SPEED_KT = 220, 180
 AIRBORNE_AGL_FT = 500
 VACATE_SPEED_KT = 40
 AT_POINT_M = 30  # "at" a holding point or hold short
+NEAR_HOLDING_POINT_M = 150  # Tower takes a call from one this close to a departure holding point (C2)
 HOLD_SHORT_HINT_S = 15  # stopped at a crossing this long without reporting: show the call to make
 STOPPED_KT = 2
 NO_CLEARANCE_GO_AROUND_NM = 2

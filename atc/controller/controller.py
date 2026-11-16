@@ -31,8 +31,9 @@ from atc.sim.base import AircraftState
 from atc.units import format_khz
 from atc.weather.metar import Metar
 from atc.weather.runway_choice import choose_runway
-from atc.controller.common import (AIRBORNE_AGL_FT, APPROACH_HANDOFF_NM, CALL_KINDS, PHASES, PHASE_ROLE,
-                                   READBACK_REMINDER_S, RESERVED_SQUAWKS, ROLES, SECTOR_NEAR_DEG, TOWER_HANDOFF_NM,
+from atc.controller.common import (AIRBORNE_AGL_FT, APPROACH_HANDOFF_NM, CALL_KINDS, NEAR_HOLDING_POINT_M, PHASES,
+                                   PHASE_ROLE, READBACK_REMINDER_S, RESERVED_SQUAWKS, ROLES, SECTOR_NEAR_DEG,
+                                   TOWER_HANDOFF_NM,
                                    VACATE_SPEED_KT, Response, Station, _wind, center_station, describe_intent,
                                    frequency_list, wrong_frequency_hint)  # frequency_list: for atc.session
 from atc.controller.ground import GroundMixin
@@ -384,8 +385,10 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin):
         if role is None:
             return [self._say(station, f"{self.cs}, say again")]
         expected = self.station(role)
+        if expected is not None and expected.key != station.key and self._tower_near_holding_point(station, role, state):
+            role, expected = "tower", station
         if expected is not None and expected.key != station.key:
-            return [self._say(station, f"{self.cs}, contact {expected.name} {spoken.frequency(expected.freq.khz)}")]
+            return self._redirect(station, expected, role)
 
         kind = intent.kind
         if kind == "request_clearance":
@@ -439,6 +442,32 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin):
                                      and set(intent.items) not in ({"pushback"}, {"hold_position"})):
             return self._plain_call(intent, station, state)
         return []  # "roger", "wilco": needs no answer
+
+    def _redirect(self, station: Station, expected: Station, role: str) -> list[Response]:
+        """Called the wrong controller: "contact Tower 121.280", a handoff like any other, read back and then
+        checked in with (Milestone 8, C2: as a plain redirect the readback wasn't recognised and Ground and Tower
+        sent the aircraft back and forth). With another instruction waiting for its readback, only where to call."""
+        item = rb.contact(expected.name, expected.freq.khz)
+        if self.pending:
+            return [self._say(station, f"{self.cs}, {item.phrase}")]
+        if self.phase == "taxi" and role == "tower":
+            self.at_holding_point = True  # Ground has handed over: Tower's from now on
+        self.call_next = expected
+        self._set_pending([item], station.key, handoff_to=expected.key)
+        return [self._say(station, f"{self.cs}, {item.phrase}")]
+
+    def _tower_near_holding_point(self, station: Station, role: str, state: AircraftState) -> bool:
+        """Tower takes a call from an aircraft taxiing out that is at or near a holding point of the departure
+        runway, also one Ground didn't hand over yet (C2: it sent the check-in back to Ground)."""
+        tower = self.station("tower")
+        if (self.phase != "taxi" or tower is None or station.key != tower.key
+                or role not in ("ground", "apron") or self.taxi is None):
+            return False
+        near = any(self.taxi.distance_m(n, state.lat, state.lon) <= NEAR_HOLDING_POINT_M
+                   for n in self.taxi.holding_points(self.runway))
+        if near:
+            self.at_holding_point = True
+        return near
 
     def _plain_call(self, intent: Intent, station: Station, state: AircraftState) -> list[Response]:
         """A call without a request: a first call, "with you", a position report. ATC always answers (V3: a

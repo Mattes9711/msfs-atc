@@ -1,5 +1,5 @@
 """Found in the first full test flight, EDDH → EDDM on 2026-11-16 (Milestone 8, part B: the runway at the
-destination, the sequence, traffic information and the landing)."""
+destination, the sequence, traffic information and the landing; part C: on the ground)."""
 from dataclasses import replace
 
 from atc.intent.parser import parse
@@ -115,3 +115,63 @@ def test_landing_on_another_runway_is_no_incursion(eddh, eddm):
 
 def test_stopping_is_an_acknowledgement():
     assert parse("Lufthansa 758 stopping immediately", "DLH758").kind == "acknowledge"
+
+
+# --- C: on the ground ---------------------------------------------------------------------------------------------
+
+def at_node(s, node):
+    lat, lon = s.atc.taxi.latlon[node]
+    s.sim.update(lat=lat, lon=lon, on_ground=True, ground_speed_kt=0)
+
+
+def beside_the_route_end(s):
+    """At A1, another holding point of 23 than the route's A3: Ground's automatic handoff doesn't come."""
+    [a1] = [n for n in s.atc.taxi.holding_points("23") if "A1" in {e.name for e in s.atc.taxi.adjacent[n]}]
+    at_node(s, a1)
+    assert s.tick() == []
+
+
+def test_on_holding_point_is_a_holding_point_report():
+    """C1: "On holding point, Lufthansa 758" got "say again" twice; STT once heard "One holding point"."""
+    for text in ("On holding point, Lufthansa 4AB", "One holding point, Lufthansa 4AB",
+                 "Lufthansa 4AB, Hamburg Tower, good day, on holding point, runway 33",
+                 "Lufthansa 4AB at holding point runway 23"):
+        assert parse(text, "DLH4AB").kind == "holding_short", text
+    assert parse("taxi to holding point runway 33, via Zulu 1, Lufthansa 4AB", "DLH4AB").kind == "readback"
+    assert parse("holding point runway 33, ready for departure, Lufthansa 4AB", "DLH4AB").kind == "ready_departure"
+
+
+def test_ground_hands_over_to_tower_once_and_tower_keeps_the_aircraft(eddh, eddm):
+    """C2: Ground's "contact Tower" was a plain redirect, its readback not recognised ("continue taxi"), Tower sent
+    the check-in back to Ground and Ground handed over again two minutes later."""
+    from tests.test_ground_flow import GROUND, TOWER, confirmed
+    from tests.test_tower import taxiing
+
+    s = taxiing(eddh, eddm)
+    beside_the_route_end(s)
+    assert s.say(GROUND, "On holding point, Lufthansa 4AB") == [
+        f"{CS}, contact Hamburg Tower one two one decimal two eight zero"]
+    assert confirmed(s.say(GROUND, "Hamburg Tower 121.280, Lufthansa 4AB"))
+    assert s.atc.expected_station().name == "Hamburg Tower"
+    [cleared] = s.say(TOWER, "Lufthansa 4AB, Hamburg Tower, good day, on holding point, runway 23")
+    assert cleared.endswith("runway two tree, cleared for takeoff")
+    assert s.tick() == []  # and no second handoff from Ground
+
+
+def test_tower_takes_a_check_in_near_the_holding_point(eddh, eddm):
+    from tests.test_ground_flow import TOWER
+    from tests.test_tower import taxiing
+
+    s = taxiing(eddh, eddm)
+    beside_the_route_end(s)
+    assert s.say(TOWER, "Hamburg Tower, Lufthansa 4AB") == [f"{CS}, Hamburg Tower, report when ready for departure"]
+    assert s.atc.expected_station().name == "Hamburg Tower"
+
+
+def test_far_from_the_holding_point_tower_still_sends_the_aircraft_to_ground(eddh, eddm):
+    from tests.test_ground_flow import TOWER
+    from tests.test_tower import taxiing
+
+    s = taxiing(eddh, eddm)  # still at the gate
+    [call] = s.say(TOWER, "Hamburg Tower, Lufthansa 4AB")
+    assert call.startswith(f"{CS}, contact Hamburg Ground")

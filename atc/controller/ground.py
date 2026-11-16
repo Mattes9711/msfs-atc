@@ -292,12 +292,12 @@ class GroundMixin:
 
     def _reported_runway(self, intent: Intent) -> str | None:
         """The runway in "holding short (runway) 05" / "ready to cross runway 05"; without one, the next runway
-        to cross on the taxi route."""
+        to cross on the taxi route, or after the last crossing the departure runway ("on holding point")."""
         named = intent.items.get("hold_short") or intent.items.get("runway")
         if named or self.phase != "taxi" or self.route_out is None:
             return named
         return next((r for r, _ in self.crossing_points(self.route_out)
-                     if (self.airport.ident, r) not in self.cleared_runways), None)
+                     if (self.airport.ident, r) not in self.cleared_runways), self.runway)
 
     def _is_departure_runway(self, name: str | None) -> bool:
         if name is None or self.airport.runway_end(name) is None:

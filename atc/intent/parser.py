@@ -249,6 +249,11 @@ def classify(t: str, items: dict) -> str:
     if (re.search(r"\bholding short\b|\bready to cross\b|\brequest(?:ing)? (?:to )?cross(?:ing)?\b", t)
             and "taxiways" not in items):
         return "holding_short"
+    # "on holding point (runway 33)" (Milestone 8, C1; STT heard "one holding point"), but not the readback
+    # "taxi to holding point runway 33"
+    if (re.search(r"\b(?:on|at|one|1|in|reaching) (?:the )?holding point\b", t) and not re.search(r"\btaxi\b", t)
+            and "taxiways" not in items and not re.search(r"\bready\b", t)):
+        return "holding_short"
     if re.search(r"\bwind check\b", t):
         return "request_wind"
     if REQUEST.search(t):
