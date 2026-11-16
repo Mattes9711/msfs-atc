@@ -381,6 +381,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin):
                     self.blocked = True
                     return [Response(f"read back first{where}: {rb.instruction_text(self.pending)}", spoken=False)]
                 self._set_pending(())  # handed off and the pilot switched: that counts
+        if intent.kind == "request_other":  # a request ATC doesn't know: always an answer (C3, "ground services")
+            return [self._say(station, f"{self.cs}, say again")]
         role = self._role_for(intent)
         if role is None:
             return [self._say(station, f"{self.cs}, say again")]

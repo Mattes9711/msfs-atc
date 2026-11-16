@@ -175,3 +175,12 @@ def test_far_from_the_holding_point_tower_still_sends_the_aircraft_to_ground(edd
     s = taxiing(eddh, eddm)  # still at the gate
     [call] = s.say(TOWER, "Hamburg Tower, Lufthansa 4AB")
     assert call.startswith(f"{CS}, contact Hamburg Ground")
+
+
+def test_an_unknown_request_gets_say_again(eddh, eddm):
+    """C3: "request ground services" got no answer at all."""
+    from tests.test_ground_flow import GROUND
+    from tests.test_tower import taxiing
+
+    s = taxiing(eddh, eddm)
+    assert s.say(GROUND, "Lufthansa 4AB request ground services") == [f"{CS}, say again"]
