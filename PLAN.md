@@ -1081,8 +1081,9 @@ D10. ✅ **MSFS 2024 (first step, untested):** a friend on MSFS 2024 got "SimCon
     The banner names it ("Little Navmap (MSFS 2024)"). SimConnect: the MSFS 2024 SDK's default folder is searched;
     the message names the SDK of either sim. **To check with MSFS 2024:** everything.
 
-Next (user, 2026-11-16): a downloadable .exe. Still later: onboarding at the flight start (only flight information, "like VATSIM";
-paused by the user).
+Next: test flights with MSFS 2020 (TESTFLUG.md) and MSFS 2024 (a friend). Proposed, not started: airports straight
+from MSFS (SimConnect Facilities API, cached), so Little Navmap becomes optional. Still later: onboarding at the
+flight start (only flight information, "like VATSIM"; paused by the user).
 
 W1. 🔶 **Start screen** (user picked: briefing, dark look; the start check was dropped again: "egal").
     - **Done:** "Load flight" (`atc/preflight.py`, POST /api/briefing) shows the plan before starting: callsign with
