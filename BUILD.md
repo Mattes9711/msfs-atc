@@ -1,6 +1,6 @@
 # Building a release
 
-**Built 2026-11-16 (version 0.1.0):** `MSFS ATC.exe` in a folder (PyInstaller 6.22, Python 3.14), 316 MB, as a
+**Built 2026-11-16 (version 0.1.1):** `MSFS ATC.exe` in a folder (PyInstaller 6.22, Python 3.14), 316 MB, as a
 zip of 140 MB. Read the **licences** section before publishing anything.
 
 ```
