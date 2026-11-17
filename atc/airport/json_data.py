@@ -20,6 +20,10 @@ class JsonAirportData:
             return None
         return airport_from_dict(json.loads(path.read_text(encoding="utf-8")))
 
+    def procedures(self, ident: str) -> None:
+        """No STARs or approaches in the exported files: the arrival falls back to plain vectors."""
+        return None
+
     def nearest(self, lat: float, lon: float, max_nm: float) -> str | None:
         found = [(distance_nm(lat, lon, a.lat, a.lon), a.ident)
                  for a in map(self.get, (p.stem for p in sorted(self.directory.glob("*.json")))) if a and a.runways]

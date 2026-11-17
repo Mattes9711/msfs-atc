@@ -11,6 +11,7 @@ from pathlib import Path
 
 from atc.airport.geo import M_PER_DEG_LAT, distance_nm, point_in_polygon
 from atc.airport.model import Airport, ControlZone, Frequency, Ils, Parking, Runway, RunwayEnd, TaxiPath, VfrPoint
+from atc.airport.procedures import Procedures, load_procedures
 from atc.airspace.littlenavmap import decode_polygon
 
 
@@ -26,6 +27,18 @@ class LittleNavmapAirportData:
         con = self._connect()
         try:
             return _load(con, ident.upper())
+        finally:
+            con.close()
+
+    def procedures(self, ident: str) -> Procedures | None:
+        """The airport's STARs and approaches (Milestone 10 A); None for an airport the database doesn't know."""
+        con = self._connect()
+        try:
+            if con.execute("select 1 from airport where ident = ?", (ident.upper(),)).fetchone() is None:
+                return None
+            return load_procedures(con, ident)
+        except sqlite3.OperationalError:  # an old database without the procedure tables
+            return None
         finally:
             con.close()
 

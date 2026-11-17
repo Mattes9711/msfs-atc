@@ -1330,6 +1330,58 @@ E3. Crossing a control zone ("request crossing of the control zone from November
 5. The flight plan field for VFR in the app (A1): OK?
    ✅ **User: yes, an IFR/VFR field in the flight plan card** (set by SimBrief when it has one).
 
+### Milestone 10 — Realistic IFR arrival: descent and approach (planned 2026-11-17, before E3)
+
+From the test flight 2026-11-17 (Hamburg → Munich, log `2026-11-17_1249Z_DLH7M_2.txt`). The user: "Wir müssen
+ganz ganz dolle den approach und descent überarbeiten … mehr Realismus und bessere Approach." What went wrong:
+- Frankfurt Radar gave "direct LANDU": it skipped the airway T105 and SimBrief's TOD.
+- The descent came late (fixed in fdea143: SimBrief's TOD altitude).
+- The runway changed only 30 NM out (26L → 26R).
+- Munich Approach took the aircraft off the STAR LAND2B with "heading 215", 45° straight at the final from 8 NM
+  beside it. The approach clearance would have come only ~4 NM before the threshold, at 4500 ft.
+- Nobody noticed that the aircraft stayed at 6700 ft although cleared to 4500 ft.
+
+The user's decisions (2026-11-17):
+- No direct off the planned route: neither the Center's shortcut nor Approach's headings on the STAR.
+- Fly STAR and transition, with vectors only at its end.
+- Descent by the procedure's constraints.
+
+The data: Little Navmap's MSFS database (the user's own, read at runtime, never shipped) has the STARs, approaches
+and transitions with their legs, altitude and speed constraints. Munich ILS 26R: "LANDU" transition LANDU, DM411,
+DM422, DM429 (downwind), then "FM" = vectors, CF DM438 at or above 5000 ft, GUDEG (FAF, 5000 ft), threshold. STAR
+LAND2B: LANDU at or below FL100 and 250 kt, MIQ. Without that data: the improved vectors (F) as a fallback.
+
+A. ✅ **Procedure data** (2026-11-17, `atc/airport/procedures.py`, `AirportData.procedures()`): STARs, approaches and their transitions for an airport from
+   the Little Navmap database. Legs with position, kind (fix, "vectors" for FM/VM legs, the FAF), altitude
+   constraint (at, at or above, at or below, between) and speed limit. Never the Navigraph database. Tests with
+   procedures built in code, no real data in the repo. Checked on the user's EDDM: LAND2B (26R) LANDU to MIQ,
+   LANDU to 08R gives LAND2A, ILS 26R with FAF GUDEG at 5000 ft, transition LANDU vectors from DM429. The FAF is
+   not marked in the database: the fix after the approach's first fix (IF). Exported JSON files have no procedures.
+B. **The landing runway before the TOD**: fixed when the descent is given (ATIS, wind, traffic), with the STAR that
+   fits it ("LAND2A" for 08, "LAND2B" for 26) and the transition from the STAR's last fix: "descend flight level one
+   hundred, cleared LANDU two Bravo arrival, expect ILS approach runway two six right". A later runway change only
+   when the wind really turns, then with the new STAR/transition named.
+C. **No direct off the route**: the Center's shortcut only en route, before the TOD, never past the first fix of
+   the STAR, and only when the track left still leaves room for the descent. A pilot's "request direct" on the
+   arrival only to a fix ahead on the STAR/transition.
+D. **Descent by the constraints**: the Center's descent planned so the aircraft meets the STAR's first constraint
+   (LANDU FL100 or below, 250 kt). Approach then gives the transition's altitudes step by step ("descend altitude
+   five thousand feet") and speeds ("reduce speed two two zero knots") in time before each fix. And it notices
+   when the aircraft doesn't leave its level: "Lufthansa 7M, confirm descending altitude four thousand five
+   hundred feet".
+E. **Transition + vectors**: Approach's first call names the transition ("radar contact, descend altitude 5000
+   feet, QNH 993, transition LANDU, ILS approach runway 26R"). The pilot flies it in the FMC; ATC follows the
+   position along the legs. At the vectors leg (after DM429) Approach turns base by heading, so the intercept is
+   at 10–12 NM at the FAF altitude: "turn right heading 170", then "turn right heading 230, cleared ILS approach
+   runway 26R". With traffic ahead the downwind gets longer (trombone). With traffic far behind the base turn
+   may come earlier, but never a direct off the transition.
+F. **Better vectors without data**: never 45° straight at the final from far beside it, but a downwind and a base,
+   the intercept at 30° 8–12 NM out at the approach altitude. Vectors only after the STAR's last fix.
+G. **Tests and a replay**: the 2026-11-17 flight's geometry as a test (Munich-like procedures built in code), and
+   the smoke test.
+
+Order: A → B → C → D → E → F → G, each part with tests and its own commit. Milestone 9 E3 after it.
+
 ### Later versions (agreed, in rough order)
 
 26. *(Moved into Milestone 4: native SimConnect is S1–S2, the traffic parts T1–T4.)* Still later: the Facilities API

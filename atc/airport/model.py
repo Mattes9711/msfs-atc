@@ -141,5 +141,8 @@ class AirportData(Protocol):
 
     def get(self, ident: str) -> Airport | None: ...
 
+    def procedures(self, ident: str):
+        """The airport's STARs and approaches (atc.airport.procedures.Procedures), or None without them."""
+
     def nearest(self, lat: float, lon: float, max_nm: float) -> str | None:
         """Ident of the closest airport with a runway, measured to its reference point, or None."""
