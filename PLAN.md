@@ -1210,7 +1210,7 @@ from everything the user sees: the shipped centers.json is empty, unknown freque
 **Order:** A and B first (they broke the flight), then H, C, D, E, F, G; I once its data source is settled. **To check afterwards:** the same flight
 again, with TESTFLUG.md.
 
-### Milestone 9 — VFR from small airfields (planned 2026-11-16; parts A and B done 2026-11-17)
+### Milestone 9 — VFR from small airfields (planned 2026-11-16; parts A, B and C done 2026-11-17)
 
 The user: "can we fly ultralights from small fields like Uetersen yet?" Not yet: tried `--from EDHE --to EDHL
 --callsign DMABC` offline. The app starts there, but no station at Uetersen ("Frequencies:" empty, its Info is not a
@@ -1267,11 +1267,22 @@ B4. ✅ A field with no Info station: blind calls "Uetersen traffic, …" are lo
     Tests: `tests/test_info.py`. Smoke test EDHE → EDHF (Uetersen Info → Itzehoe Info) offline: all calls answered.
 
 **Part C — The circuit**
-C1. Where the aircraft is in the circuit (crosswind, downwind, base, final) from its position relative to the runway
-    in use and the circuit side; for B3 and for the traffic information.
-C2. Traffic in the circuit: LiveTraffic aircraft near the field, said by position ("traffic, one aircraft on left
-    downwind runway 27"); the other aircraft's own position reports as chatter (like Milestone 8 G).
-C3. Touch-and-go and full stop; going round in the circuit again.
+C1. ✅ Where the aircraft is in the circuit (upwind, crosswind, downwind, base, final) from its position relative to
+    the runway in use and the circuit side, and its heading (`atc/controller/circuit.py`): within 3 NM and below
+    2500 ft AGL, final up to 4 NM out, a leg only if the heading fits within 45°. The pilot's "left downwind runway
+    27" / "left base" (new kind `circuit_report`) → "roger", or the traffic in the circuit. Flying onto a leg
+    without a call also puts the flight in the circuit.
+C2. ✅ Traffic in the circuit by leg: "one aircraft on left downwind runway two seven", "two aircraft in the circuit,
+    one on final, one on left downwind" (in the inbound answer and the answer to a position report). The other
+    aircraft's own reports as chatter on the Info frequency when they turn onto downwind, base or final, with the
+    same quiet-radio rules as Milestone 8 G.
+C3. ✅ "on final runway 27, touch and go" / "full stop". Touching down fast and climbing away again (above 500 ft AGL),
+    or "going around", or turning crosswind after the final call → back in the circuit, the reports due again; a
+    slow roll-out → vacating. **A local flight** (`--from EDHE --to EDHE`) stays with the field's Info after takeoff
+    (no "leaving the circuit", no release to Info); the suggestions follow the leg (downwind, base, final "touch and
+    go"). The Phrases tab has a new group "Small field (Info)", current at such a field.
+    Text mode: `/circuit upwind|crosswind|downwind|base|final` and `/landed go` (a touch-and-go).
+    Tests: `tests/test_circuit.py`. Smoke test EDHE → EDHE offline: two circuits, touch-and-go, full stop, vacated.
 
 **Part D — On the way: Langen Information (FIS)** (optional for the pilot, as in reality)
 D1. Initial call with position, level and destination → "identified" with a squawk, QNH; "squawk 7000" and "leaving

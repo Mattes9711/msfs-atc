@@ -6,7 +6,7 @@ KINDS = (
     "request_clearance", "request_pushback", "request_taxi", "request_descent", "request_other",
     "ready_departure", "holding_short", "request_line_up", "request_wind", "request_level", "request_direct", "request_qnh", "request_weather", "unable",
     "confirm", "going_around", "vacated", "checkin", "readback", "acknowledge",
-    "leaving_frequency", "inbound", "on_final",  # calls to a small field's Info station (Milestone 9 B)
+    "leaving_frequency", "inbound", "on_final", "circuit_report",  # calls at a small field (Milestone 9 B, C)
     "radio_check", "say_again", "unknown",
 )
 

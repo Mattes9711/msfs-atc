@@ -12,6 +12,7 @@ import re
 
 from atc.airport.geo import bearing_deg, distance_nm
 from atc.controller import readback as rb
+from atc.controller.circuit import circuit_side, leg_words
 from atc.phraseology import spoken
 from atc.phraseology.airlines import TELEPHONY
 from atc.phraseology.catalog import EXAMPLE, GROUPS, PHRASES
@@ -22,6 +23,7 @@ SPOKEN_DIGIT = r"(?:zero|one|two|tree|three|four|fife|five|six|seven|eight|niner
 COMPASS = ("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west")
 GROUP_ROLE = {"Clearance": "clearance", "Ground": "ground", "Tower": "tower", "Departure and Center": "departure",
               "Approach": "approach", "Arrival Tower and Ground": "arrival_tower"}
+INFO_GROUP = "Small field (Info)"
 
 
 def written_callsign(callsign: str, short: bool = False) -> str:
@@ -167,14 +169,21 @@ def _info_suggestion(atc, role: str) -> dict | None:
                         "leaving the circuit, leaving the frequency")
         return None
     runway = atc.arrival_runway
+    local = airport.ident == atc.airport.ident  # a local flight: circuits at the home field (C3)
     if PHASES.index(phase) < PHASES.index("approach") and state is not None and not state.on_ground:
+        if local:
+            return None  # still climbing out: the crosswind turn puts it into the circuit
         nm = round(distance_nm(airport.lat, airport.lon, state.lat, state.lon))
         side = COMPASS[round(bearing_deg(airport.lat, airport.lon, state.lat, state.lon) / 45) % 8]
         where = f"{nm} miles {side}, {round(state.alt_msl_ft, -2):.0f} feet"
         return call("Inbound", f"{where}, joining the circuit runway {runway}" if blind else
                     f"{where}, for landing")
     if phase == "approach":
-        return call("On final", f"final runway {runway}" if blind else f"on final runway {runway}")
+        leg = atc._own_leg(state)
+        if leg in ("downwind", "base") and leg not in atc.circuit_reported:
+            return call(leg.capitalize(), f"{leg_words(leg, circuit_side(airport, runway))} runway {runway}")
+        final = f"final runway {runway}" if blind else f"on final runway {runway}"
+        return call("On final", f"{final}, {'touch and go' if local else 'full stop'}")
     if phase == "vacating" or (phase == "landing" and state is not None and state.on_ground):
         return call("Runway vacated", "runway vacated")
     return None
@@ -199,15 +208,23 @@ def phrase_book(atc) -> list[dict]:
         values["level"] = _level_text(atc) if atc.cleared_level.startswith("FL") else EXAMPLE["level"]
     if atc.metar and atc.metar.qnh_hpa:
         values["qnh"] = str(atc.metar.qnh_hpa)
+    info_role = atc._info_role()  # at a small field: its Info group is the current one (Milestone 9 C)
+    if info_role:
+        info = atc.station(info_role)
+        field = atc.airport if info_role == "info" else atc.destination
+        values["info"] = info.name if info else f"{field.name} traffic"
     groups = []
     for group, phases in GROUPS.items():
         role = GROUP_ROLE.get(group)
         station = atc.station(role) if role else atc.expected_station()
         filled = {**values, "station": station.name} if station else values
-        if group in ("Approach", "Arrival Tower and Ground") and atc.arrival_runway:
+        arriving = group in ("Approach", "Arrival Tower and Ground") or (group == INFO_GROUP
+                                                                          and info_role == "arrival_info")
+        if arriving and atc.arrival_runway:
             filled = {**filled, "runway": atc.arrival_runway}
+        current = group == INFO_GROUP if info_role else atc.phase in phases
         groups.append({
-            "group": group, "current": atc.phase in phases,
+            "group": group, "current": current,
             "phrases": [{"title": p.title, "pilot": p.text(filled), "atc": p.atc.format(**{**EXAMPLE, **filled}),
                          "note": p.note} for p in PHRASES if p.group == group]})
     return sorted(groups, key=lambda g: not g["current"])  # stable: the rest keep the flight's order

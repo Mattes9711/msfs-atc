@@ -57,6 +57,21 @@ class FakeSim:
         self.update(lat=lat, lon=lon, alt_msl_ft=airport.elevation_ft + agl, alt_agl_ft=agl, on_ground=False,
                     ground_speed_kt=140, heading_mag=end.heading_true - airport.mag_var)
 
+    def circuit(self, airport: Airport, end: RunwayEnd, leg: str) -> None:
+        """On a leg of the circuit for landing on `end` (Milestone 9 C), 1000 ft above the field: upwind, crosswind
+        past the far end, downwind 1 nm beside abeam the threshold, base before it, final 1.5 nm out."""
+        if leg == "final":
+            self.on_final(airport, end, 1.5)
+            return
+        side = 90 if end.circuit == "R" else -90
+        along, beside, turn = {"upwind": (1500, 0, 0), "crosswind": (2500, 600, side), "downwind": (0, 1852, 180),
+                               "base": (-1500, 1500, -side)}[leg]
+        lat, lon = destination_point(end.lat, end.lon, end.heading_true if along >= 0 else end.heading_true + 180,
+                                     abs(along) / M_PER_NM)
+        lat, lon = destination_point(lat, lon, (end.heading_true + side) % 360, beside / M_PER_NM)
+        self.update(lat=lat, lon=lon, alt_msl_ft=airport.elevation_ft + 1000, alt_agl_ft=1000, on_ground=False,
+                    ground_speed_kt=90, heading_mag=(end.heading_true + turn - airport.mag_var) % 360)
+
     def landed(self, airport: Airport, end: RunwayEnd) -> None:
         """Rolling out, slow, 1500 m down the runway."""
         lat, lon = destination_point(end.lat, end.lon, end.heading_true, 1500 / M_PER_NM)

@@ -47,7 +47,8 @@ class Flight:
         self.origin, self.dest = origin, dest
         self.sim = FakeSim.parked_at(origin, ga=True)
         plan = replace(VFR, departure=origin.ident, destination=dest.ident)
-        self.atc = Controller(origin, plan, METAR, destination=dest, destination_metar=EDDM_METAR,
+        self.atc = Controller(origin, plan, METAR, destination=dest,
+                              destination_metar=METAR if dest is origin else EDDM_METAR,
                               rng=random.Random(7))
 
     def say(self, khz: int, text: str) -> list[str]:
@@ -146,7 +147,7 @@ def test_b3_circuit_traffic_is_counted():
                           Traffic(2, DEST.lat - 0.01, DEST.lon, 1000, 90, 270, False, "DEIJK", "", "", "C152"),
                           Traffic(3, DEST.lat, DEST.lon, 9000, 300, 0, False, "DLH1", "DLH", "1", "A320")])
     [info] = f.say(INFO_B, f"Bravo Info, {FULL}, 8 miles south, 2500 feet, for landing")
-    assert info.endswith("right hand circuit, two aircraft in the circuit")
+    assert info.endswith("right hand circuit, two aircraft in the circuit, one on right downwind")
 
 
 def test_b4_blind_calls_get_no_answer():

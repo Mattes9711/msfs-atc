@@ -8,7 +8,7 @@ The phrases are our own, written after ICAO Doc 4444 / Doc 9432 and the German (
 nothing is copied from those documents. Placeholders in braces are filled with the flight's values, or with
 EXAMPLE when there is no flight:
     {station} {callsign} {destination} {atis} {runway} {squawk} {altitude} {level} {taxiways} {crossing}
-    {frequency} {next_station} {qnh} {stand} {fix}
+    {frequency} {next_station} {qnh} {stand} {fix} {info}
 """
 from dataclasses import dataclass, field
 
@@ -20,6 +20,7 @@ GROUPS = {
     "Departure and Center": ("airborne", "climb", "enroute"),
     "Approach": ("arrival", "approach"),
     "Arrival Tower and Ground": ("final", "landing", "vacating", "taxi_in"),
+    "Small field (Info)": (),  # current while at a field without a controller (Controller._info_role)
     "Any time": (),
 }
 
@@ -27,7 +28,7 @@ EXAMPLE = {
     "station": "Hamburg Ground", "callsign": "Lufthansa 4AB", "destination": "Munich", "atis": "alpha",
     "runway": "23", "squawk": "1701", "altitude": "5000 feet", "level": "flight level 350", "taxiways": "A, B",
     "crossing": "05", "frequency": "121.280", "next_station": "Hamburg Tower", "qnh": "1018", "stand": "G201",
-    "fix": "AMLUH",
+    "fix": "AMLUH", "info": "Uetersen Info",
 }
 
 
@@ -181,6 +182,33 @@ PHRASES = (
     Phrase("Arrival Tower and Ground", "Read back the taxi route to the stand",
            "Taxi to stand {stand} via {taxiways}, {callsign}", CORRECT, "readback",
            {"taxiways": ["A", "B"]}),
+    # --- Small field (Info) ------------------------------------------------------------------------------------
+    Phrase("Small field (Info)", "Request taxi information",
+           "{info}, {callsign}, at the apron, VFR to {destination}, request taxi information",
+           "Runway in use, wind, QNH and the circuit side: read back runway and QNH", "request_taxi",
+           note="Info only informs: it clears nothing, you decide. Without an Info station the calls are blind "
+                "calls to the other pilots, \"Uetersen traffic, …\", and nobody answers."),
+    Phrase("Small field (Info)", "Read back the taxi information", "Runway {runway}, QNH {qnh}, {callsign}",
+           CORRECT, "readback", {"runway": "23"}),
+    Phrase("Small field (Info)", "Ready for departure", "{info}, {callsign}, ready for departure runway {runway}",
+           "Wind and \"runway free\", or the traffic on the runway or on final", "ready_departure",
+           note="No takeoff clearance: you take off when the runway is free."),
+    Phrase("Small field (Info)", "Leaving the circuit",
+           "{info}, {callsign}, leaving the circuit, leaving the frequency", "Goodbye", "leaving_frequency"),
+    Phrase("Small field (Info)", "Inbound call", "{info}, {callsign}, 10 miles south, 2500 feet, for landing",
+           "Runway in use, wind, QNH, the circuit side and the traffic in the circuit: read back runway and QNH",
+           "inbound", note="Where you are from the field, your altitude, what you want."),
+    Phrase("Small field (Info)", "Downwind", "{info}, {callsign}, left downwind runway {runway}",
+           "\"roger\", or the traffic in the circuit", "circuit_report",
+           note="Left or right: the circuit side Info gave you."),
+    Phrase("Small field (Info)", "Base", "{info}, {callsign}, left base runway {runway}",
+           "\"roger\", or the traffic in the circuit", "circuit_report"),
+    Phrase("Small field (Info)", "Final", "{info}, {callsign}, on final runway {runway}, full stop",
+           "Wind and \"runway free\", or the traffic on it", "on_final",
+           note="\"touch and go\" instead of \"full stop\" to fly another circuit."),
+    Phrase("Small field (Info)", "Going around", "{info}, {callsign}, going around", "\"roger\"",
+           "going_around", note="Fly the circuit again and report downwind."),
+    Phrase("Small field (Info)", "Runway vacated", "{info}, {callsign}, runway vacated", "\"roger\"", "vacated"),
     # --- Any time ----------------------------------------------------------------------------------------------
     Phrase("Any time", "Radio check", "{station}, {callsign}, radio check",
            "\"read you five\"", "radio_check"),

@@ -91,7 +91,7 @@ PHASE_ROLE = {"clearance": "clearance", "cleared": "ground", "pushback": "ground
               "takeoff": "tower", **CALL_ROLE}
 AIR_PHASES = ("airborne", "climb", "enroute", "arrival", "approach", "final")  # traffic information
 CALL_KINDS = ("checkin", "readback", "acknowledge", "unknown", "request_other", "leaving_frequency", "inbound",
-              "on_final")
+              "on_final", "circuit_report")
 # Uncontrolled fields (Milestone 9 B): who counts as in the circuit, and when a moving aircraft taxis
 CIRCUIT_NM, CIRCUIT_AGL_FT = 3, 2500
 TAXIING_KT = 5

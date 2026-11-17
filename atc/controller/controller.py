@@ -160,6 +160,13 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
         self.crossing_waiting: tuple[Station, Airport, str] | None = None  # (station, airport, runway as said)
         self.info_left: set[str] = set()  # airports whose Info the pilot has said "leaving the frequency" to
         self.info_released = False  # close to an uncontrolled destination: sent to its Info (Milestone 9 B)
+        # The circuit at a small field (Milestone 9 C): the legs we reported since joining it, touched down on this
+        # circuit, circuits flown again after a touch-and-go or go-around; the other aircraft's legs (chatter)
+        self.circuit_reported: set[str] = set()
+        self.touched = False
+        self.circuits = 0
+        self.circuit_legs: dict[int, str | None] = {}
+        self.circuit_due: dict[int, tuple[str, float]] = {}
 
     # --- public -----------------------------------------------------------------------------------------------
 
@@ -284,14 +291,15 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
         origin, "arrival_info" from INFO_CALL_NM before the destination; else None."""
         index, airborne = PHASES.index(self.phase), PHASES.index("airborne")
         state = self.state
+        dest = self.destination
+        local = dest is not None and dest.ident == self.airport.ident  # a local flight: back to the circuit
         if uncontrolled(self.airport):
             if index < airborne:
                 return "info"
             near = state is not None and distance_nm(state.lat, state.lon, self.airport.lat,
                                                      self.airport.lon) <= 2 * CIRCUIT_NM  # leaving the circuit
-            if near and self.airport.ident not in self.info_left and self.phase in ("climb", "enroute"):
+            if near and not local and self.airport.ident not in self.info_left and self.phase in ("climb", "enroute"):
                 return "info"
-        dest = self.destination
         if uncontrolled(dest) and index >= airborne:
             if index >= PHASES.index("approach"):
                 return "arrival_info"
@@ -415,7 +423,9 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
         if intent.kind == "unable":
             return self._unable(station)
 
-        if intent.kind == "going_around" and self.phase in ("approach", "final", "landing"):
+        info_here = station.freq.type == "FSS" and uncontrolled(self.airport if station.ident == self.airport.ident
+                                                                else self.destination)
+        if intent.kind == "going_around" and self.phase in ("approach", "final", "landing") and not info_here:
             return self._go_around(station, state, "roger")
         if self.pending:
             if station.key == self.pending_key:
@@ -429,8 +439,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
                     self.blocked = True
                     return [Response(f"read back first{where}: {rb.instruction_text(self.pending)}", spoken=False)]
                 self._set_pending(())  # handed off and the pilot switched: that counts
-        if station.freq.type == "FSS" and uncontrolled(self.airport if station.ident == self.airport.ident
-                                                       else self.destination):
+        if info_here:
             return self._info_call(intent, station, state)  # Info informs, it doesn't clear (Milestone 9 B)
         if intent.kind == "request_other":  # a request ATC doesn't know: always an answer (C3, "ground services")
             return [self._say(station, f"{self.cs}, say again")]

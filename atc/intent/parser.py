@@ -290,6 +290,9 @@ def classify(t: str, items: dict) -> str:
     if re.search(r"\bfor landing\b|\binbound\b|\bjoin(?:ing)? (?:the )?(?:circuit|downwind|pattern|traffic pattern)\b"
                  r"|\b(?:miles?|nm) (?:north|south|east|west)", t):
         return "inbound"
+    # In the circuit (Milestone 9 C): "left downwind runway 27"; not "report left downwind"
+    if re.search(r"\b(?:crosswind|downwind|base)\b", t) and not re.search(r"\breport\b|\bcleared\b|\brequest\b", t):
+        return "circuit_report"
     if REQUEST.search(t):
         if re.search(r"\bline ?up\b", t):
             return "request_line_up"

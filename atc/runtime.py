@@ -9,6 +9,7 @@ from atc.airport.geo import distance_nm
 from atc.audio.base import SpeechInput
 from atc import copilot
 from atc.cabin import Cabin
+from atc.controller.circuit import LEGS
 from atc.controller.controller import Controller, Response
 from atc.events import Event, Sink
 from atc.phraseology import spoken
@@ -22,11 +23,12 @@ STILL_KT = 1  # slower than this the aircraft stands still (GROUND_VELOCITY jitt
 WEATHER_REFRESH_S = 30 * 60
 
 HELP = ("Commands: /com <MHz> tune COM1 | /taxi show the taxi route | /goto holding|crossing|runway on the ground | "
-        "/fly <nm> airborne, nm along the route | /final <nm> on final | /landed | /beacon on|off | /help | "
-        "/quit. "
-        "Anything else is a radio transmission. (/com, /goto, /fly, /final and /landed move the fake sim; "
+        "/fly <nm> airborne, nm along the route | /final <nm> on final | /circuit <leg> in the circuit of a "
+        "small field (upwind, crosswind, downwind, base, final) | /landed [go] (go: a touch-and-go) | "
+        "/beacon on|off | /help | /quit. "
+        "Anything else is a radio transmission. (/com, /goto, /fly, /final, /circuit and /landed move the fake sim; "
         "with MSFS you fly yourself.)")
-SIM_COMMANDS = ("/com", "/goto", "/fly", "/final", "/landed", "/beacon")
+SIM_COMMANDS = ("/com", "/goto", "/fly", "/final", "/circuit", "/landed", "/beacon")
 
 
 def emit_responses(sink: Sink, responses: list[Response]) -> None:
@@ -346,7 +348,7 @@ def handle_command(text: str, sim: SimSource, controller: Controller, sink: Sink
         sim.update(com1_khz=khz)
         describe_tuning(controller, khz, sink)
         return True
-    if name in ("/fly", "/final", "/landed"):
+    if name in ("/fly", "/final", "/circuit", "/landed"):
         dest = controller.destination
         if dest is None:
             info("No destination airport data: use --to or a SimBrief plan.")
@@ -357,10 +359,16 @@ def handle_command(text: str, sim: SimSource, controller: Controller, sink: Sink
                 sim.fly(controller.airport, dest, float(arg), controller.plan.cruise_ft)
             elif name == "/final":
                 sim.on_final(dest, end, float(arg or 10))
+            elif name == "/circuit":
+                if arg not in LEGS:
+                    raise ValueError(arg)
+                sim.circuit(dest, end, arg)
             else:
                 sim.landed(dest, end)
+                if arg == "go":
+                    sim.update(ground_speed_kt=60)  # still rolling fast: a touch-and-go
         except ValueError:
-            info(f"usage: {name} <nm>")
+            info(f"usage: {name} {'|'.join(LEGS) if name == '/circuit' else '<nm>'}")
             return True
         s = sim.read()
         to_go = distance_nm(s.lat, s.lon, dest.lat, dest.lon)
