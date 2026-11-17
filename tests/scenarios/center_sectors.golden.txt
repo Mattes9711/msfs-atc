@@ -62,7 +62,7 @@ PILOT> South Upper Radar, Lufthansa 4AB, with you, flight level 350
        (understood: checkin, callsign DLH4AB (yours), flight_level=350)
 ATC:   Lufthansa four Alfa Bravo, South Upper Radar, identified
        (flew to 219 nm, 34900 ft)
-ATC:   Lufthansa four Alfa Bravo, descend flight level one hundred
+ATC:   Lufthansa four Alfa Bravo, descend flight level one hundred, expect ILS approach runway zero eight right
 PILOT> descend flight level 100, Lufthansa 4AB
        (understood: readback, callsign DLH4AB (yours), flight_level=100)
        (readback correct)

@@ -1357,10 +1357,15 @@ A. ✅ **Procedure data** (2026-11-17, `atc/airport/procedures.py`, `AirportData
    procedures built in code, no real data in the repo. Checked on the user's EDDM: LAND2B (26R) LANDU to MIQ,
    LANDU to 08R gives LAND2A, ILS 26R with FAF GUDEG at 5000 ft, transition LANDU vectors from DM429. The FAF is
    not marked in the database: the fix after the approach's first fix (IF). Exported JSON files have no procedures.
-B. **The landing runway before the TOD**: fixed when the descent is given (ATIS, wind, traffic), with the STAR that
+B. ✅ **The landing runway before the TOD** (2026-11-17, `atc/controller/arrival.py`): fixed when the descent is given (ATIS, wind, traffic), with the STAR that
    fits it ("LAND2A" for 08, "LAND2B" for 26) and the transition from the STAR's last fix: "descend flight level one
    hundred, cleared LANDU two Bravo arrival, expect ILS approach runway two six right". A later runway change only
    when the wind really turns, then with the new STAR/transition named.
+   Done: the STAR from the filed STAR's first fix (else the route's last fix) for the runway, the approach (ILS
+   first), the transition from the STAR's last fix; "expect ILS approach runway …" always. After the descent the
+   traffic moves the runway only to the other direction, never to the parallel. **Open for E:** with the real EDDM
+   data LAND2B ends at MIQ, and the MIQ transition has no vectors; the LANDU transition (vectors from DM429) starts
+   at the STAR's first fix. Which transition to choose must be decided in E.
 C. **No direct off the route**: the Center's shortcut only en route, before the TOD, never past the first fix of
    the STAR, and only when the track left still leaves room for the descent. A pilot's "request direct" on the
    arrival only to a fix ahead on the STAR/transition.

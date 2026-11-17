@@ -46,7 +46,7 @@ def test_full_flight_to_the_gate(s, eddm):
     assert fly(s, 100) == []  # cruising
     assert fly(s, s_total(s) - 110) == []  # top of descent for FL350 is 105 nm out
     [descent] = fly(s, s_total(s) - 100)
-    assert descent == "Lufthansa four Alfa Bravo, descend flight level one hundred"
+    assert descent == "Lufthansa four Alfa Bravo, descend flight level one hundred, expect ILS approach runway zero eight right"
     assert confirmed(s.say(HAMBURG_APPROACH, "descend flight level 100, Lufthansa 4AB"))
 
     assert fly(s, s_total(s) - 35) == [
@@ -116,7 +116,7 @@ def test_pilot_can_request_descent_early(s):
     s.say(HAMBURG_APPROACH, "climb flight level 350, direct Amluh, Lufthansa 4AB")
     fly(s, 150)
     assert s.say(HAMBURG_APPROACH, "Lufthansa 4AB, request descent") == [
-        "Lufthansa four Alfa Bravo, descend flight level one hundred"]
+        "Lufthansa four Alfa Bravo, descend flight level one hundred, expect ILS approach runway zero eight right"]
 
 
 def test_no_new_instruction_until_the_last_one_is_read_back(s):

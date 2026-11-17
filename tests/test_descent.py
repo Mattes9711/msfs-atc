@@ -48,7 +48,8 @@ def test_no_descent_well_before_the_top_of_descent(eddh, eddm):
 
 def test_the_descent_just_before_the_top_of_descent(eddh, eddm):
     s = cruising(eddh, eddm, "EXUSI")  # 4 nm before the TOD
-    assert s.tick() == [f"{CS}, descend flight level one hundred, cleared Landu two Alfa arrival"]
+    assert s.tick() == [f"{CS}, descend flight level one hundred, cleared Landu two Alfa arrival, expect ILS approach "
+                        "runway zero eight right"]
 
 
 def test_cruising_higher_than_planned_starts_down_earlier(eddh, eddm):

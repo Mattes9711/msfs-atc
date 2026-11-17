@@ -8,7 +8,8 @@ from atc.controller import readback as rb
 from atc.controller.give_way import traffic_name
 from atc.controller import vectors, wake
 from atc.sim.traffic import M_PER_NM, Traffic
-from atc.flightplan.route import first_fix, spoken_star
+from atc.controller.arrival import plan_arrival, spoken_arrival
+from atc.flightplan.route import first_fix
 from atc.flightplan.track import track_to_go_nm
 from atc.intent.schema import Intent
 from atc.phraseology import spoken
@@ -190,7 +191,9 @@ class AirMixin:
         if self.descent_given or self.destination is None or station is None:
             return [self._say(station, f"{self.cs}, roger")] if station else []
         self.descent_given = True
-        star = spoken_star(self.plan.route, self.plan.star) if self.plan.route or self.plan.star else None
+        # The landing runway is fixed now, with the STAR and the approach that fit it (Milestone 10 B)
+        self.arrival = plan_arrival(self.destination, self.arrival_runway, self.plan, self.procedures)
+        star = spoken_arrival(self.arrival, self.plan)
         if state.alt_msl_ft > DESCENT_FL * 100 + 1000:
             # In steps: Center to FL100 (and the arrival route); Approach gives the altitude and the QNH
             items = [rb.level(DESCENT_FL, "descend")]
@@ -200,7 +203,8 @@ class AirMixin:
                 items.append(rb.qnh(self.destination_metar.qnh_hpa))
         self._set_pending(items, station.key)
         # The STAR is said, but not a readback item yet: whisper writes procedure names too differently to compare
-        text = ", ".join([rb.instruction_text(items), *([f"cleared {star}"] if star else [])])
+        text = ", ".join([rb.instruction_text(items), *([f"cleared {star}"] if star else []),
+                          f"expect {self.arrival.approach_kind} approach runway {spoken.runway(self.arrival_runway)}"])
         return self._transmit(station, f"{self.cs}, {text}", state)
 
     def _final_geometry(self, state: AircraftState) -> tuple:

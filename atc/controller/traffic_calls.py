@@ -6,6 +6,7 @@ from atc.airport.geo import bearing_deg, distance_nm
 from atc.airport.model import Airport
 from atc.controller.give_way import traffic_name
 from atc.controller import wake
+from atc.controller.arrival import plan_arrival, spoken_arrival
 from atc.controller.traffic import TRAFFIC_FORGET_NM, runway_end_for, spoken_callsign, traffic_information
 from atc.sim.traffic import Traffic
 from atc.phraseology import spoken
@@ -63,18 +64,30 @@ class TrafficMixin:
         before_approach = (self.destination is not None and not self.approach_cleared
                            and PHASES.index(self.phase) <= PHASES.index("approach"))
         end = self._traffic_runway(self.destination, "arrival", self.arrival_runway) if before_approach else None
-        if end and end != self.arrival_runway:
+        if end and end != self.arrival_runway and (not self.descent_given or self._reversed(end)):
             before, self.arrival_runway = self.arrival_runway, end
             self._note_runway_change(before)
             notes.append(Response(f"{self.destination.ident} landing runway now {end}, as the traffic uses it",
                                   spoken=False))
         return notes
 
+    def _reversed(self, end: str) -> bool:
+        """The runway end points the other way than the one the arrival is planned for (26L after 08R): only that
+        changes the runway once the descent is given (Milestone 10 B; the 2026-11-17 flight was moved from 26L to
+        the parallel 26R ten minutes before landing, only because the traffic used it)."""
+        new, old = self.destination.runway_end(end), self.destination.runway_end(self.arrival_runway)
+        if new is None or old is None:
+            return True
+        return abs((new.heading_true - old.heading_true + 180) % 360 - 180) > 90
+
     def _note_runway_change(self, before: str | None) -> None:
         """After the descent clearance named the STAR, a new landing runway is told by radio (B3): the STAR may be
-        for the old one, and Approach vectors to the new one anyway."""
+        for the old one, and Approach vectors to the new one anyway. The arrival is planned again for it."""
         if before and before != self.arrival_runway and self.descent_given:
             self.runway_change = self.arrival_runway
+            old_star = self.arrival.star_name if self.arrival else None
+            self.arrival = plan_arrival(self.destination, self.arrival_runway, self.plan, self.procedures)
+            self.star_changed = self.arrival.star_name is not None and self.arrival.star_name != old_star
 
     def _runway_change_call(self, state: AircraftState) -> list[Response]:
         station = self.expected_station()
@@ -82,9 +95,15 @@ class TrafficMixin:
             return []
         end = self.destination.runway_end(self.runway_change)
         self.runway_change = None
-        kind = "ILS" if end is not None and end.ils else "RNAV"
-        return self._transmit(station, f"{self.cs}, runway change, expect vectors {kind} approach runway "
-                                       f"{spoken.runway(self.arrival_runway)}", state)
+        runway = spoken.runway(self.arrival_runway)
+        if self.arrival and self.arrival.star_name and self.star_changed:
+            # A new STAR for the new direction: "cleared Landu two Alfa arrival" (Milestone 10 B)
+            star = spoken_arrival(self.arrival, self.plan)
+            return self._transmit(station, f"{self.cs}, runway change, cleared {star}, expect "
+                                           f"{self.arrival.approach_kind} approach runway {runway}", state)
+        kind = self.arrival.approach_kind if self.arrival else ("ILS" if end is not None and end.ils else "RNAV")
+        return self._transmit(station, f"{self.cs}, runway change, expect vectors {kind} approach runway {runway}",
+                              state)
 
     def _chatter(self, places) -> list[Response]:
         """What the other aircraft and our controller say to each other (T4), on the frequency the pilot is tuned

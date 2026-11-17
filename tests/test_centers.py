@@ -169,7 +169,7 @@ def test_full_flight_through_the_center_sectors(eddh, eddm):
     s.say(SOUTH_UPPER, "South Upper Radar, Lufthansa 4AB, with you, flight level 350")
 
     # Top of descent: the Center in charge gives it
-    assert next_call(s, 163, 240) == (219, [f"{CS}, descend flight level one hundred"])
+    assert next_call(s, 163, 240) == (219, [f"{CS}, descend flight level one hundred, expect ILS approach runway zero eight right"])
     assert confirmed(s.say(SOUTH_UPPER, "descend flight level 100, Lufthansa 4AB"))
     # Descending through FL245: same area, lower sector
     assert next_call(s, 220, 280) == (251, [contact("South Radar", SOUTH)])
@@ -203,7 +203,7 @@ def test_pilot_can_request_descent_from_center(eddh, eddm):
     check_in(s, NORTH, "North Radar")
     # Still below FL110 (18 nm out): straight to the altitude, with the QNH
     assert s.say(NORTH, "Lufthansa 4AB, request descent") == [
-        f"{CS}, descend altitude fife thousand feet, QNH one zero one niner"]
+        f"{CS}, descend altitude fife thousand feet, QNH one zero one niner, expect ILS approach runway zero eight right"]
 
 
 def test_leaving_every_sector_terminates_radar_service(eddh, eddm):
@@ -250,5 +250,5 @@ def test_placeholder_sector_after_a_real_one_keeps_the_current_center(eddh, eddm
 
 def test_without_sectors_departure_keeps_the_aircraft(eddh, eddm):
     s = airborne(eddh, eddm, CenterSectors())
-    assert next_call(s, 3, 240) == (219, [f"{CS}, descend flight level one hundred"])
+    assert next_call(s, 3, 240) == (219, [f"{CS}, descend flight level one hundred, expect ILS approach runway zero eight right"])
     assert s.atc.phase == "climb"

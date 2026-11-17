@@ -141,5 +141,5 @@ def test_the_descent_brings_the_star(eddh, eddm):
     s = with_departure(eddh, eddm, sectors=CenterSectors())  # no sectors: Departure keeps us to the top of descent
     s.say(HAMBURG_APPROACH, "climb flight level 350, direct Amluh, Lufthansa 4AB")
     nm, calls = next_call(s, 3, int(s_total(s)))
-    assert calls == [f"{CS}, descend flight level one hundred, cleared Landu two Alfa arrival"]
+    assert calls == [f"{CS}, descend flight level one hundred, cleared Landu two Alfa arrival, expect ILS approach runway zero eight right"]
     assert confirmed(s.say(HAMBURG_APPROACH, "descend flight level 100, Landu 2A arrival, Lufthansa 4AB"))

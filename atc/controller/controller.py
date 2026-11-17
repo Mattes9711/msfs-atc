@@ -30,6 +30,7 @@ from atc.phraseology import spoken
 from atc.phraseology.farewell import farewell
 from atc.sim.base import AircraftState
 from atc.units import format_khz
+from atc.airport.procedures import Procedures
 from atc.weather.metar import Metar
 from atc.weather.runway_choice import choose_runway
 from atc.controller.common import (AIRBORNE_AGL_FT, APPROACH_HANDOFF_NM, CALL_KINDS, NEAR_HOLDING_POINT_M, PHASES,
@@ -40,6 +41,7 @@ from atc.controller.common import (AIRBORNE_AGL_FT, APPROACH_HANDOFF_NM, CALL_KI
 from atc.controller.ground import GroundMixin, stand_words
 from atc.controller.tower import TowerMixin
 from atc.controller.air import AirMixin
+from atc.controller.arrival import Arrival
 from atc.controller.traffic_calls import TrafficMixin
 from atc.controller.air_chatter import AirChatterMixin
 from atc.controller.info import InfoMixin, uncontrolled
@@ -53,7 +55,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
     def __init__(self, airport: Airport, plan: FlightPlan, metar: Metar | None, strict_freq: bool = False,
                  destination: Airport | None = None, destination_metar: Metar | None = None,
                  rng: random.Random | None = None, centers: CenterSectors | None = None, chatter: bool = True,
-                 strict_readback: bool = False):
+                 strict_readback: bool = False, procedures: Procedures | None = None):
         self.airport = airport
         self.plan = plan
         self.metar = metar
@@ -61,6 +63,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
         self.destination = destination
         self.destination_metar = destination_metar
         self.arrival_runway = choose_runway(destination, destination_metar).name if destination else None
+        self.procedures = procedures  # the destination's STARs and approaches (Milestone 10), None without the data
+        self.arrival: Arrival | None = None  # runway, STAR, approach, transition: fixed with the descent (10 B)
         self.strict_freq = strict_freq
         # Strict readbacks (the user's wish, 2026-11-15): no switching frequency before the readback, the pushback
         # approval is read back too, and ATC asks once after READBACK_REMINDER_S of silence
@@ -150,6 +154,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
         self.speed_step = 0  # speed control behind it: 1 = "reduce speed 160 knots", 2 = "final approach speed"
         self.speed_gap = 0.0  # the gap to it when we were last told to slow down
         self.runway_change: str | None = None  # landing runway changed after the STAR was given: tell the pilot (B3)
+        self.star_changed = False  # ... and with it the STAR (Milestone 10 B): the new one is said
         self.copilot_on = False  # the co-pilot has the radio (C2)
         self.direct_fix: str | None = None  # the last fix ATC cleared the aircraft direct to (A1)
         self.approach_cleared = False  # cleared for the approach: the landing runway stays (B1)

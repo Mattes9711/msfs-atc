@@ -65,12 +65,12 @@ ATC:   Lufthansa four Alfa Bravo, readback correct
 PILOT> /com 121.705
        (COM1 121.705: Hamburg Ground)
        (flew to 219 nm, 34900 ft)
-       (Hamburg Approach is calling you on 118.205: Lufthansa four Alfa Bravo, descend flight level one hundred)
+       (Hamburg Approach is calling you on 118.205: Lufthansa four Alfa Bravo, descend flight level one hundred, expect ILS approach runway zero eight right)
 PILOT> /com 118.205
        (COM1 118.205: Hamburg Approach)
 PILOT> Hamburg Approach, Lufthansa 4AB, say again
        (understood: say_again, callsign DLH4AB (yours))
-ATC:   Lufthansa four Alfa Bravo, descend flight level one hundred
+ATC:   Lufthansa four Alfa Bravo, descend flight level one hundred, expect ILS approach runway zero eight right
 PILOT> descend flight level 100, Lufthansa 4AB
        (understood: readback, callsign DLH4AB (yours), flight_level=100)
        (readback correct)

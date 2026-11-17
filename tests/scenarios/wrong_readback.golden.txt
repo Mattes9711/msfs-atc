@@ -61,7 +61,7 @@ PILOT> climb flight level 350, Lufthansa 4AB
        (understood: readback, callsign DLH4AB (yours), flight_level=350)
        (readback correct)
 ATC:   Lufthansa four Alfa Bravo, readback correct
-ATC:   Lufthansa four Alfa Bravo, descend flight level one hundred
+ATC:   Lufthansa four Alfa Bravo, descend flight level one hundred, expect ILS approach runway zero eight right
 PILOT> descend flight level 100, Lufthansa 4AB
        (understood: readback, callsign DLH4AB (yours), flight_level=100)
        (readback correct)

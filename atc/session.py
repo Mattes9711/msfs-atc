@@ -190,7 +190,8 @@ def build_session(request: PlanRequest, options: SessionOptions, config: Config,
     dest_metar = airport_metar(weather, destination) if destination else None
     controller = Controller(airport, plan, metar, strict_freq=options.strict_freq, destination=destination,
                             destination_metar=dest_metar, centers=centers, chatter=config.traffic.chatter,
-                            strict_readback=config.atc.strict_readback)
+                            strict_readback=config.atc.strict_readback,
+                            procedures=find_procedures(sources, destination.ident) if destination else None)
     return Session(config, options, plan, plan_source, airport, source_name, destination, metar, dest_metar,
                    centers, sim, controller, weather, notices, winds)
 
@@ -306,6 +307,11 @@ def find_airport(sources: list[AirportData], ident: str) -> tuple[Airport, str] 
         if airport := source.get(ident):
             return airport, source.name
     return None
+
+
+def find_procedures(sources: list[AirportData], ident: str):
+    """The airport's STARs and approaches from the first source that has them (Little Navmap), else None."""
+    return next((p for source in sources if (p := source.procedures(ident)) is not None), None)
 
 
 def load_metar(weather: WeatherSource, icao: str) -> Metar | None:
