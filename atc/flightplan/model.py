@@ -23,6 +23,8 @@ class FlightPlan:
     sid: str | None = None  # "AMLU2G"
     star: str | None = None  # "LAND2A"
     tod: tuple[float, float] | None = None  # SimBrief's top of descent (lat, lon), as the FMC plans it
+    # ... and the altitude SimBrief plans there: lower than cruise_ft after a step descent (FL350, then FL310)
+    tod_ft: int | None = None
 
     def route_points(self) -> tuple[Waypoint, ...]:
         """The en-route waypoints, without the SID and STAR points."""

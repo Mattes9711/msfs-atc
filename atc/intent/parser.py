@@ -343,7 +343,7 @@ def classify(t: str, items: dict) -> str:
             return "request_clearance"
         if re.search(r"\btaxi\b", t):
             return "request_taxi"
-        if re.search(r"\bdescent\b|\blower\b", t):
+        if re.search(r"\bdes?cent\b|\blower\b", t):  # whisper writes "request decent" (flight 2026-11-17)
             return "request_descent"
         if "direct" in items:
             return "request_direct"

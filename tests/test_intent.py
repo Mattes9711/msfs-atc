@@ -92,6 +92,7 @@ def test_taxi_delta_is_not_mistaken_for_the_airline_delta():
     ("can we get a squawk please, Lufthansa 4AB", "request_other"),
     ("Lufthansa 759, say again", "say_again"),
     ("Munich Radar, Lufthansa 759, request descent", "request_descent"),
+    ("Munich Radar, Lufthansa 7M, request decent", "request_descent"),  # whisper's spelling (flight 2026-11-17)
     ("bla bla", "unknown"),
 ])
 def test_kind(text, kind):

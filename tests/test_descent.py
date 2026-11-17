@@ -20,6 +20,7 @@ def point(ident):
 
 def test_simbriefs_top_of_descent_is_read():
     assert SIMBRIEF.tod == (49.162465, 12.61392)
+    assert (SIMBRIEF.cruise_ft, SIMBRIEF.tod_ft) == (35000, 30000)  # a step descent before it
 
 
 def test_track_miles_follow_the_route_not_the_straight_line():
@@ -32,7 +33,7 @@ def test_track_miles_follow_the_route_not_the_straight_line():
     assert 75 < tod < 82  # along the STAR; 59 nm in a straight line
 
 
-def cruising(eddh, eddm, at, alt_ft=35000):
+def cruising(eddh, eddm, at, alt_ft=30000):  # as SimBrief plans it at its TOD
     s = with_departure(eddh, eddm, sectors=CenterSectors())  # Departure keeps us to the top of descent
     s.say(HAMBURG_APPROACH, "climb flight level 350, direct Amluh, Lufthansa 4AB")
     w = point(at)
@@ -51,12 +52,20 @@ def test_the_descent_just_before_the_top_of_descent(eddh, eddm):
 
 
 def test_cruising_higher_than_planned_starts_down_earlier(eddh, eddm):
-    s = cruising(eddh, eddm, "LULAR", alt_ft=39000)  # 4000 ft higher: 12 nm earlier
+    s = cruising(eddh, eddm, "LULAR", alt_ft=34000)  # 4000 ft higher: 12 nm earlier
     assert s.tick()[0].startswith(f"{CS}, descend flight level one hundred")
 
 
+def test_the_step_descent_left_out_moves_the_point_earlier(eddh, eddm):
+    # Flight 2026-11-17: still at the cruise level FL350, SimBrief's TOD planned at FL300: 15 nm earlier
+    s = cruising(eddh, eddm, "LULAR", alt_ft=35000)
+    assert s.tick()[0].startswith(f"{CS}, descend flight level one hundred")
+    s = cruising(eddh, eddm, "LULAR", alt_ft=25000)  # lower than planned: never later than the plan
+    assert not any("descend" in call for call in s.tick())
+
+
 def test_without_simbriefs_point_the_three_in_one_rule(eddh, eddm):
-    s = cruising(eddh, eddm, "LULAR")
+    s = cruising(eddh, eddm, "LULAR", alt_ft=35000)
     s.atc.plan = replace(SIMBRIEF, tod=None)  # e.g. a plan from another source
     # 3 nm per 1000 ft from FL350 down to 5000 ft, plus 15 nm: 105 nm along the route; LULAR is 92 nm to go
     assert s.tick()[0].startswith(f"{CS}, descend flight level one hundred")

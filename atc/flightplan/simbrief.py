@@ -75,6 +75,7 @@ def parse_simbrief(data: bytes) -> FlightPlan:
         sid=sid,
         star=star,
         tod=top_of_descent(root),
+        tod_ft=top_of_descent_ft(root),
     )
 
 
@@ -86,6 +87,17 @@ def top_of_descent(root: ET.Element) -> tuple[float, float] | None:
                 return float(fix.findtext("pos_lat")), float(fix.findtext("pos_long"))
             except (TypeError, ValueError):
                 return None
+    return None
+
+
+def top_of_descent_ft(root: ET.Element) -> int | None:
+    """The altitude SimBrief plans at its top of descent: after a step descent lower than the cruise level.
+    Found in flight 2026-11-17: Hamburg → Munich at FL350, SimBrief's TOD at FL300 (it planned FL310 from Urona);
+    measured from FL350 the descent came 15 nm late."""
+    for fix in root.findall("navlog/fix"):
+        if (fix.findtext("ident") or "").upper() == "TOD":
+            value = (fix.findtext("altitude_feet") or "").strip()
+            return int(value) if value.isdigit() else None
     return None
 
 

@@ -1060,6 +1060,10 @@ D6. ✅ **Descent at the top of descent** (`atc/flightplan/track.py`): the user 
     the route, so the call came ~45 nm early. Now track miles to go along the route are compared with SimBrief's
     TOD (read from the navlog), 5 nm before it, moved 3 nm per 1000 ft cruised above or below the plan. Without
     SimBrief's TOD the 3-in-1 rule, but along the route too.
+    ✅ **Fix after flight 2026-11-17** (Hamburg → Munich, FL350): the descent came only after the TOD. SimBrief
+    planned a step descent (FL310 from Urona, FL300 at its TOD); the shift was measured from the cruise level, so
+    5000 ft "above the plan" were missing (15 nm). Now from the altitude SimBrief plans at its TOD (`tod_ft`).
+    And "request decent" (whisper's spelling) is heard as a descent request.
 D7. ✅ **Tuning away cuts the old frequency:** the moment COM1 changes, a transmission still playing from ATC, the
     ATIS or other traffic stops, and those still waiting are dropped; cabin and co-pilot go on. Piper stops its
     sound; the Windows voice can only drop the waiting ones (its COM object belongs to the speech thread).

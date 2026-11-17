@@ -174,14 +174,16 @@ class AirMixin:
 
     def _top_of_descent_nm(self, state: AircraftState) -> float:
         """Track miles to go at which the descent is given: DESCENT_LEAD_NM before the top of descent.
-        With SimBrief's TOD (what the FMC plans): its track miles to go, moved 3 nm per 1000 ft the aircraft
-        cruises above (earlier) or below (later) the planned level. Without it the 3-in-1 rule: 3 nm per 1000 ft
-        to lose, plus a margin to be down before the approach."""
-        top = max(state.alt_msl_ft, self.plan.cruise_ft or 0)  # already lower: the point must not move back
+        With SimBrief's TOD (what the FMC plans): its track miles to go, moved 3 nm earlier per 1000 ft the aircraft
+        cruises above the level SimBrief plans there (after a step descent lower than the cruise level). Without it
+        the 3-in-1 rule: 3 nm per 1000 ft to lose, plus a margin to be down before the approach."""
         if self.plan.tod is not None:
+            planned = self.plan.tod_ft or self.plan.cruise_ft
+            top = max(state.alt_msl_ft, planned or 0)  # already lower: the point must not move back
             tod = track_to_go_nm(self.plan.waypoints, (self.destination.lat, self.destination.lon), *self.plan.tod)
-            above = (top - (self.plan.cruise_ft or top)) / 1000 * 3
+            above = (top - (planned or top)) / 1000 * 3
             return max(0.0, tod + above) + DESCENT_LEAD_NM
+        top = max(state.alt_msl_ft, self.plan.cruise_ft or 0)
         return max(0.0, top - DESCENT_ALTITUDE_FT) / 1000 * 3 + DESCENT_MARGIN_NM
 
     def _descent(self, station: Station | None, state: AircraftState) -> list[Response]:
