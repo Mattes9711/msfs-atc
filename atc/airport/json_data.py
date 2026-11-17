@@ -72,6 +72,7 @@ def _end(e: dict) -> RunwayEnd:
         lon=e["lon"],
         offset_threshold_ft=e["offset_threshold_ft"],
         ils=Ils(ils["ident"], ils["khz"], ils["course_true"]) if ils else None,
+        circuit=e.get("circuit", "L"),
     )
 
 
@@ -102,4 +103,5 @@ def _end_to_dict(e: RunwayEnd) -> dict:
         "name": e.name, "heading_true": round(e.heading_true, 2), "lat": round(e.lat, 7), "lon": round(e.lon, 7),
         "offset_threshold_ft": e.offset_threshold_ft,
         "ils": {"ident": e.ils.ident, "khz": e.ils.khz, "course_true": round(e.ils.course_true, 2)} if e.ils else None,
+        "circuit": e.circuit,
     }

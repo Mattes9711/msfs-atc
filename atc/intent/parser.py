@@ -284,6 +284,12 @@ def classify(t: str, items: dict) -> str:
         return "holding_short"
     if re.search(r"\bwind check\b", t):
         return "request_wind"
+    # Calls at a small field (Milestone 9 B): leaving the circuit or the frequency, the inbound call
+    if re.search(r"\bleaving (?:the |your )?(?:frequency|circuit|traffic pattern|pattern)\b", t):
+        return "leaving_frequency"
+    if re.search(r"\bfor landing\b|\binbound\b|\bjoin(?:ing)? (?:the )?(?:circuit|downwind|pattern|traffic pattern)\b"
+                 r"|\b(?:miles?|nm) (?:north|south|east|west)", t):
+        return "inbound"
     if REQUEST.search(t):
         if re.search(r"\bline ?up\b", t):
             return "request_line_up"
@@ -313,6 +319,8 @@ def classify(t: str, items: dict) -> str:
         return "vacated"
     if re.search(r"\bwith you\b|\bpassing\b|\bestablished\b|\bpush ?(?:back )?(?:is )?completed?\b", t):
         return "checkin"
+    if re.search(r"\b(?:(?:on|short|long) final|final runway)\b", t) and not re.search(r"\breport\b|\bcleared\b", t):
+        return "on_final"  # at a small field (Milestone 9 B); Tower's final is "established"
     # A first call with nothing else in it, "Hamburg Ground, Lufthansa 4AB": ATC answers "go ahead"
     if re.fullmatch(r"(?:[a-z]+ ){0,2}(?:ground|tower|approach|radar|delivery|apron|departure|center|centre|control)"
                     r"(?: (?!stand ?by\b)[a-z0-9]+)?", t):  # but "Hamburg Ground, …, standby" means wait

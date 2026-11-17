@@ -93,6 +93,8 @@ class TrafficMixin:
         tuned = self.station_at(state.com1_khz) if self.chatter and state else None
         if tuned is None:
             return []
+        if tuned.freq.role == "FSS":
+            return []  # Info: the traffic it tells the pilot of comes with its answers
         if tuned.freq.role not in ("T", "G", "APRON"):
             return self._air_chatter(tuned)  # Departure, Approach, Center (atc/controller/air_chatter.py)
         airport = next((a for a, _ in places if a.ident == tuned.ident), None)

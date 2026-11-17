@@ -3,11 +3,12 @@ station to call next, the flight in one line. Only reads the controller, like su
 from atc.flightplan.route import SID
 
 # How the frequency list names each job, in the order a flight uses them
-SHORT = {"ATIS": "ATIS", "C": "DEL", "APRON": "APRON", "G": "GND", "T": "TWR", "D": "DEP", "A": "APP"}
+# Info: a small field's station (Milestone 9 B). UNICOM (UC) is left out: in the German data it is Langen FIS
+SHORT = {"ATIS": "ATIS", "C": "DEL", "APRON": "APRON", "G": "GND", "T": "TWR", "D": "DEP", "A": "APP", "FSS": "INFO"}
 # Who comes after whom in a flight (Center is left out: which one depends on where the aircraft is)
 ROLE_AFTER = {"clearance": "apron", "apron": "ground", "ground": "tower", "tower": "departure",
               "departure": "approach", "center": "approach", "approach": "arrival_tower",
-              "arrival_tower": "arrival_ground", "arrival_ground": "arrival_apron"}
+              "arrival_tower": "arrival_ground", "arrival_ground": "arrival_apron", "info": "arrival_info"}
 
 
 def airport_panel(atc) -> dict:

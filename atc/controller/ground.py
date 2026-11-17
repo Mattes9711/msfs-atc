@@ -449,6 +449,8 @@ class GroundMixin:
             self.incursion = None
             return []
         airport, zones = self._ground_zones()
+        if not airport.controlled:
+            return []  # nobody clears a runway at a small field: the pilot looks (Milestone 9 B)
         rwy = zones.runway_at(state.lat, state.lon)
         key = (airport.ident, designator(rwy)) if rwy else None
         if self.phase == "landing" and key is not None and self.landed_on is None:

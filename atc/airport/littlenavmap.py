@@ -70,7 +70,8 @@ def _load(con: sqlite3.Connection, ident: str) -> Airport | None:
 
     def end(end_id: int) -> RunwayEnd:
         e = con.execute("select * from runway_end where runway_end_id = ?", (end_id,)).fetchone()
-        return RunwayEnd(e["name"], e["heading"], e["laty"], e["lonx"], e["offset_threshold"], ils.get(e["name"]))
+        return RunwayEnd(e["name"], e["heading"], e["laty"], e["lonx"], e["offset_threshold"], ils.get(e["name"]),
+                         "R" if "is_pattern" in e.keys() and e["is_pattern"] == "R" else "L")
 
     runways = tuple(
         Runway(r["length"], r["width"], (end(r["primary_end_id"]), end(r["secondary_end_id"])))

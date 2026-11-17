@@ -1210,7 +1210,7 @@ from everything the user sees: the shipped centers.json is empty, unknown freque
 **Order:** A and B first (they broke the flight), then H, C, D, E, F, G; I once its data source is settled. **To check afterwards:** the same flight
 again, with TESTFLUG.md.
 
-### Milestone 9 — VFR from small airfields (planned 2026-11-16, not started, after Milestone 8 part I)
+### Milestone 9 — VFR from small airfields (planned 2026-11-16; parts A and B done 2026-11-17)
 
 The user: "can we fly ultralights from small fields like Uetersen yet?" Not yet: tried `--from EDHE --to EDHL
 --callsign DMABC` offline. The app starts there, but no station at Uetersen ("Frequencies:" empty, its Info is not a
@@ -1245,13 +1245,26 @@ A5. ✅ Stands: GA ramps get a plain name ("parking two seven", "the apron" with
     a VFR flight is sent to a GA ramp, not an airliner's gate, and the fake sim starts it there.
 
 **Part B — The small field's Info station** (e.g. "Uetersen Info": information only, never a clearance)
-B1. Radio check and taxi information: "Uetersen Info, Delta Mike Alfa Bravo Charlie, ultralight, at the apron, VFR
+B0. ✅ The Info station: the field's `FSS` frequency, spoken "Uetersen Info". A field without a controller
+    (`Airport.controlled`: no Delivery, Ground, Tower, Approach or Departure) is handled by `atc/controller/info.py`;
+    at a controlled field an Info frequency stays a frequency like any other. The circuit side per runway end is now
+    read from Little Navmap (`is_pattern`) and kept in the airport JSON. No runway incursion watch and no go-around
+    at an uncontrolled field: nobody clears the runway there. The phases follow the aircraft (taxiing, airborne,
+    landed, off the runway, parked).
+B1. ✅ Radio check and taxi information: "Uetersen Info, Delta Mike Alfa Bravo Charlie, ultralight, at the apron, VFR
     to Lübeck, request taxi information" → runway in use, wind, QNH, circuit side. Read back runway and QNH.
-B2. Ready for departure: wind and "runway free" / the traffic on the runway or on final (LiveTraffic); leaving the
-    circuit: "leaving the frequency".
-B3. Arrival: the inbound call ("10 miles north, 1500 feet, for landing") → runway, wind, QNH, circuit side, traffic
-    in the circuit; "on final 27" → wind, "runway free"; "runway vacated".
-B4. A field with no Info station (only `UC`): blind calls "Uetersen traffic, …" are logged, nobody answers.
+B2. ✅ Ready for departure: wind and "runway free" / the traffic on the runway or on final (LiveTraffic); leaving the
+    circuit: "leaving the frequency" → the farewell.
+B3. ✅ Arrival: the inbound call ("10 miles north, 1500 feet, for landing", from 15 NM out) → runway, wind, QNH,
+    circuit side, traffic in the circuit (aircraft within 3 NM and below 2500 ft AGL); "on final 27" → wind,
+    "runway free"; "runway vacated". A controller in charge before (Departure, Center) says "radar service
+    terminated, Itzehoe Info on …" at 40 NM.
+B4. ✅ A field with no Info station: blind calls "Uetersen traffic, …" are logged, nobody answers. **Finding:** the
+    German data has no frequency of the field's own for these (its `UC` is Langen FIS 125.100 at every field), so a
+    blind call is any call on a frequency without a station while the flight is at such a field. UNICOM is not
+    shown in the frequency list for the same reason.
+    Also: **a VFR flight no longer gets Center** (Langen Information is part D).
+    Tests: `tests/test_info.py`. Smoke test EDHE → EDHF (Uetersen Info → Itzehoe Info) offline: all calls answered.
 
 **Part C — The circuit**
 C1. Where the aircraft is in the circuit (crosswind, downwind, base, final) from its position relative to the runway

@@ -3,7 +3,9 @@ from dataclasses import dataclass
 from typing import Protocol
 
 # Little Navmap COM type codes -> ICAO station suffix. Types not listed (ATIS, UC, ...) are not controllers.
-STATION_SUFFIX = {"C": "Delivery", "G": "Ground", "T": "Tower", "A": "Approach", "D": "Departure"}
+# FSS is a small field's flight information station ("Uetersen Info", Milestone 9 B): it informs, never clears.
+STATION_SUFFIX = {"C": "Delivery", "G": "Ground", "T": "Tower", "A": "Approach", "D": "Departure", "FSS": "Info"}
+CONTROLLER_TYPES = ("C", "G", "T", "A", "D")  # an airport with none of these is uncontrolled
 # Apron (and ramp) frequencies are typed Ground in the MSFS data; only the name tells, e.g. "MUNICHAPRON1"
 APRON = re.compile(r"\s*(?:APRON|RAMP)\s*\d*", re.IGNORECASE)
 
@@ -43,6 +45,7 @@ class RunwayEnd:
     lon: float
     offset_threshold_ft: float
     ils: Ils | None
+    circuit: str = "L"  # the side of the traffic circuit (pattern), "L" or "R"
 
 
 @dataclass(frozen=True)
@@ -101,6 +104,11 @@ class Airport:
 
     def runway_end(self, name: str) -> RunwayEnd | None:
         return next((e for r in self.runways for e in r.ends if e.name == name), None)
+
+    @property
+    def controlled(self) -> bool:
+        """Has a controller (Delivery, Ground, Tower, Approach or Departure); else at most an Info station."""
+        return any(f.type in CONTROLLER_TYPES for f in self.frequencies)
 
     def frequency_at(self, khz: int) -> Frequency | None:
         return next((f for f in self.frequencies if f.khz == khz), None)

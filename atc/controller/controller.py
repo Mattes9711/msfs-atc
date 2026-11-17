@@ -5,6 +5,7 @@ Its parts live in their own files, as mixins of the one Controller class sharing
     tower.py          line up, takeoff and landing, waiting for the runway, wake turbulence, go-around
     air.py            handoffs, Departure and Center, the descent, Approach and the sequence
     traffic_calls.py  the other aircraft: the traffic picture, traffic information, their radio calls
+    info.py           the Info station of a small field without a controller, and blind calls (Milestone 9 B)
     common.py         the limits, roles and phases, Response and Station
 """
 import random
@@ -33,7 +34,7 @@ from atc.weather.metar import Metar
 from atc.weather.runway_choice import choose_runway
 from atc.controller.common import (AIRBORNE_AGL_FT, APPROACH_HANDOFF_NM, CALL_KINDS, NEAR_HOLDING_POINT_M, PHASES,
                                    PHASE_ROLE, READBACK_REMINDER_S, RESERVED_SQUAWKS, ROLES, SECTOR_NEAR_DEG,
-                                   TOWER_HANDOFF_NM, VFR_SQUAWK,
+                                   CIRCUIT_NM, INFO_CALL_NM, TOWER_HANDOFF_NM, VFR_SQUAWK,
                                    VACATE_SPEED_KT, Response, Station, _wind, center_station, describe_intent,
                                    frequency_list, wrong_frequency_hint)  # frequency_list: for atc.session
 from atc.controller.ground import GroundMixin, stand_words
@@ -41,9 +42,10 @@ from atc.controller.tower import TowerMixin
 from atc.controller.air import AirMixin
 from atc.controller.traffic_calls import TrafficMixin
 from atc.controller.air_chatter import AirChatterMixin
+from atc.controller.info import InfoMixin, uncontrolled
 
 
-class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixin):
+class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixin, InfoMixin):
     """The deterministic ATC brain: one state machine for the whole flight. Pilot calls go to handle(); position
     changes go to tick(), which is where ATC calls the pilot by itself. Only `rng` (squawks) is random."""
 
@@ -156,6 +158,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
         self.copilot_tries: tuple[str, int] = ("", 0)  # his last call and how often he made it
         self.landing_waiting: Station | None = None
         self.crossing_waiting: tuple[Station, Airport, str] | None = None  # (station, airport, runway as said)
+        self.info_left: set[str] = set()  # airports whose Info the pilot has said "leaving the frequency" to
+        self.info_released = False  # close to an uncontrolled destination: sent to its Info (Milestone 9 B)
 
     # --- public -----------------------------------------------------------------------------------------------
 
@@ -268,10 +272,32 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
 
     def _phase_role(self) -> str:
         """Who a plain call (check-in, report, readback) is for now."""
+        if info := self._info_role():
+            return info
         if self.phase == "taxi" and self.at_holding_point:
             return "tower"  # handed off at the holding point
         role = PHASE_ROLE[self.phase]
         return self._ground_role() if role in ("ground", "arrival_ground") else role
+
+    def _info_role(self) -> str | None:
+        """At an uncontrolled field (Milestone 9 B): "info" on the ground and until leaving the circuit at the
+        origin, "arrival_info" from INFO_CALL_NM before the destination; else None."""
+        index, airborne = PHASES.index(self.phase), PHASES.index("airborne")
+        state = self.state
+        if uncontrolled(self.airport):
+            if index < airborne:
+                return "info"
+            near = state is not None and distance_nm(state.lat, state.lon, self.airport.lat,
+                                                     self.airport.lon) <= 2 * CIRCUIT_NM  # leaving the circuit
+            if near and self.airport.ident not in self.info_left and self.phase in ("climb", "enroute"):
+                return "info"
+        dest = self.destination
+        if uncontrolled(dest) and index >= airborne:
+            if index >= PHASES.index("approach"):
+                return "arrival_info"
+            if state is not None and distance_nm(state.lat, state.lon, dest.lat, dest.lon) <= INFO_CALL_NM:
+                return "arrival_info"
+        return None
 
     def readback_station(self) -> Station | None:
         """The controller waiting for a readback, if any."""
@@ -291,6 +317,11 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
 
     def handle(self, text: str, state: AircraftState) -> list[Response]:
         station = self.station_at(state.com1_khz)
+        if station is None and (blind := self.blind_call(state.com1_khz)):  # B4: nobody answers
+            intent = parse(text, self.plan.callsign)
+            if intent.kind == "leaving_frequency" and self._info_role() == "info":
+                self.info_left.add(self.airport.ident)
+            return [Response(describe_intent(intent), spoken=False, kind="understood"), blind]
         if station is None:
             if self.strict_freq:
                 return []
@@ -318,6 +349,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
         if self.pending and self.strict_readback and now is not None:
             if reminder := self._readback_reminder(state, now):
                 return reminder
+        if (info := self._info_tick(state)) is not None:
+            return info  # at an uncontrolled field (Milestone 9 B)
         if self.pending and not all(i.key == "frequency_khz" for i in self.pending):
             return []  # waiting for a readback before the next instruction
         if waited := self._traffic_waits(state):
@@ -330,7 +363,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
             return self._handoff("tower", "departure", "airborne", state)
         to_airport = (distance_nm(state.lat, state.lon, self.destination.lat, self.destination.lon)
                       if self.destination else float("inf"))
-        if self.phase in ("climb", "enroute") and self.centers and to_airport > APPROACH_HANDOFF_NM:
+        # VFR flies without Center (Milestone 9 B; Langen Information is part D)
+        if self.phase in ("climb", "enroute") and self.centers and not self.vfr and to_airport > APPROACH_HANDOFF_NM:
             if calls := self._center_progress(state):
                 return calls
         if self.destination is None:
@@ -395,6 +429,9 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
                     self.blocked = True
                     return [Response(f"read back first{where}: {rb.instruction_text(self.pending)}", spoken=False)]
                 self._set_pending(())  # handed off and the pilot switched: that counts
+        if station.freq.type == "FSS" and uncontrolled(self.airport if station.ident == self.airport.ident
+                                                       else self.destination):
+            return self._info_call(intent, station, state)  # Info informs, it doesn't clear (Milestone 9 B)
         if intent.kind == "request_other":  # a request ATC doesn't know: always an answer (C3, "ground services")
             return [self._say(station, f"{self.cs}, say again")]
         role = self._role_for(intent)
@@ -454,7 +491,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
             return self._landing_clearance(station)
         if kind == "unknown":
             return [self._say(station, f"{self.cs}, say again")]
-        if kind == "checkin" or (kind == "readback" and not self.pending
+        if kind in ("checkin", "leaving_frequency", "inbound", "on_final") or (kind == "readback" and not self.pending
                                      and set(intent.items) not in ({"pushback"}, {"hold_position"})):
             return self._plain_call(intent, station, state)
         return []  # "roger", "wilco": needs no answer

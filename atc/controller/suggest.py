@@ -10,13 +10,16 @@ tests/test_suggest.py flies a whole flight by saying only the suggestions.
 """
 import re
 
+from atc.airport.geo import bearing_deg, distance_nm
 from atc.controller import readback as rb
 from atc.phraseology import spoken
 from atc.phraseology.airlines import TELEPHONY
 from atc.phraseology.catalog import EXAMPLE, GROUPS, PHRASES
+from atc.controller.common import PHASES
 
 SPOKEN_DIGIT = r"(?:zero|one|two|tree|three|four|fife|five|six|seven|eight|niner|nine)"
 # Which controller "{station}" is in each group of the phrase book
+COMPASS = ("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west")
 GROUP_ROLE = {"Clearance": "clearance", "Ground": "ground", "Tower": "tower", "Departure and Center": "departure",
               "Approach": "approach", "Arrival Tower and Ground": "arrival_tower"}
 
@@ -78,6 +81,8 @@ def suggestion(atc) -> dict | None:
         cs = _callsign_for(atc, waiting)
         return {"title": "Read back", "text": ", ".join(readback_part(i) for i in atc.pending) + f", {cs}",
                 "station": waiting.name, "khz": waiting.freq.khz}
+    if role := atc._info_role():
+        return _info_suggestion(atc, role)
     station = atc.expected_station()
     if station is None:
         return None
@@ -127,6 +132,51 @@ def suggestion(atc) -> dict | None:
         return call("Check in", f"established ILS runway {atc.arrival_runway}")
     if phase == "vacating":
         return call("Request taxi", "request taxi to the gate")
+    return None
+
+
+def _info_suggestion(atc, role: str) -> dict | None:
+    """At an uncontrolled field (Milestone 9 B): the calls to its Info, or the blind calls "Uetersen traffic, ..."
+    where it has none, on the frequency tuned: the data has no frequency of its own for such a field (its UNICOM
+    entry is the area's FIS, Langen Information in Germany)."""
+    airport = atc.airport if role == "info" else atc.destination
+    station = atc.station(role)
+    if station is not None:
+        name, khz, cs = station.name, station.freq.khz, _callsign_for(atc, station)
+    elif atc.state is not None:
+        name, khz, cs = f"{airport.name} traffic", atc.state.com1_khz, written_callsign(atc.plan.callsign)
+    else:
+        return None
+    blind, phase, state = station is None, atc.phase, atc.state
+
+    def call(title: str, text: str) -> dict:
+        return {"title": title, "text": f"{name}, {cs}, {text}", "station": name, "khz": khz}
+
+    if role == "info":
+        runway = atc.runway
+        if phase in ("clearance", "cleared", "pushback"):
+            if blind:
+                return call("Taxi", f"taxiing to runway {runway}")
+            to = atc.destination.name if atc.destination else atc.plan.destination
+            parts = [atc.plan.aircraft, "at the apron", f"VFR to {to}" if to else "VFR", "request taxi information"]
+            return call("Request taxi information", ", ".join(p for p in parts if p))
+        if phase == "taxi":
+            return call("Departure", f"departing runway {runway}" if blind else f"ready for departure runway {runway}")
+        if phase in ("climb", "enroute"):
+            return call("Leaving the circuit", "leaving the circuit" if blind else
+                        "leaving the circuit, leaving the frequency")
+        return None
+    runway = atc.arrival_runway
+    if PHASES.index(phase) < PHASES.index("approach") and state is not None and not state.on_ground:
+        nm = round(distance_nm(airport.lat, airport.lon, state.lat, state.lon))
+        side = COMPASS[round(bearing_deg(airport.lat, airport.lon, state.lat, state.lon) / 45) % 8]
+        where = f"{nm} miles {side}, {round(state.alt_msl_ft, -2):.0f} feet"
+        return call("Inbound", f"{where}, joining the circuit runway {runway}" if blind else
+                    f"{where}, for landing")
+    if phase == "approach":
+        return call("On final", f"final runway {runway}" if blind else f"on final runway {runway}")
+    if phase == "vacating" or (phase == "landing" and state is not None and state.on_ground):
+        return call("Runway vacated", "runway vacated")
     return None
 
 

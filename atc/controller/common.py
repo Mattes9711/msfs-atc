@@ -75,6 +75,9 @@ ROLES = {
     "arrival_ground": ("destination", ("G", "T")),
     "apron": ("origin", ("APRON",)),  # only where the data has one (EDDM: yes, EDDH: no)
     "arrival_apron": ("destination", ("APRON",)),
+    # A small field's Info station (Milestone 9 B): only used where the airport has no controller
+    "info": ("origin", ("FSS",)),
+    "arrival_info": ("destination", ("FSS",)),
 }
 PHASES = ("clearance", "cleared", "pushback", "taxi", "takeoff",  # ground, origin
           "airborne", "climb", "enroute", "arrival", "approach", "final", "landing",  # air
@@ -87,7 +90,12 @@ CALL_ROLE = {"airborne": "departure", "climb": "departure", "enroute": "center",
 PHASE_ROLE = {"clearance": "clearance", "cleared": "ground", "pushback": "ground", "taxi": "ground",
               "takeoff": "tower", **CALL_ROLE}
 AIR_PHASES = ("airborne", "climb", "enroute", "arrival", "approach", "final")  # traffic information
-CALL_KINDS = ("checkin", "readback", "acknowledge", "unknown", "request_other")
+CALL_KINDS = ("checkin", "readback", "acknowledge", "unknown", "request_other", "leaving_frequency", "inbound",
+              "on_final")
+# Uncontrolled fields (Milestone 9 B): who counts as in the circuit, and when a moving aircraft taxis
+CIRCUIT_NM, CIRCUIT_AGL_FT = 3, 2500
+TAXIING_KT = 5
+INFO_CALL_NM = 15  # the inbound call to the destination's Info is suggested from this close in
 
 
 @dataclass(frozen=True)

@@ -243,6 +243,8 @@ class TowerMixin:
         go-around the pilot didn't report (low on final, then climbing)."""
         if self.destination is None or self.phase not in ("approach", "final", "landing") or state.on_ground:
             return []
+        if not self.destination.controlled:
+            return []  # no landing clearance at a small field: nobody sends the aircraft around
         end = self.destination.runway_end(self.arrival_runway)
         if self.phase in ("final", "landing"):
             self.lowest_agl_on_final = min(self.lowest_agl_on_final, state.alt_agl_ft)
