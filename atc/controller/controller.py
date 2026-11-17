@@ -43,9 +43,10 @@ from atc.controller.air import AirMixin
 from atc.controller.traffic_calls import TrafficMixin
 from atc.controller.air_chatter import AirChatterMixin
 from atc.controller.info import InfoMixin, uncontrolled
+from atc.controller.vfr import VfrMixin
 
 
-class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixin, InfoMixin):
+class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixin, InfoMixin, VfrMixin):
     """The deterministic ATC brain: one state machine for the whole flight. Pilot calls go to handle(); position
     changes go to tick(), which is where ATC calls the pilot by itself. Only `rng` (squawks) is random."""
 
@@ -167,6 +168,15 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
         self.circuits = 0
         self.circuit_legs: dict[int, str | None] = {}
         self.circuit_due: dict[int, tuple[str, float]] = {}
+        # Through a control zone (Milestone 9 E, atc/controller/vfr.py): the stage, the point to leave or enter
+        # by, the closest the aircraft came to it, "check altitude" said; the destination's ATIS letter
+        self.ctr_stage: str | None = None
+        self.ctr_point = None
+        self.ctr_closest = float("inf")
+        self.ctr_altitude_told = False
+        self.dest_atis = Atis(destination) if destination else None
+        if self.dest_atis:
+            self.dest_atis.update(destination_metar, self.arrival_runway)
 
     # --- public -----------------------------------------------------------------------------------------------
 
@@ -196,6 +206,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
                 self.arrival_runway = (self._traffic_runway(self.destination, "arrival", self.arrival_runway)
                                        or choose_runway(self.destination, destination_metar, self.arrival_runway).name)
                 self._note_runway_change(before)
+            if self.dest_atis:
+                self.dest_atis.update(destination_metar, self.arrival_runway)
             changes.append(f"{self.destination.ident} weather: {destination_metar.raw}, "
                            f"landing runway {self.arrival_runway}")
         return changes
@@ -281,6 +293,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
         """Who a plain call (check-in, report, readback) is for now."""
         if info := self._info_role():
             return info
+        if zone := self._ctr_role():
+            return zone  # through a control zone (Milestone 9 E): Tower, no Departure or Approach
         if self.phase == "taxi" and self.at_holding_point:
             return "tower"  # handed off at the holding point
         role = PHASE_ROLE[self.phase]
@@ -357,12 +371,16 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
         if self.pending and self.strict_readback and now is not None:
             if reminder := self._readback_reminder(state, now):
                 return reminder
+        if self.ctr_stage == "out" and (out := self._ctr_tick(state)) is not None:
+            return out  # leaving the origin's control zone (Milestone 9 E)
         if (info := self._info_tick(state)) is not None:
             return info  # at an uncontrolled field (Milestone 9 B)
         if self.pending and not all(i.key == "frequency_khz" for i in self.pending):
             return []  # waiting for a readback before the next instruction
         if waited := self._traffic_waits(state):
             return waited
+        if (zone := self._ctr_tick(state)) is not None:
+            return zone  # into the destination's control zone (Milestone 9 E)
         if self.phase == "taxi":
             return self._taxi_progress(state, now)
         if self.phase == "taxi_in":
@@ -451,6 +469,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
             role, expected = "tower", station
         if expected is not None and expected.key != station.key:
             return self._redirect(station, expected, role)
+        if (zone := self._ctr_call(intent, station, state)) is not None:
+            return zone  # through a control zone (Milestone 9 E)
 
         kind = intent.kind
         if kind == "request_clearance":
@@ -491,16 +511,10 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
         if self.phase == "arrival":
             return self._vectors(station, state)
         if self.phase == "final":
-            if self._ahead_in_sequence(state):  # landing clearance once it has landed and vacated (_traffic_waits)
-                self.landing_waiting = station
-                return [self._say(station, f"{self.cs}, {station.name}, continue approach, {self._sequence(state)}")]
-            if busy := self._runway_traffic(self.destination, self.arrival_runway, final_nm=0):
-                self.landing_waiting = station
-                return [self._say(station, f"{self.cs}, {station.name}, continue approach, {busy}, I will call you")]
-            return self._landing_clearance(station)
+            return self._final_call(station, state)
         if kind == "unknown":
             return [self._say(station, f"{self.cs}, say again")]
-        if kind in ("checkin", "leaving_frequency", "inbound", "on_final") or (kind == "readback" and not self.pending
+        if kind in ("checkin", "leaving_frequency", "inbound", "on_final", "point_report") or (kind == "readback" and not self.pending
                                      and set(intent.items) not in ({"pushback"}, {"hold_position"})):
             return self._plain_call(intent, station, state)
         return []  # "roger", "wilco": needs no answer

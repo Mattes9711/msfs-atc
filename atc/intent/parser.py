@@ -33,8 +33,11 @@ def parse(text: str, expected_callsign: str | None = None) -> Intent:
     rest = [PHONETIC.get(tok, tok) for i, tok in enumerate(tokens) if i not in span]
     joined = " ".join(rest)
     items = extract_items(rest, joined)
+    kind = classify(joined, items)
+    if kind == "point_report" and (point := reported_point(joined)):
+        items["vfr_point"] = point
     return Intent(
-        kind=classify(joined, items),
+        kind=kind,
         callsign=callsign,
         addressed_to_us=bool(callsign and expected_callsign and callsign_matches(callsign, expected_callsign)),
         items=items,
@@ -213,6 +216,14 @@ def extract_items(tokens: list[str], t: str) -> dict:
 
     if taxiways := _taxiways(tokens):
         items["taxiways"] = taxiways
+    # "leave the control zone via November", "enter the control zone via S1", "... to the north" (Milestone 9 E):
+    # the point, not a taxi route
+    if re.search(r"\b(?:control zone|ctr)\b", t):
+        if m := re.search(r"\bvia (?:point )?([a-z][a-z0-9]*)(?: (\d{1,2})\b)?", t):
+            items["vfr_point"] = point_code(m[1], m[2])
+            items.pop("taxiways", None)
+        elif m := re.search(r"\b(?:to|from) the (north|east|south|west)\b", t):
+            items["vfr_point"] = m[1].upper()
     if re.search(r"\bcleared (?:for )?takeoff\b", t):
         items["cleared_takeoff"] = True
     if re.search(r"\bcleared (?:to )?land\b", t):
@@ -232,6 +243,33 @@ def extract_items(tokens: list[str], t: str) -> dict:
     if m := re.search(r"\b(?:intersection|from) (?:departure )?([a-z]) ?(\d{1,2})\b", t):
         items["intersection"] = f"{m[1].upper()}{m[2]}"
     return items
+
+
+def point_code(word: str, number: str | None = None) -> str:
+    """A reporting point as heard: "n" (November), "n" + "1", "n1" -> "N1", "ewest" -> "EWEST"."""
+    if len(word) == 1:
+        return word.upper() + (number or "")
+    return word.upper()
+
+
+POINT_STOPWORDS = {"the", "holding", "gate", "stand", "apron", "parking", "runway", "flight", "level", "fl", "feet",
+                   "final", "intersection", "taxiway", "position", "altitude", "your", "my", "time", "least"}
+STATIONS = r"(?:ground|tower|approach|radar|delivery|apron|departure|center|centre|control|info|information)"
+
+
+def reported_point(t: str) -> str | None:
+    """The point in a position report: "Lubeck Tower, November", "overhead Sierra 1", "passing Ewest" -> "N", "S1",
+    "EWEST"; "" for "leaving the control zone" (no point named); None if it is no position report."""
+    if m := re.fullmatch(rf"(?:[a-z]+ ){{0,2}}{STATIONS} (?:(?:over|overhead|at|passing|reaching|approaching) )?"
+                        r"(?:point )?([a-z])(?: ?(\d{1,2}))?", t):
+        return point_code(m[1], m[2])
+    for m in re.finditer(r"\b(?:overhead|over|passing|reaching|approaching|at) (?:point )?([a-z][a-z0-9]*)"
+                         r"(?: (\d{1,2})\b)?", t):
+        if m[1] not in POINT_STOPWORDS:
+            return point_code(m[1], m[2])
+    if re.search(r"\b(?:leaving|entering|left) (?:the )?(?:control zone|ctr)\b", t):
+        return ""
+    return None
 
 
 def _taxiways(tokens: list[str]) -> list[str]:
@@ -320,6 +358,8 @@ def classify(t: str, items: dict) -> str:
         return "ready_departure"
     if re.search(r"\bvacated\b", t):
         return "vacated"
+    if reported_point(t) is not None:  # "Lubeck Tower, November", "overhead Ewest" (Milestone 9 E)
+        return "point_report"
     if re.search(r"\bwith you\b|\bpassing\b|\bestablished\b|\bpush ?(?:back )?(?:is )?completed?\b", t):
         return "checkin"
     if re.search(r"\b(?:(?:on|short|long) final|final runway)\b", t) and not re.search(r"\breport\b|\bcleared\b", t):

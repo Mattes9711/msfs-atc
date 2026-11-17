@@ -90,6 +90,22 @@ class TaxiPath:
 
 
 @dataclass(frozen=True)
+class VfrPoint:
+    """A visual reporting point of the field ("NOVMR", "S1"): where VFR flights enter and leave the control zone."""
+    ident: str
+    lat: float
+    lon: float
+
+
+@dataclass(frozen=True)
+class ControlZone:
+    """The field's control zone (CTR), from the ground up to ceiling_ft MSL."""
+    name: str
+    ceiling_ft: float
+    polygon: tuple[tuple[float, float], ...]  # (lat, lon)
+
+
+@dataclass(frozen=True)
 class Airport:
     ident: str
     name: str
@@ -101,6 +117,8 @@ class Airport:
     runways: tuple[Runway, ...]
     parking: tuple[Parking, ...] = ()
     taxi_paths: tuple[TaxiPath, ...] = ()
+    vfr_points: tuple[VfrPoint, ...] = ()
+    control_zone: ControlZone | None = None
 
     def runway_end(self, name: str) -> RunwayEnd | None:
         return next((e for r in self.runways for e in r.ends if e.name == name), None)

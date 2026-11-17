@@ -12,6 +12,7 @@ from atc.phraseology import spoken
 from atc.sim.base import AircraftState
 from atc.controller.common import (CLOSE_PARALLEL_M, GO_AROUND_BELOW_AGL_FT, GO_AROUND_CLIMB_FT, INTERSECTION_MARGIN_M,
                                    LANDING_TRAFFIC_NM, LANDING_WAKE_S, NO_CLEARANCE_GO_AROUND_NM, OCCUPIED_GO_AROUND_NM,
+                                   VFR_GO_AROUND_NM,
                                    ROLLING_KT, TURNED_DEG, WAKE_CAUTION_S, Response, Station, _wind)
 
 
@@ -79,6 +80,7 @@ class TowerMixin:
 
     def _takeoff_clearance(self, station: Station, intersection: str | None = None,
                            state: AircraftState | None = None) -> list[Response]:
+        zone = self._ctr_exit_items() if self._ctr_departure() else []  # VFR: out of the zone (Milestone 9 E)
         items = rb.cleared_takeoff(self.runway)
         if intersection:
             items[0] = rb.Item("runway", self.runway, f"runway {spoken.runway(self.runway)} from intersection "
@@ -92,8 +94,10 @@ class TowerMixin:
         self.phase = "takeoff"
         self.takeoff_intersection, self.wake_told = None, False
         self.cleared_runways.add(self._runway_key(self.airport, self.runway))
-        self._set_pending(items, station.key)
-        text = f"{self.cs}, " + ", ".join(filter(None, [caution, _wind(self.metar), rb.instruction_text(items)]))
+        self._set_pending(zone + items, station.key)
+        text = f"{self.cs}, " + ", ".join(filter(None, [
+            caution, rb.instruction_text(zone), _wind(self.metar), rb.instruction_text(items),
+            self._ctr_report_text() if zone else None]))
         return self._transmit(station, text, state) if state else [self._say(station, text)]
 
     def _runway_traffic(self, airport: Airport, runway: str, final_nm: float = LANDING_TRAFFIC_NM) -> str | None:
@@ -214,6 +218,20 @@ class TowerMixin:
             name = ahead[0].name if ahead else "the traffic"
         return name.removeprefix("the ")
 
+    def _final_call(self, station: Station, state: AircraftState, auto: bool = False) -> list[Response]:
+        """On final: the landing clearance, or "continue approach" while the runway is not free. auto: Tower calls
+        by itself (a VFR flight seen turning final, Milestone 9 E)."""
+        def say(text: str) -> list[Response]:
+            return self._transmit(station, text, state) if auto else [self._say(station, text)]
+
+        if self._ahead_in_sequence(state):  # landing clearance once it has landed and vacated (_traffic_waits)
+            self.landing_waiting = station
+            return say(f"{self.cs}, {station.name}, continue approach, {self._sequence(state)}")
+        if busy := self._runway_traffic(self.destination, self.arrival_runway, final_nm=0):
+            self.landing_waiting = station
+            return say(f"{self.cs}, {station.name}, continue approach, {busy}, I will call you")
+        return self._landing_clearance(station, state if auto else None)
+
     def _landing_clearance(self, station: Station, state: AircraftState | None = None) -> list[Response]:
         self.phase = "landing"
         self.cleared_runways.add(self._runway_key(self.destination, self.arrival_runway))
@@ -249,7 +267,9 @@ class TowerMixin:
         if self.phase in ("final", "landing"):
             self.lowest_agl_on_final = min(self.lowest_agl_on_final, state.alt_agl_ft)
         to_threshold = distance_nm(state.lat, state.lon, end.lat, end.lon)
-        if self.phase != "landing" and to_threshold <= NO_CLEARANCE_GO_AROUND_NM:
+        # VFR in the circuit (Milestone 9 E) passes the threshold on downwind: only short final counts
+        limit = (VFR_GO_AROUND_NM if self.phase == "final" else -1) if self._ctr_arrival() else NO_CLEARANCE_GO_AROUND_NM
+        if self.phase != "landing" and to_threshold <= limit:
             station = self.station("arrival_tower" if self.phase == "final" else "approach")
             busy = self._runway_traffic(self.destination, self.arrival_runway, final_nm=0)
             self.landing_waiting = None
@@ -268,6 +288,14 @@ class TowerMixin:
     def _go_around(self, station: Station, state: AircraftState, prefix: str | None) -> list[Response]:
         """Simple missed approach: runway heading, climb, back to Approach for another approach."""
         dest = self.destination
+        if self._ctr_arrival():  # VFR: round the circuit again (Milestone 9 E)
+            item = self._join_item()
+            self.phase, self.ctr_stage, self.landing_waiting = "approach", "joining", None
+            self.lowest_agl_on_final = float("inf")
+            self.cleared_runways.discard(self._runway_key(dest, self.arrival_runway))
+            self._set_pending([item], station.key)
+            return self._transmit(station, f"{self.cs}, " + ", ".join(filter(None, [
+                prefix, item.phrase, "report downwind"])), state)
         end = dest.runway_end(self.arrival_runway)
         heading = round((end.heading_true - dest.mag_var) / 5) * 5 % 360 or 360  # ATC assigns 5-degree steps
         altitude = -(-(int(dest.elevation_ft) + 3000) // 1000) * 1000  # round up to 1000 ft

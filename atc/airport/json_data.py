@@ -3,7 +3,7 @@ import json
 from atc.airport.geo import distance_nm
 from pathlib import Path
 
-from atc.airport.model import Airport, Frequency, Ils, Parking, Runway, RunwayEnd, TaxiPath
+from atc.airport.model import Airport, ControlZone, Frequency, Ils, Parking, Runway, RunwayEnd, TaxiPath, VfrPoint
 
 
 class JsonAirportData:
@@ -60,7 +60,13 @@ def airport_from_dict(d: dict) -> Airport:
         ),
         # [start_lat, start_lon, end_lat, end_lon, name, type, start_type, end_type]
         taxi_paths=tuple(TaxiPath(*t) for t in d.get("taxi_paths", [])),
+        vfr_points=tuple(VfrPoint(*p) for p in d.get("vfr_points", [])),  # [ident, lat, lon]
+        control_zone=_zone(d.get("control_zone")),
     )
+
+
+def _zone(z: dict | None) -> ControlZone | None:
+    return ControlZone(z["name"], z["ceiling_ft"], tuple(tuple(p) for p in z["polygon"])) if z else None
 
 
 def _end(e: dict) -> RunwayEnd:
@@ -90,6 +96,10 @@ def airport_to_dict(a: Airport) -> dict:
              "heading": round(p.heading, 1), "airline_codes": list(p.airline_codes)}
             for p in a.parking
         ],
+        "vfr_points": [[p.ident, round(p.lat, 7), round(p.lon, 7)] for p in a.vfr_points],
+        "control_zone": {"name": a.control_zone.name, "ceiling_ft": a.control_zone.ceiling_ft,
+                         "polygon": [[round(lat, 6), round(lon, 6)] for lat, lon in a.control_zone.polygon]}
+        if a.control_zone else None,
         "taxi_paths": [
             [round(t.start_lat, 7), round(t.start_lon, 7), round(t.end_lat, 7), round(t.end_lon, 7),
              t.name, t.type, t.start_type, t.end_type]

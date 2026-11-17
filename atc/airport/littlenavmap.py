@@ -9,8 +9,9 @@ import math
 import sqlite3
 from pathlib import Path
 
-from atc.airport.geo import M_PER_DEG_LAT, distance_nm
-from atc.airport.model import Airport, Frequency, Ils, Parking, Runway, RunwayEnd, TaxiPath
+from atc.airport.geo import M_PER_DEG_LAT, distance_nm, point_in_polygon
+from atc.airport.model import Airport, ControlZone, Frequency, Ils, Parking, Runway, RunwayEnd, TaxiPath, VfrPoint
+from atc.airspace.littlenavmap import decode_polygon
 
 
 class LittleNavmapAirportData:
@@ -91,10 +92,30 @@ def _load(con: sqlite3.Connection, ident: str) -> Airport | None:
                  t["start_type"] or "N", t["end_type"] or "N")
         for t in con.execute("select * from taxi_path where airport_id = ? order by taxi_path_id", (airport_id,))
     )
+    vfr_points = tuple(
+        VfrPoint(w["ident"], round(w["laty"], 7), round(w["lonx"], 7))
+        for w in con.execute("select ident, laty, lonx from waypoint where airport_ident = ? and type = 'VFR' "
+                             "order by ident", (ident,))
+    )
     return Airport(
         ident=ident, name=name, lat=a["laty"], lon=a["lonx"], elevation_ft=a["altitude"], mag_var=a["mag_var"],
-        frequencies=frequencies, runways=runways, parking=parking, taxi_paths=taxi_paths,
+        frequencies=frequencies, runways=runways, parking=parking, taxi_paths=taxi_paths, vfr_points=vfr_points,
+        control_zone=_control_zone(con, a["laty"], a["lonx"]),
     )
+
+
+def _control_zone(con: sqlite3.Connection, lat: float, lon: float) -> ControlZone | None:
+    """The smallest control zone (boundary type CD) from the ground up that contains the field. Zones with a floor
+    above the ground (e.g. "HAMBURG-FINKENWERDER (D)", 2500-3500 ft) belong to no field's circuit."""
+    rows = con.execute(
+        "select name, max_altitude, geometry, (max_laty - min_laty) * (max_lonx - min_lonx) as area from boundary "
+        "where type = 'CD' and min_altitude = 0 and ? between min_laty and max_laty and ? between min_lonx and max_lonx "
+        "order by area", (lat, lon)).fetchall()
+    for r in rows:
+        polygon = tuple((round(p_lat, 6), round(p_lon, 6)) for p_lat, p_lon in decode_polygon(r["geometry"]))
+        if polygon and point_in_polygon(lat, lon, polygon):
+            return ControlZone((r["name"] or "").title(), r["max_altitude"], polygon)
+    return None
 
 
 def _parking_name(name: str | None) -> str:

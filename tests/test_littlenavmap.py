@@ -1,4 +1,5 @@
 import sqlite3
+import struct
 
 import pytest
 
@@ -19,7 +20,20 @@ create table parking (airport_id integer, type text, name text, number integer, 
                       airline_codes text, laty real, lonx real);
 create table taxi_path (taxi_path_id integer, airport_id integer, type text, name text, start_type text,
                         end_type text, start_laty real, start_lonx real, end_laty real, end_lonx real);
+create table waypoint (ident text, airport_ident text, type text, laty real, lonx real);
+create table boundary (type text, name text, min_altitude integer, max_altitude integer, min_laty real,
+                       max_laty real, min_lonx real, max_lonx real, geometry blob);
 """
+
+
+def polygon(points):
+    """Little Navmap's geometry blob: the count, then lon, lat as big-endian floats."""
+    return struct.pack(f">i{2 * len(points)}f", len(points), *[v for lat, lon in points for v in (lon, lat)])
+
+
+def box(lat_min, lat_max, lon_min, lon_max, kind, name, floor, ceiling):
+    return (kind, name, floor, ceiling, lat_min, lat_max, lon_min, lon_max, polygon(
+        [(lat_min, lon_min), (lat_max, lon_min), (lat_max, lon_max), (lat_min, lon_max)]))
 
 
 @pytest.fixture
@@ -43,6 +57,16 @@ def lnm(tmp_path):
         ("GM", "G", 12, "A", 180.0, "DLH,EWG", 50.002, 8.002),
     ])
     con.execute("insert into taxi_path values (1, 1, 'PT', '', 'N', 'HSND', 50.001, 8.0, 50.0005, 8.0)")
+    con.executemany("insert into waypoint values (?, ?, ?, ?, ?)", [
+        ("NOVMR", "EXMP", "VFR", 50.125, 8.0), ("S1", "EXMP", "VFR", 49.875, 8.0),
+        ("ABCDE", "EXMP", "WN", 50.5, 8.0),  # an IFR waypoint: not a reporting point
+    ])
+    con.executemany("insert into boundary values (?, ?, ?, ?, ?, ?, ?, ?, ?)", [
+        box(49.75, 50.25, 7.75, 8.25, "CD", "EXAMPLE CITY", 0, 2500),
+        box(49.5, 50.5, 7.5, 8.5, "CD", "BIGGER ZONE", 0, 3500),  # contains it too, but larger
+        box(49.9, 50.1, 7.9, 8.1, "CD", "UP HIGH", 2500, 3500),  # not from the ground up
+        box(49.9, 50.1, 7.9, 8.1, "C", "CLASS C", 0, 10000),  # no control zone
+    ])
     con.commit()
     con.close()
     return LittleNavmapAirportData(path)
@@ -87,6 +111,13 @@ def test_parking_names_and_default_gate(lnm):
 def test_taxi_paths_are_loaded(lnm):
     [t] = lnm.get("EXMP").taxi_paths
     assert (t.name, t.type, t.end_type) == ("", "PT", "HSND")
+
+
+def test_vfr_points_and_the_control_zone(lnm):
+    a = lnm.get("EXMP")
+    assert [p.ident for p in a.vfr_points] == ["NOVMR", "S1"]
+    assert (a.control_zone.name, a.control_zone.ceiling_ft) == ("Example City", 2500)
+    assert len(a.control_zone.polygon) == 4
 
 
 def test_json_round_trip_keeps_everything(lnm):

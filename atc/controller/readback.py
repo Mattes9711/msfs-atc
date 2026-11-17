@@ -15,7 +15,7 @@ READ_BACK_NAMES = {
     "altitude_ft": "altitude", "heading": "heading", "speed_kt": "speed", "squawk": "squawk",
     "frequency_khz": "frequency", "qnh": "QNH", "cleared_takeoff": "takeoff clearance",
     "cleared_land": "landing clearance", "line_up": "line up", "direct": "direct-to",
-    "pushback": "pushback", "hold_position": "hold position",
+    "pushback": "pushback", "hold_position": "hold position", "vfr_point": "route",
 }
 
 

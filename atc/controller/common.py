@@ -29,6 +29,7 @@ NEAR_HOLDING_POINT_M = 150  # Tower takes a call from one this close to a depart
 HOLD_SHORT_HINT_S = 15  # stopped at a crossing this long without reporting: show the call to make
 STOPPED_KT = 2
 NO_CLEARANCE_GO_AROUND_NM = 2
+VFR_GO_AROUND_NM = 0.5  # a VFR flight in a control zone's circuit: sent around only this close without clearance
 DEPARTURE_CEILING_FL = 240  # with Center sectors, Departure climbs to this at most; Center gives the rest
 MAX_FL = 410
 DIRECT_MAX_NM = 150  # Center's direct-to: the farthest route point ahead within this distance
@@ -91,7 +92,7 @@ PHASE_ROLE = {"clearance": "clearance", "cleared": "ground", "pushback": "ground
               "takeoff": "tower", **CALL_ROLE}
 AIR_PHASES = ("airborne", "climb", "enroute", "arrival", "approach", "final")  # traffic information
 CALL_KINDS = ("checkin", "readback", "acknowledge", "unknown", "request_other", "leaving_frequency", "inbound",
-              "on_final", "circuit_report")
+              "on_final", "circuit_report", "point_report")
 # Uncontrolled fields (Milestone 9 B): who counts as in the circuit, and when a moving aircraft taxis
 CIRCUIT_NM, CIRCUIT_AGL_FT = 3, 2500
 TAXIING_KT = 5

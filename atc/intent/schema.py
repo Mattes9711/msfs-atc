@@ -7,6 +7,7 @@ KINDS = (
     "ready_departure", "holding_short", "request_line_up", "request_wind", "request_level", "request_direct", "request_qnh", "request_weather", "unable",
     "confirm", "going_around", "vacated", "checkin", "readback", "acknowledge",
     "leaving_frequency", "inbound", "on_final", "circuit_report",  # calls at a small field (Milestone 9 B, C)
+    "point_report",  # over a visual reporting point, or leaving the control zone (Milestone 9 E)
     "radio_check", "say_again", "unknown",
 )
 
@@ -31,6 +32,7 @@ ITEMS = {
     "pushback": bool,  # "push and start approved" read back
     "hold_position": bool,  # "hold position" read back ("holding position")
     "progressive": bool,  # "request progressive taxi": Ground calls each turn
+    "vfr_point": str,  # a visual reporting point: "N", "S1", "EWEST", or a direction out of the zone: "NORTH"
 }
 
 

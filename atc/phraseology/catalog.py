@@ -21,6 +21,7 @@ GROUPS = {
     "Approach": ("arrival", "approach"),
     "Arrival Tower and Ground": ("final", "landing", "vacating", "taxi_in"),
     "Small field (Info)": (),  # current while at a field without a controller (Controller._info_role)
+    "Control zone (VFR)": (),  # current while flying VFR out of or into a control zone (Controller._ctr_role)
     "Any time": (),
 }
 
@@ -209,6 +210,32 @@ PHRASES = (
     Phrase("Small field (Info)", "Going around", "{info}, {callsign}, going around", "\"roger\"",
            "going_around", note="Fly the circuit again and report downwind."),
     Phrase("Small field (Info)", "Runway vacated", "{info}, {callsign}, runway vacated", "\"roger\"", "vacated"),
+    # --- Control zone (VFR) ------------------------------------------------------------------------------------
+    Phrase("Control zone (VFR)", "Read back the takeoff clearance",
+           "Leave the control zone via November, 1500 feet or below, squawk 7000, runway {runway}, cleared for "
+           "takeoff, {callsign}", CORRECT, "readback",
+           {"vfr_point": "N", "altitude_ft": 1500, "squawk": "7000", "cleared_takeoff": True},
+           note="At a controlled field Tower says with the takeoff clearance how to leave the control zone: by a "
+                "visual reporting point (on the VFR chart), and how high at most."),
+    Phrase("Control zone (VFR)", "Over the reporting point", "{station}, {callsign}, November",
+           "\"leaving the control zone, frequency change approved\"", "point_report", {"vfr_point": "N"},
+           note="Without a point: \"leaving the control zone\"."),
+    Phrase("Control zone (VFR)", "Inbound call",
+           "{station}, {callsign}, 15 miles north, 2500 feet, information {atis}, for landing",
+           "Where to enter the control zone and how high, \"report Sierra 1\"; the runway and QNH without the "
+           "current ATIS", "inbound", {"atis": "a"},
+           note="Call the Tower about 15 miles out, with the ATIS letter."),
+    Phrase("Control zone (VFR)", "Read back the entry", "Enter the control zone via Sierra 1, 1500 feet or below, "
+           "{callsign}", CORRECT, "readback", {"vfr_point": "S1", "altitude_ft": 1500}),
+    Phrase("Control zone (VFR)", "Overhead the reporting point", "{station}, {callsign}, overhead Sierra 1",
+           "\"join right downwind runway 23, report downwind\"", "point_report", {"vfr_point": "S1"}),
+    Phrase("Control zone (VFR)", "Read back joining the circuit", "Join right downwind runway {runway}, {callsign}",
+           CORRECT, "circuit_report", {"runway": "23"}),
+    Phrase("Control zone (VFR)", "Downwind", "{station}, {callsign}, right downwind runway {runway}",
+           "\"report final\", maybe with the traffic in the circuit", "circuit_report"),
+    Phrase("Control zone (VFR)", "Final", "{station}, {callsign}, final runway {runway}",
+           "The landing clearance, or \"continue approach\"", "on_final",
+           note="Tower also calls by itself when it sees you on final."),
     # --- Any time ----------------------------------------------------------------------------------------------
     Phrase("Any time", "Radio check", "{station}, {callsign}, radio check",
            "\"read you five\"", "radio_check"),

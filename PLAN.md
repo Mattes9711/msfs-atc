@@ -1210,7 +1210,7 @@ from everything the user sees: the shipped centers.json is empty, unknown freque
 **Order:** A and B first (they broke the flight), then H, C, D, E, F, G; I once its data source is settled. **To check afterwards:** the same flight
 again, with TESTFLUG.md.
 
-### Milestone 9 — VFR from small airfields (planned 2026-11-16; parts A, B and C done 2026-11-17)
+### Milestone 9 — VFR from small airfields (planned 2026-11-16; parts A, B, C and E done 2026-11-17)
 
 The user: "can we fly ultralights from small fields like Uetersen yet?" Not yet: tried `--from EDHE --to EDHL
 --callsign DMABC` offline. The app starts there, but no station at Uetersen ("Frequencies:" empty, its Info is not a
@@ -1292,12 +1292,23 @@ D3. Airspace watch (a notice, and FIS says it): heading into a control zone or a
     a restricted area. Floors and ceilings from the `boundary` table.
 
 **Part E — Controlled airports** (e.g. Lübeck, Hamburg: Tower and Ground give VFR clearances)
-E1. Departure: Ground "taxi to holding point runway 25"; Tower "leave the control zone via November, 1500 feet or
-    below, squawk 7000", cleared for takeoff, "report November" → "leaving the control zone, frequency change
-    approved".
-E2. Arrival: the inbound call with the ATIS letter → "enter the control zone via Sierra, 1500 feet or below, report
-    Sierra" → "join right downwind runway 25, report downwind" → cleared to land. The reporting points and the
-    "via" from the VFR waypoints of that airport; watched like the taxi conformance (passing the point, staying low).
+E1. ✅ Departure: Ground "taxi to holding point runway 25"; Tower with the takeoff clearance "leave the control zone
+    via November, one thousand five hundred feet or below, squawk 7000, … cleared for takeoff, report November".
+    Over the point (came within 2 NM and flies away again), out of the zone (sideways or over the top) or on the
+    pilot's "November" → "leaving the control zone, frequency change approved". No Departure. The reporting points
+    are the field's VFR waypoints from Little Navmap (`waypoint` type VFR, "NOVMR" → "November", "S1" → "Sierra
+    one"), the zone its CD boundary (`boundary`); the point is the outermost one of each route toward the
+    destination; without points a direction ("to the north"), without a zone 5 NM / 2500 ft. The limit is 1000 ft
+    below the ceiling in 500 ft steps (Lübeck: 1500 ft). Above it by more than 300 ft: "check altitude" (once).
+E2. ✅ Arrival: within 15 NM the call is for the destination's Tower; "… 12 miles south, 2500 feet, information
+    alpha, for landing" → "enter the control zone via Sierra, one thousand five hundred feet or below, report
+    Sierra" (with runway and QNH if the ATIS letter is missing or old). At Sierra (reported or passed) or on a leg
+    → "join right downwind runway 25, report downwind" (with the circuit traffic) → "report final" → on final
+    (called or seen) the landing clearance or "continue approach". Without points straight "join … downwind". No
+    Approach, no descent, no vectors ("roger, report Sierra"); a go-around rejoins downwind; the go-around without
+    a landing clearance only on short final (0.5 NM), since downwind passes the threshold. The Phrases tab has a
+    new group "Control zone (VFR)". Tests: `tests/test_vfr_controlled.py`. Smoke tests EDHL → EDHE (out via
+    Whiskey) and EDHE → EDHL (in via Whiskey, downwind, final, landed) offline.
 E3. Crossing a control zone ("request crossing of the control zone from November to Sierra").
 
 **Open questions (❓, answers first):**
