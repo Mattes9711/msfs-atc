@@ -1412,8 +1412,19 @@ F. ✅ **Better vectors without data** (2026-11-18, `atc/controller/vectors.py`,
    transition Approach follows the STAR (Little Navmap's legs, else the plan's STAR points: LANDU, MIQ) like a
    transition: "descend altitude …, QNH …, expect vectors ILS approach runway …", then at its last fix "turn …
    heading …, reduce speed two two zero knots". Off the STAR at check-in: vectors at once, as before.
-G. **Tests and a replay**: the 2026-11-17 flight's geometry as a test (Munich-like procedures built in code), and
+G. ✅ **Tests and a replay** (2026-11-18, `tests/test_replay_eddm.py`): the 2026-11-17 flight's geometry as a test (Munich-like procedures built in code), and
    the smoke test.
+   Done: a small simulated pilot flies the arrival to runway 26R from 3 nm before LANDU at FL100 (the FMC's
+   fixes until a heading, rate-one turns, 2000 ft/min, the localizer once cleared) and reads back every call.
+   Without data: along LAND2B to MIQ with no heading, then downwind, base, intercept; cleared 12 nm out at 4500 ft.
+   With made-up Munich-like procedures (transition LANDU, vectors from DM429, FAF GUDEG 5000 ft): "cleared
+   transition Landu", 220 kt and 5000 ft in time, "turn right heading one seven zero", then the intercept and
+   the clearance 12 nm out at 5000 ft. Checked every time: no direct, no 45 degrees at the final from far beside
+   it, no heading right after another, on the localizer 8 nm out or farther. And the aircraft that stays high
+   gets one "confirm descending". Found and fixed: out on the downwind the base turn came within 2 nm of the
+   base point (10 nm out) and the localizer only 7.8 nm out: now 1 nm before the base point's distance; no
+   drift correction close to the base point (it came 5 s before the base turn). Not done: without data the
+   aircraft goes down to 4500 ft at once and flies the STAR's leg to MIQ at that altitude.
 
 Order: A → B → C → D → E → F → G, each part with tests and its own commit. Milestone 9 E3 after it.
 

@@ -366,20 +366,27 @@ class AirMixin:
             return self._approach_clearance(station, state, intercept=True)
         if self.vector_leg == "downwind" and self.vector_own:
             # The transition's downwind: only the base turn, later with traffic ahead (Milestone 10 E)
-            if along >= self._base_along_nm(state) - 1:
+            if along >= self._base_along_nm(state) - vectors.BASE_TURN_LEAD_NM:
                 self.vector_leg = "base"
                 return self._give_vector(station, state, vectors.base_heading_true(end, self.vector_side), now)
             return []
         if self.vector_leg == "downwind":
             base = vectors.base_point(end, self.vector_side * vectors.DOWNWIND_NM)
-            level = along <= vectors.BASE_ALONG_NM if self.vector_inbound else along >= vectors.BASE_ALONG_NM
-            if distance_nm(state.lat, state.lon, *base) <= vectors.BASE_WITHIN_NM or level:
+            # Going out on the downwind: the turn 1 nm before the base point's distance, the turn's radius takes the
+            # aircraft there (Milestone 10 G: within 2 nm of the point it came at 10 nm and met the localizer 7.8 nm
+            # out). Coming in from in front: at the base point, or abeam it.
+            if self.vector_inbound:
+                level = along <= vectors.BASE_ALONG_NM or                     distance_nm(state.lat, state.lon, *base) <= vectors.BASE_WITHIN_NM
+            else:
+                level = along >= vectors.BASE_ALONG_NM - vectors.BASE_TURN_LEAD_NM
+            if level:
                 self.vector_leg = "base"
                 return self._give_vector(station, state, vectors.base_heading_true(end, self.vector_side), now)
             wanted = self._magnetic(bearing_deg(state.lat, state.lon, *base))
             off = abs((wanted - self.vector_heading + 540) % 360 - 180)
             waited = now is None or self.vector_at is None or now - self.vector_at >= vectors.CORRECT_EVERY_S
-            if off >= vectors.CORRECT_DEG and waited:
+            near = distance_nm(state.lat, state.lon, *base) <= vectors.BASE_WITHIN_NM  # the bearing swings there
+            if off >= vectors.CORRECT_DEG and waited and not near:
                 return self._give_vector(station, state, bearing_deg(state.lat, state.lon, *base), now)
         return []
 
