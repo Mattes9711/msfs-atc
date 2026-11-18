@@ -156,13 +156,17 @@
           </div>
         </div>
 
-        <div class="view map" id="map" hidden>
-          <canvas id="map-canvas" aria-label="Map: your aircraft, the route, taxiways, Center sectors and traffic"></canvas>
+        <div class="view map" id="map" hidden tabindex="0" data-chart="paper">
+          <canvas id="map-canvas" aria-label="Chart: your aircraft, the route, airports, taxiways, control zones, Center sectors and traffic. Drag or use the arrow keys to move, the wheel or + and − to zoom"></canvas>
+          <div class="map-band" id="map-band" hidden aria-label="Frequencies near the middle of the map"></div>
           <div class="map-zoom">
             <button type="button" class="icon-button" id="zoom-in" aria-label="Zoom in">+</button>
             <button type="button" class="icon-button" id="zoom-out" aria-label="Zoom out">−</button>
           </div>
-          <span class="map-scale" id="map-scale"></span>
+          <div class="map-tools">
+            <button type="button" class="chip" id="map-follow" hidden title="Back to your aircraft; the map then moves with it">Follow</button>
+            <button type="button" class="chip" id="map-theme" aria-pressed="false" title="The chart in white (day) or dark (night)">Night</button>
+          </div>
         </div>
 
         <div class="view phrases" id="phrases" hidden>

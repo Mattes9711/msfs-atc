@@ -32,12 +32,6 @@
   --red: #e5675c;         /* warnings only */
   --red-bg: #2b1614;
 
-  /* names the map drawing reads (app.js color()) */
-  --text: #e8eaec;
-  --soft: #a8afb6;
-  --label: #808891;
-  --accent: #e6b450;
-
   --font: "B612", "Segoe UI", sans-serif;
   --mono: "B612 Mono", "Cascadia Mono", Consolas, monospace;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -215,10 +209,53 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; margin:
 
 /* --- map ------------------------------------------------------------------------------------------------------ */
 
-.map { flex: 1; position: relative; overflow: hidden; background: var(--well); min-height: 300px; }
-.map canvas { display: block; }
-.map-zoom { position: absolute; top: 16px; left: 16px; display: flex; flex-direction: column; gap: 4px; }
-.map-scale { position: absolute; left: 16px; bottom: 16px; font-family: var(--mono); font-size: 12px; color: var(--ink-3); }
+/* The map is a chart (Milestone 11 O4). By day black ink on white as a printed airport diagram or enroute chart;
+   by night the same chart in the console's inks. Close in: paved surfaces in grey to their real width, runways
+   filled, holding positions as a double bar. Further out: towered fields blue, the others brown, control zones
+   dashed blue, Center sectors as a thin rule with an outlined frequency box. Amber stays "you": the aircraft and
+   the taxi route ATC gave. app.js tokens() reads these names. */
+.map {
+  flex: 1; position: relative; overflow: hidden; min-height: 300px; background: var(--chart-bg); color: var(--chart-ink);
+  --chart-bg: #fbfbf9; --chart-ink: #16181a; --chart-ink-2: #4b5157; --chart-ink-3: #6c7278;
+  --chart-paved: #d4d6d8; --chart-paved-edge: #8f9499; --chart-apron: #e6e7e8;
+  --chart-runway: #16181a; --chart-runway-mark: #fbfbf9;
+  --chart-tower: #1d4f91; --chart-field: #8b5a2b; --chart-zone: #1d4f91; --chart-sector: #8f9499;
+  --chart-you: #b8770a;
+}
+.map[data-chart="night"] {
+  --chart-bg: #0a0c0e; --chart-ink: #e8eaec; --chart-ink-2: #a8afb6; --chart-ink-3: #808891;
+  --chart-paved: #2b3036; --chart-paved-edge: #4a5259; --chart-apron: #1d2126;
+  --chart-runway: #c9ced3; --chart-runway-mark: #0a0c0e;
+  --chart-tower: #7aa7e0; --chart-field: #c4956a; --chart-zone: #7aa7e0; --chart-sector: #4a5259;
+  --chart-you: #e6b450;
+}
+.map:focus { outline: none; }
+.map:focus-visible { box-shadow: inset 0 0 0 2px var(--chart-tower); }
+.map canvas { display: block; cursor: grab; touch-action: none; }
+.map canvas:active { cursor: grabbing; }
+
+/* The frequency band along the top, as on an airport chart: the place, then one ruled cell per frequency */
+.map-band { position: absolute; top: 0; left: 0; right: 0; display: flex; flex-wrap: wrap; background: var(--chart-bg);
+            border-bottom: 1px solid var(--chart-ink); transition: background-color 120ms var(--ease); }
+.map-band > div { display: flex; flex-direction: column; justify-content: center; padding: 4px 12px; min-width: 0;
+                  border-right: 1px solid var(--chart-sector); border-bottom: 1px solid var(--chart-sector); margin-bottom: -1px; }
+.band-place { flex-direction: row !important; align-items: baseline; gap: 8px; }
+.band-ident { font-size: 16px; line-height: 22px; color: var(--chart-ink); }
+.band-name { font-size: 11px; line-height: 16px; color: var(--chart-ink-2); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.band-label { font-size: 10px; line-height: 14px; color: var(--chart-ink-2); letter-spacing: 0.04em; white-space: nowrap; }
+.band-freq { font-size: 14px; line-height: 18px; color: var(--chart-ink); }
+@media (max-width: 640px) {  /* one row that scrolls sideways, so the chart keeps the room */
+  .map-band { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .map-band > div { flex: none; padding: 4px 10px; }
+  .band-name { display: none; }
+}
+
+.map-zoom { position: absolute; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 4px; }
+.map-tools { position: absolute; right: 60px; bottom: 16px; display: flex; gap: 6px; }
+.map .icon-button, .map .chip { background: var(--chart-bg); color: var(--chart-ink); border-color: var(--chart-ink-3);
+                                transition: border-color 120ms var(--ease), background-color 120ms var(--ease); }
+.map .icon-button:hover, .map .chip:hover { border-color: var(--chart-ink); color: var(--chart-ink); }
+.map .chip[aria-pressed="true"] { background: var(--chart-paved); border-color: var(--chart-ink-2); }
 
 /* --- tabs: phrase groups, settings sections ----------------------------------------------------------------- */
 

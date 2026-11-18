@@ -297,19 +297,46 @@ function showView(name) {
 
 for (const tab of Object.keys(VIEWS)) $("tab-" + tab).addEventListener("click", () => showView(tab));
 
-// --- map: drawn by us on a canvas, no map tiles, so it works offline --------------------------------------------
+// --- map: drawn by us on a canvas as a chart, no map tiles, so it works offline -----------------------------------
+// Close in it is an airport diagram (taxiways as paved surfaces to their real width, runways filled, holding positions,
+// stands); further out an enroute chart (airports with a data block, control zones dashed, Center sectors with their
+// frequency box). The camera is free: drag or the arrow keys move it, the wheel zooms about the cursor, "Follow"
+// brings it back to the aircraft. What lies around the camera comes from /api/map/area (Milestone 11 O4).
 
-const ZOOMS_NM = [1, 2, 5, 10, 20, 40, 80, 160, 320, 640];  // how many nautical miles the map is wide
-const GROUND_ZOOM = 1, AIR_ZOOM = 5;  // 2 NM on the ground, 40 NM in the air, until the pilot zooms
-let zoom = AIR_ZOOM;
+const MAP_MIN_NM = 0.4, MAP_MAX_NM = 1500;  // how many nautical miles the map is wide, at most and at least
+const GROUND_NM = 2, AIR_NM = 40;  // on the ground and in the air, until the pilot zooms
+const CHART_NM = 8;  // narrower than this the airports are drawn as diagrams
+let widthNm = AIR_NM;
 let zoomChosen = false;  // the pilot zoomed: keep it
+let camera = null;  // {lat, lon}: the middle of the map
+let follow = true;  // the camera stays on the aircraft until the pilot moves it
 let mapData = null;  // airports, route, sectors: the same for the whole flight (/api/map)
 let mapMoving = null;  // our aircraft and the traffic: with every status poll
 let trafficSeen = "", trafficReadAt = 0;  // the traffic is read from the sim every 3 s: when it last changed
 const DEAD_RECKON_S = 4;  // move aircraft on along their heading at most this long after a reading
+let mapArea = null, areaBox = null, areaWidth = 0, areaTimer = 0, areaAsked = 0, areaPending = null;  // around the camera
+const charts = new Map();  // ident → an airport in full (or null: none), for airports that are not the flight's
+let bandShown = "";
+let chartTheme = "paper";
+try { chartTheme = localStorage.getItem("chart-theme") === "night" ? "night" : "paper"; } catch (error) { /* paper */ }
 
-function color(name) {  // the page's colour tokens, so the map follows the design
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+function chartFreq(khz) {
+  // As charts print them: a 25 kHz channel without its trailing zeros (118.2, 126.85, 123.125), an 8.33 kHz channel
+  // with all three digits (121.705, 126.855), which is what a pilot dials
+  if (!khz) return "";
+  if (khz % 25) return (khz / 1000).toFixed(3);
+  const mhz = String(khz / 1000);
+  return mhz.includes(".") ? mhz : mhz + ".0";
+}
+
+function tokens() {  // the chart's colours (app.css, .map[data-chart]), read once per drawing
+  const style = getComputedStyle($("map"));
+  const out = {};
+  for (const name of ["bg", "ink", "ink-2", "ink-3", "paved", "paved-edge", "apron", "runway", "runway-mark",
+                      "tower", "field", "zone", "sector", "you"]) {
+    out[name] = style.getPropertyValue("--chart-" + name).trim();
+  }
+  return out;
 }
 
 async function loadMap() {
@@ -319,159 +346,550 @@ async function loadMap() {
   drawMap();
 }
 
+function nmBetween(a, b) {  // flat, good enough for "which airport is nearest the camera"
+  const dLat = (a.lat - b.lat) * 60, dLon = (a.lon - b.lon) * 60 * Math.cos(a.lat * Math.PI / 180);
+  return Math.hypot(dLat, dLon);
+}
+
+function inside(lat, lon, polygon) {  // ray casting
+  let hit = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [la1, lo1] = polygon[i], [la2, lo2] = polygon[j];
+    if ((la1 > lat) !== (la2 > lat) && lon < (lo2 - lo1) * (lat - la1) / (la2 - la1) + lo1) hit = !hit;
+  }
+  return hit;
+}
+
+function view(w, h) {  // the box the map shows, in degrees
+  const halfLat = h / 2 / (w / widthNm) / 60;
+  const halfLon = halfLat * (w / h) / Math.cos(camera.lat * Math.PI / 180);
+  return { s: camera.lat - halfLat, n: camera.lat + halfLat, w: camera.lon - halfLon, e: camera.lon + halfLon };
+}
+
+function askArea(box) {
+  // Ask for a box half a view larger on every side; again once the view leaves it, or after zooming in a lot
+  // (the server sends the biggest airports first, so a wide box has left the small fields out)
+  const covers = (b, width) => b && box.s >= b.s && box.n <= b.n && box.w >= b.w && box.e <= b.e && widthNm > width / 3;
+  if (covers(areaBox, areaWidth) || (areaPending && covers(areaPending, areaPending.width))) return;
+  clearTimeout(areaTimer);
+  areaTimer = setTimeout(async () => {
+    const latPad = (box.n - box.s) / 2, lonPad = (box.e - box.w) / 2;
+    const want = { s: Math.max(-90, box.s - latPad), n: Math.min(90, box.n + latPad),
+                   w: Math.max(-180, box.w - lonPad), e: Math.min(180, box.e + lonPad) };
+    const asked = ++areaAsked, width = widthNm;
+    areaPending = { ...want, width };
+    try {
+      const data = await api(`/api/map/area?s=${want.s.toFixed(4)}&w=${want.w.toFixed(4)}` +
+                             `&n=${want.n.toFixed(4)}&e=${want.e.toFixed(4)}`);
+      if (asked !== areaAsked) return;  // the camera has moved on: a newer answer is coming
+      mapArea = data; areaBox = want; areaWidth = width;
+      drawMap();
+    } catch (error) { /* asked again when the camera moves */ }
+    if (asked === areaAsked) areaPending = null;
+  }, 200);
+}
+
+function askCharts(box) {  // the diagrams of the airports in view that are not the flight's own
+  const own = new Set(((mapData && mapData.airports) || []).map((a) => a.ident));
+  for (const a of (mapArea && mapArea.airports) || []) {
+    if (own.has(a.ident) || charts.has(a.ident)) continue;
+    if (a.lat < box.s || a.lat > box.n || a.lon < box.w || a.lon > box.e) continue;
+    charts.set(a.ident, null);  // asked: not again
+    api("/api/map/airport?ident=" + encodeURIComponent(a.ident))
+      .then((chart) => { charts.set(a.ident, chart); drawMap(); })
+      .catch(() => charts.delete(a.ident));
+  }
+}
+
 function drawMap() {
   const canvas = $("map-canvas");
   const box = $("map");
   if (box.hidden || !box.clientWidth) return;
   const ratio = window.devicePixelRatio || 1;
   const w = box.clientWidth, h = box.clientHeight;
-  canvas.width = w * ratio; canvas.height = h * ratio;
-  canvas.style.width = w + "px"; canvas.style.height = h + "px";
+  if (canvas.width !== w * ratio || canvas.height !== h * ratio) {
+    canvas.width = w * ratio; canvas.height = h * ratio;
+    canvas.style.width = w + "px"; canvas.style.height = h + "px";
+  }
   const g = canvas.getContext("2d");
   g.setTransform(ratio, 0, 0, ratio, 0, 0);
-  g.clearRect(0, 0, w, h);
-  text("map-scale", ZOOMS_NM[zoom] + " NM");
+  const c = tokens();
+  g.fillStyle = c.bg;
+  g.fillRect(0, 0, w, h);
 
   const own = mapMoving && mapMoving.own;
   const first = mapData && mapData.airports[0];
-  const center = own || first;
-  if (!center) return;
-  if (!zoomChosen) zoom = own && !own.on_ground ? AIR_ZOOM : GROUND_ZOOM;
-  text("map-scale", ZOOMS_NM[zoom] + " NM");
-  // Flat projection around the centre: 1 degree of latitude = 60 NM, longitude shrinks with cos(latitude)
-  const perNm = w / ZOOMS_NM[zoom];
-  const cosLat = Math.cos(center.lat * Math.PI / 180);
-  const xy = (lat, lon) => [w / 2 + (lon - center.lon) * cosLat * 60 * perNm, h / 2 - (lat - center.lat) * 60 * perNm];
-  g.font = "11px B612, sans-serif";
-  g.textBaseline = "middle";
+  if (follow && (own || first)) camera = { lat: (own || first).lat, lon: (own || first).lon };
+  $("map-follow").hidden = follow || !own;
+  if (!camera) return;
+  if (!zoomChosen) widthNm = own && !own.on_ground ? AIR_NM : GROUND_NM;
+  const bounds = view(w, h);
+  askArea(bounds);
+  const chart = widthNm <= CHART_NM;
+  if (chart) askCharts(bounds);
 
-  if (mapData) {
-    // Center sectors: thin lines, name and frequency in the middle
-    for (const s of mapData.sectors) {
-      g.strokeStyle = color("--line");
-      g.lineWidth = 1;
-      g.beginPath();
-      s.polygon.forEach(([lat, lon], i) => { const [x, y] = xy(lat, lon); i ? g.lineTo(x, y) : g.moveTo(x, y); });
-      g.closePath();
-      g.stroke();
-      const [cx, cy] = xy(s.polygon.reduce((a, p) => a + p[0], 0) / s.polygon.length,
-                          s.polygon.reduce((a, p) => a + p[1], 0) / s.polygon.length);
-      if (cx > 0 && cx < w && cy > 0 && cy < h) {
-        g.fillStyle = color("--label");
-        g.fillText(s.name.toUpperCase() + (s.khz ? " " + freq(s.khz) : ""), cx, cy);
-      }
-    }
-    // The route: SimBrief's waypoints, else straight from origin to destination
-    const [from, to] = [mapData.airports[0], mapData.airports[mapData.airports.length - 1]];
-    const points = [from, ...mapData.route, ...(to && to !== from ? [to] : [])];
-    g.strokeStyle = color("--soft");
-    g.lineWidth = 1.5;
-    g.beginPath();
-    points.forEach((p, i) => { const [x, y] = xy(p.lat, p.lon); i ? g.lineTo(x, y) : g.moveTo(x, y); });
-    g.stroke();
-    if (ZOOMS_NM[zoom] <= 160) {
-      g.fillStyle = color("--label");
-      for (const p of mapData.route) {
-        const [x, y] = xy(p.lat, p.lon);
-        g.fillRect(x - 2, y - 2, 4, 4);
-        g.fillText(p.ident, x + 6, y);
-      }
-    }
-    // Airports: taxiways with their names and stands when zoomed in, the runways, the ICAO code
-    const close = ZOOMS_NM[zoom] <= 5;
-    for (const a of mapData.airports) {
-      if (close) drawTaxiways(g, a, xy, w, h, perNm);
-      for (const r of a.runways) {
-        const [[la1, lo1], [la2, lo2]] = r.ends;
-        g.strokeStyle = color("--line-strong");
-        g.lineWidth = close ? Math.max(3, r.width_m / 1852 * perNm) : 3;  // to scale when close
-        g.beginPath(); g.moveTo(...xy(la1, lo1)); g.lineTo(...xy(la2, lo2)); g.stroke();
-        if (close) {  // the runway numbers just beyond each end
-          g.fillStyle = color("--soft");
-          r.ends.forEach(([lat, lon], i) => {
-            const [ox, oy] = xy(...r.ends[1 - i]);
-            const [ex, ey] = xy(lat, lon);
-            const len = Math.hypot(ex - ox, ey - oy) || 1;
-            g.fillText(r.names[i], ex + (ex - ox) / len * 14 - 6, ey + (ey - oy) / len * 14);
-          });
-        }
-      }
-      if (!close || ZOOMS_NM[zoom] > 2) {
-        const [x, y] = xy(a.lat, a.lon);
-        g.fillStyle = color("--text");
-        g.fillText(a.ident, x + 10, y - 10);
-      }
-    }
+  // Flat projection around the camera: 1 degree of latitude = 60 NM, longitude shrinks with cos(latitude)
+  const perNm = w / widthNm;
+  const cosLat = Math.cos(camera.lat * Math.PI / 180);
+  const xy = (lat, lon) => [w / 2 + (lon - camera.lon) * cosLat * 60 * perNm, h / 2 - (lat - camera.lat) * 60 * perNm];
+  const seen = (x, y, margin = 40) => x > -margin && y > -margin && x < w + margin && y < h + margin;
+  const band = $("map-band");
+  const placed = [[0, 0, w, band.hidden ? 0 : band.offsetHeight + 4],  // labels keep clear of the band,
+                  [0, h - 36, 200, h], [w - 210, h - 100, w, h]];       // the scale bar and the buttons
+  const m = { g, c, w, h, xy, seen, perNm, placed };
+  g.textBaseline = "middle";
+  g.lineJoin = "round";
+
+  const flight = (mapData && mapData.airports) || [];
+  const sectors = (mapArea && mapArea.sectors) || (mapData && mapData.sectors) || [];
+  if (widthNm >= 10) drawSectors(m, sectors);
+  if (mapArea && widthNm >= 4) drawZones(m, mapArea.zones);
+  if (chart) {
+    const diagrams = [...flight, ...[...charts.values()].filter(Boolean)];
+    for (const a of diagrams) drawDiagram(m, a);
   }
-  // The taxi route ATC gave: amber, on top of the taxiways
-  const route = (mapMoving && mapMoving.taxi_route) || [];
-  if (route.length > 1 && ZOOMS_NM[zoom] <= 10) {
-    g.strokeStyle = color("--accent");
-    g.lineWidth = 3;
-    g.beginPath();
-    route.forEach(([lat, lon], i) => { const [x, y] = xy(lat, lon); i ? g.lineTo(x, y) : g.moveTo(x, y); });
-    g.stroke();
-  }
-  // Traffic: small arrows with the callsign (aircraft on the ground only when zoomed in close)
-  const since = Math.min((performance.now() - trafficReadAt) / 1000, DEAD_RECKON_S);
-  for (const t of (mapMoving && mapMoving.traffic) || []) {
-    if (t.on_ground && ZOOMS_NM[zoom] > 10) continue;
-    const nm = (t.gs || 0) * since / 3600, rad = t.heading * Math.PI / 180;  // where it is now, roughly
-    const [x, y] = xy(t.lat + nm * Math.cos(rad) / 60, t.lon + nm * Math.sin(rad) / 60 / cosLat);
-    arrow(g, x, y, t.heading, 6, color("--label"));
-    g.fillStyle = color("--label");
-    g.fillText(t.callsign + (t.on_ground ? "" : " " + level(t.alt_ft)), x + 9, y);
-  }
-  if (own) arrow(g, w / 2, h / 2, own.heading, 9, color("--accent"));  // us: amber, in the middle
+  if (!chart) drawRoute(m);
+  if (!chart || widthNm > 3) drawAirports(m, flight, chart);
+  drawTaxiRoute(m);
+  drawTraffic(m, cosLat);
+  if (own) { const [x, y] = xy(own.lat, own.lon); arrow(g, x, y, own.heading, 9, c.you, c.bg); }
+  drawScale(m);
+  showBand(flight, sectors);
 }
 
-function drawTaxiways(g, airport, xy, w, h, perNm) {
-  // Segments: taxiways a bit brighter than the lead-in lines to the stands
-  for (const [la1, lo1, la2, lo2, , toStand] of airport.taxiways) {
-    g.strokeStyle = color(toStand ? "--line" : "--line-strong");
-    g.lineWidth = toStand ? 1 : 2;
-    g.beginPath(); g.moveTo(...xy(la1, lo1)); g.lineTo(...xy(la2, lo2)); g.stroke();
+function path(m, points) {  // a polyline through [lat, lon] points
+  points.forEach(([lat, lon], i) => { const [x, y] = m.xy(lat, lon); i ? m.g.lineTo(x, y) : m.g.moveTo(x, y); });
+}
+
+function free(m, x, y, width, height) {  // a label's box does not touch one already placed: then it is placed
+  const box = [x - 2, y - 2, x + width + 2, y + height + 2];
+  if (m.placed.some((p) => box[0] < p[2] && box[2] > p[0] && box[1] < p[3] && box[3] > p[1])) return false;
+  m.placed.push(box);
+  return true;
+}
+
+function drawSectors(m, sectors) {
+  // The boundary as a thin rule; name and frequency in an outlined box, as an enroute chart's frequency box
+  const { g, c } = m;
+  g.strokeStyle = c.sector;
+  g.lineWidth = 1;
+  g.setLineDash([]);
+  for (const s of sectors) { g.beginPath(); path(m, s.polygon); g.closePath(); g.stroke(); }
+  const labelled = new Set();
+  for (const s of sectors) {
+    const key = s.name + s.khz;
+    if (labelled.has(key)) continue;
+    const [x, y] = m.xy(s.polygon.reduce((a, p) => a + p[0], 0) / s.polygon.length,
+                        s.polygon.reduce((a, p) => a + p[1], 0) / s.polygon.length);
+    if (x < 40 || y < 60 || x > m.w - 40 || y > m.h - 40) continue;
+    const lines = [s.name.toUpperCase(), chartFreq(s.khz)].filter(Boolean);
+    g.font = "10px B612, sans-serif";
+    const width = Math.max(...lines.map((l) => g.measureText(l).width)) + 12, height = lines.length * 13 + 6;
+    if (!free(m, x - width / 2, y - height / 2, width, height)) continue;
+    labelled.add(key);
+    g.fillStyle = c.bg;
+    g.fillRect(x - width / 2, y - height / 2, width, height);
+    g.strokeRect(x - width / 2 + 0.5, y - height / 2 + 0.5, width - 1, height - 1);
+    g.textAlign = "center";
+    g.fillStyle = c["ink-2"];
+    g.fillText(lines[0], x, y - height / 2 + 9.5);
+    if (lines[1]) { g.font = "11px B612, sans-serif"; g.fillStyle = c.ink; g.fillText(lines[1], x, y + 6); }
+    g.textAlign = "left";
   }
-  // Names: one label per taxiway every ~150 px, so a long taxiway is named along its length without clutter
-  g.fillStyle = color("--label");
-  const placed = [];
-  for (const [la1, lo1, la2, lo2, name, toStand] of airport.taxiways) {
+}
+
+function drawZones(m, zones) {  // control zones: dashed, in the colour of a towered field, the name at the top
+  const { g, c } = m;
+  g.strokeStyle = c.zone;
+  g.lineWidth = 1.5;
+  g.setLineDash([7, 4]);
+  const drawn = new Set();
+  g.beginPath();
+  for (const z of zones) {
+    z.polygon.forEach((p, i) => {
+      const q = z.polygon[(i + 1) % z.polygon.length];
+      const key = [p, q].map(([lat, lon]) => lat.toFixed(4) + "," + lon.toFixed(4)).sort().join(" ");
+      if (drawn.has(key)) return;
+      drawn.add(key);
+      g.moveTo(...m.xy(...p)); g.lineTo(...m.xy(...q));
+    });
+  }
+  g.stroke();
+  g.setLineDash([]);
+  if (widthNm > 120) return;
+  g.font = "10px B612, sans-serif";
+  g.fillStyle = c.zone;
+  for (const z of zones) {
+    const top = z.polygon.reduce((a, p) => (p[0] > a[0] ? p : a));
+    const [x, y] = m.xy(top[0], top[1]);
+    const label = z.name.toUpperCase() + (z.ceiling_ft ? "  " + z.ceiling_ft : "");
+    const width = g.measureText(label).width;
+    if (m.seen(x, y, 0) && free(m, x - width / 2, y - 18, width, 12)) {
+      g.textAlign = "center"; g.fillText(label, x, y - 12); g.textAlign = "left";
+    }
+  }
+}
+
+function drawDiagram(m, a) {
+  const { g, c, xy, perNm } = m;
+  const [ax, ay] = xy(a.lat, a.lon);
+  if (!m.seen(ax, ay, perNm * 4)) return;  // an airport is at most a few miles across
+  const px = (metres) => metres / 1852 * perNm;
+  // The paved surface in two passes, the edge then the fill, so crossing taxiways merge into one outline
+  g.lineCap = "round";
+  for (const [colour, extra] of [[c["paved-edge"], 2], [c.paved, 0]]) {
+    g.strokeStyle = colour;
+    g.fillStyle = colour === c.paved ? c.apron : colour;
+    for (const apron of a.aprons || []) {
+      g.beginPath(); path(m, apron); g.closePath();
+      if (extra) { g.lineWidth = extra; g.stroke(); } else g.fill();
+    }
+    for (const [la1, lo1, la2, lo2, width] of a.surfaces || []) {
+      g.lineWidth = Math.max(1.5, px(width)) + extra;
+      g.beginPath(); g.moveTo(...xy(la1, lo1)); g.lineTo(...xy(la2, lo2)); g.stroke();
+    }
+  }
+  g.lineCap = "butt";
+  drawRunways(m, a);
+  // Holding positions: a double bar across the taxiway
+  if (widthNm <= 4) {
+    g.strokeStyle = c.ink;
+    g.lineWidth = 1.5;
+    const half = Math.max(5, px(14));
+    for (const [lat, lon, bearing] of a.holds || []) {
+      const [x, y] = xy(lat, lon);
+      if (!m.seen(x, y, 0)) continue;
+      const t = bearing * Math.PI / 180, ux = Math.sin(t), uy = -Math.cos(t);  // along the taxiway
+      for (const off of [-1.5, 1.5]) {
+        g.beginPath();
+        g.moveTo(x + ux * off - uy * half, y + uy * off + ux * half);
+        g.lineTo(x + ux * off + uy * half, y + uy * off - ux * half);
+        g.stroke();
+      }
+    }
+  }
+  // Taxiway names on the taxiway, one every ~160 px along it, never on top of another label
+  g.font = "11px B612, sans-serif";
+  g.textAlign = "center";
+  const named = [];
+  for (const [la1, lo1, la2, lo2, name, toStand] of a.taxiways || []) {
     if (!name || toStand) continue;
     const [x, y] = xy((la1 + la2) / 2, (lo1 + lo2) / 2);
-    if (x < 0 || y < 0 || x > w || y > h) continue;
-    if (placed.some((p) => p.name === name && Math.hypot(p.x - x, p.y - y) < 150)) continue;
-    if (placed.some((p) => Math.hypot(p.x - x, p.y - y) < 18)) continue;  // never on top of another label
-    placed.push({ name, x, y });
-    g.fillText(name, x + 3, y - 6);
+    if (!m.seen(x, y, -8)) continue;
+    if (named.some((p) => p.name === name && Math.hypot(p.x - x, p.y - y) < 160)) continue;
+    const width = g.measureText(name).width + 6;
+    if (!free(m, x - width / 2, y - 8, width, 16)) continue;
+    named.push({ name, x, y });
+    g.fillStyle = c.bg;
+    g.fillRect(x - width / 2, y - 7, width, 14);
+    g.fillStyle = c.ink;
+    g.fillText(name, x, y + 0.5);
   }
-  if (ZOOMS_NM[zoom] <= 1) {  // stand names only very close
-    g.fillStyle = color("--label");
-    for (const p of airport.parking) {
+  // Stands: their numbers, close in only
+  if (widthNm <= 1.6) {
+    g.font = "9px 'B612 Mono', monospace";
+    g.fillStyle = c["ink-2"];
+    for (const p of a.parking || []) {
       const [x, y] = xy(p.lat, p.lon);
-      if (x > 0 && y > 0 && x < w && y < h) g.fillText(p.name, x + 3, y + 8);
+      if (!m.seen(x, y, -4)) continue;
+      const name = p.name.replace(/^\D+\s(?=\d)/, "");  // "G 51A" → "51A", as a chart numbers its stands
+      const width = g.measureText(name).width;
+      if (free(m, x - width / 2, y - 5, width, 10)) g.fillText(name, x, y);
     }
+  }
+  g.textAlign = "left";
+}
+
+function drawRunways(m, a) {
+  // Filled to scale, a dashed centreline, the number and magnetic heading beyond each end, the length alongside
+  const { g, c, xy, perNm } = m;
+  for (const r of a.runways) {
+    const [[la1, lo1], [la2, lo2]] = r.ends;
+    const [x1, y1] = xy(la1, lo1), [x2, y2] = xy(la2, lo2);
+    const len = Math.hypot(x2 - x1, y2 - y1) || 1, ux = (x2 - x1) / len, uy = (y2 - y1) / len;
+    const width = Math.max(4, r.width_m / 1852 * perNm);
+    g.strokeStyle = c.runway;
+    g.lineWidth = width;
+    g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+    if (width >= 7) {
+      g.strokeStyle = c["runway-mark"];
+      g.lineWidth = 1;
+      g.setLineDash([8, 6]);
+      g.beginPath(); g.moveTo(x1 + ux * 10, y1 + uy * 10); g.lineTo(x2 - ux * 10, y2 - uy * 10); g.stroke();
+      g.setLineDash([]);
+      for (const [x, y, s] of [[x1, y1, 1], [x2, y2, -1]]) {  // threshold bars
+        g.lineWidth = 2;
+        g.beginPath();
+        g.moveTo(x + ux * s * 3 - uy * width * 0.35, y + uy * s * 3 + ux * width * 0.35);
+        g.lineTo(x + ux * s * 3 + uy * width * 0.35, y + uy * s * 3 - ux * width * 0.35);
+        g.stroke();
+      }
+    }
+    g.textAlign = "center";
+    r.ends.forEach((_, i) => {
+      const s = i ? 1 : -1, [ex, ey] = i ? [x2, y2] : [x1, y1];
+      const tx = ex + ux * s * 18, ty = ey + uy * s * 18;
+      g.font = "12px B612, sans-serif";
+      g.fillStyle = c.ink;
+      if (!free(m, tx - 14, ty - 8, 28, 26)) return;
+      g.fillText(r.names[i], tx, ty);
+      if (r.headings_mag) {
+        g.font = "10px 'B612 Mono', monospace";
+        g.fillStyle = c["ink-2"];
+        g.fillText(String(r.headings_mag[i]).padStart(3, "0") + "°", tx, ty + 12);
+      }
+    });
+    if (r.length_ft && len > 220) {  // 10,666' 3251 m along the runway, just beside it
+      const label = r.length_ft.toLocaleString("en-US") + "'  " + Math.round(r.length_ft * 0.3048) + " m";
+      let angle = Math.atan2(uy, ux);
+      if (angle > Math.PI / 2 || angle < -Math.PI / 2) angle += Math.PI;
+      g.save();
+      g.translate((x1 + x2) / 2 - Math.sin(angle) * (width / 2 + 9), (y1 + y2) / 2 + Math.cos(angle) * (width / 2 + 9));
+      g.rotate(angle);
+      g.font = "10px 'B612 Mono', monospace";
+      g.fillStyle = c["ink-2"];
+      g.fillText(label, 0, 0);
+      g.restore();
+    }
+    g.textAlign = "left";
   }
 }
 
-function arrow(g, x, y, heading, size, fill) {  // a triangle pointing along the heading (0 = north, up)
+function drawRoute(m) {  // SimBrief's waypoints, else straight from origin to destination; waypoints as triangles
+  if (!mapData || !mapData.airports.length) return;
+  const { g, c, xy } = m;
+  const [from, to] = [mapData.airports[0], mapData.airports[mapData.airports.length - 1]];
+  const points = [from, ...mapData.route, ...(to && to !== from ? [to] : [])].map((p) => [p.lat, p.lon]);
+  g.strokeStyle = c["ink-2"];
+  g.lineWidth = 1.5;
+  g.beginPath(); path(m, points); g.stroke();
+  if (widthNm > 300) return;
+  g.font = "10px 'B612 Mono', monospace";
+  for (const p of mapData.route) {
+    const [x, y] = xy(p.lat, p.lon);
+    if (!m.seen(x, y, 0)) continue;
+    g.fillStyle = c.bg;
+    g.beginPath(); g.moveTo(x, y - 5); g.lineTo(x + 4.5, y + 3.5); g.lineTo(x - 4.5, y + 3.5); g.closePath();
+    g.fill(); g.lineWidth = 1.2; g.stroke();
+    const width = g.measureText(p.ident).width;
+    if (free(m, x + 7, y - 6, width, 12)) { g.fillStyle = c.ink; g.fillText(p.ident, x + 7, y); }
+  }
+}
+
+function drawAirports(m, flight, chart) {
+  // An enroute chart's airport: towered fields in blue, the others in brown. From afar a ring; nearer the runway
+  // pattern; and a data block: NAME (ICAO), the tower and ATIS frequencies, elevation and longest runway in 100 ft
+  const { g, c, xy } = m;
+  const known = new Map();
+  for (const a of (mapArea && mapArea.airports) || []) known.set(a.ident, a);
+  for (const a of flight) {
+    if (!known.has(a.ident)) {
+      known.set(a.ident, { ...a, controlled: a.frequencies.some((f) => ["TWR", "GND", "APP"].includes(f.label)),
+                           runways: a.runways.map((r) => [...r.ends[0], ...r.ends[1]]),
+                           longest_ft: Math.max(0, ...a.runways.map((r) => r.length_ft || 0)) });
+    }
+  }
+  const mine = new Set(flight.map((a) => a.ident));
+  const order = [...known.values()].sort((p, q) => mine.has(q.ident) - mine.has(p.ident));
+  for (const a of order) {
+    const [x, y] = xy(a.lat, a.lon);
+    if (!m.seen(x, y)) continue;
+    const colour = a.controlled ? c.tower : c.field;
+    g.strokeStyle = colour; g.fillStyle = colour;
+    if (!chart) {
+      if (widthNm <= 60 && a.runways.length) {
+        g.lineWidth = 3;
+        g.lineCap = "butt";
+        for (const [la1, lo1, la2, lo2] of a.runways) {
+          const [x1, y1] = xy(la1, lo1), [x2, y2] = xy(la2, lo2);
+          const len = Math.hypot(x2 - x1, y2 - y1) || 1, k = len < 8 ? 4 / len : 0;  // at least 8 px long
+          g.beginPath(); g.moveTo(x1 - (x2 - x1) * k, y1 - (y2 - y1) * k); g.lineTo(x2 + (x2 - x1) * k, y2 + (y2 - y1) * k);
+          g.stroke();
+        }
+      } else {
+        g.lineWidth = 1.5;
+        g.beginPath(); g.arc(x, y, a.controlled ? 5 : 3.5, 0, Math.PI * 2); g.stroke();
+      }
+    }
+    const big = a.controlled || (a.longest_ft || 0) >= 5000;
+    const block = mine.has(a.ident) || (widthNm <= 150 && a.controlled) || widthNm <= 50;
+    const lines = [];
+    if (block || widthNm > 150 && big) lines.push(block ? `${a.name.toUpperCase()} (${a.ident})` : a.ident);
+    if (block) {
+      const pick = (label) => a.frequencies.find((f) => f.label === label);
+      const main = a.controlled ? pick("TWR") : pick("INFO") || pick("UNICOM") || pick("MULTICOM");
+      const atis = pick("ATIS");
+      const radio = [main && (a.controlled ? "CT " : main.label + " ") + chartFreq(main.khz),
+                     atis && "ATIS " + chartFreq(atis.khz)].filter(Boolean).join("  ");
+      if (radio) lines.push(radio);
+      lines.push(`${a.elevation_ft}  ${Math.round((a.longest_ft || 0) / 100)}`);
+    }
+    if (!lines.length) continue;
+    g.font = "11px B612, sans-serif";
+    const width = Math.max(...lines.map((l) => g.measureText(l).width)), height = lines.length * 13;
+    const lx = x + 10, ly = y - 8 - height / 2;
+    if (!free(m, lx, ly, width, height) && !mine.has(a.ident)) continue;
+    lines.forEach((line, i) => {
+      g.font = i ? "10px B612, sans-serif" : "11px B612, sans-serif";
+      g.fillStyle = i ? c.ink : colour;
+      g.fillText(line, lx, ly + 6 + i * 13);
+    });
+  }
+}
+
+function drawTaxiRoute(m) {  // the taxi route ATC gave: the colour of "you", on top of the taxiways
+  const route = (mapMoving && mapMoving.taxi_route) || [];
+  if (route.length < 2 || widthNm > 10) return;
+  m.g.strokeStyle = m.c.you;
+  m.g.lineWidth = 3;
+  m.g.lineCap = "round";
+  m.g.beginPath(); path(m, route); m.g.stroke();
+  m.g.lineCap = "butt";
+}
+
+function drawTraffic(m, cosLat) {  // small arrows with the callsign (on the ground only when zoomed in close)
+  const { g, c, xy } = m;
+  const since = Math.min((performance.now() - trafficReadAt) / 1000, DEAD_RECKON_S);
+  g.font = "10px 'B612 Mono', monospace";
+  for (const t of (mapMoving && mapMoving.traffic) || []) {
+    if (t.on_ground && widthNm > 10) continue;
+    const nm = (t.gs || 0) * since / 3600, rad = t.heading * Math.PI / 180;  // where it is now, roughly
+    const [x, y] = xy(t.lat + nm * Math.cos(rad) / 60, t.lon + nm * Math.sin(rad) / 60 / cosLat);
+    if (!m.seen(x, y)) continue;
+    arrow(g, x, y, t.heading, 6, c["ink-2"], c.bg);
+    g.fillStyle = c["ink-2"];
+    g.fillText(t.callsign + (t.on_ground ? "" : " " + level(t.alt_ft)), x + 9, y);
+  }
+}
+
+function drawScale(m) {  // a chart's scale bar, bottom left: a round number of miles, 60 to 160 px long
+  const { g, c, h, perNm } = m;
+  const steps = [100 / 1852, 200 / 1852, 500 / 1852, 1, 2, 5, 10, 20, 50, 100, 200, 500];
+  const nm = steps.find((s) => s * perNm >= 60) || 500;
+  const length = nm * perNm, x = 16, y = h - 20;
+  g.strokeStyle = c.ink;
+  g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(x, y - 4); g.lineTo(x, y); g.lineTo(x + length, y); g.lineTo(x + length, y - 4); g.stroke();
+  g.font = "10px 'B612 Mono', monospace";
+  g.fillStyle = c.ink;
+  g.fillText(nm < 1 ? Math.round(nm * 1852) + " M" : nm + " NM", x + length + 6, y - 1);
+}
+
+function showBand(flight, sectors) {
+  // The frequencies near the camera, as along the top of an airport chart: the nearest airport's, in the order
+  // they are used, then the Center sector the camera is in
+  let nearest = null, best = Math.max(12, widthNm * 0.75);
+  for (const a of [...flight, ...((mapArea && mapArea.airports) || [])]) {
+    const d = nmBetween(a, camera) - (flight.includes(a) ? 0.5 : 0);  // the flight's own wins a tie
+    if (d < best && a.frequencies.length) { best = d; nearest = a; }
+  }
+  const above = [];
+  for (const s of sectors) {
+    if (s.khz && !above.some((o) => o.khz === s.khz) && inside(camera.lat, camera.lon, s.polygon)) above.push(s);
+  }
+  const key = JSON.stringify([nearest && nearest.ident, nearest && nearest.frequencies, above.map((s) => s.khz)]);
+  if (key === bandShown) return;
+  bandShown = key;
+  const band = $("map-band");
+  band.replaceChildren();
+  band.hidden = !nearest && !above.length;
+  if (nearest) {
+    const place = element("div", "band-place");
+    place.append(element("span", "band-ident num", nearest.ident), element("span", "band-name", nearest.name));
+    band.append(place);
+    for (const f of nearest.frequencies.slice(0, 10)) band.append(bandCell(f.label, f.khz, f.station));
+  }
+  for (const s of above.slice(0, 2)) band.append(bandCell(s.name.toUpperCase(), s.khz, s.name));
+}
+
+function bandCell(label, khz, title) {
+  const cell = element("div", "band-cell");
+  cell.title = title || label;
+  const value = element("span", "band-freq num");
+  const [whole, fraction] = chartFreq(khz).split(".");
+  value.append(whole, element("span", "sep", "."), fraction);
+  cell.append(element("span", "band-label", label), value);
+  return cell;
+}
+
+function arrow(g, x, y, heading, size, fill, edge) {  // a triangle pointing along the heading (0 = north, up)
   const a = heading * Math.PI / 180;
   const tip = [x + Math.sin(a) * size, y - Math.cos(a) * size];
   const left = [x + Math.sin(a + 2.5) * size * 0.8, y - Math.cos(a + 2.5) * size * 0.8];
   const right = [x + Math.sin(a - 2.5) * size * 0.8, y - Math.cos(a - 2.5) * size * 0.8];
   g.fillStyle = fill;
-  g.beginPath(); g.moveTo(...tip); g.lineTo(...left); g.lineTo(...right); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(...tip); g.lineTo(...left); g.lineTo(...right); g.closePath();
+  if (edge) { g.strokeStyle = edge; g.lineWidth = 1.5; g.stroke(); }
+  g.fill();
 }
 
-function setZoom(step) {
+function zoomBy(factor, x, y) {  // zoom about a point on the map (the cursor), the middle if none
+  const box = $("map");
+  if (!camera || !box.clientWidth) return;
+  const w = box.clientWidth, h = box.clientHeight;
+  const next = Math.max(MAP_MIN_NM, Math.min(MAP_MAX_NM, widthNm * factor));
+  if (x !== undefined && !follow) {  // the point under the cursor stays under it (following: the aircraft does)
+    const perNm = w / widthNm, nextPerNm = w / next, cosLat = Math.cos(camera.lat * Math.PI / 180);
+    const dx = x - w / 2, dy = y - h / 2;
+    camera = { lat: camera.lat - dy / 60 * (1 / perNm - 1 / nextPerNm),
+               lon: camera.lon + dx / 60 / cosLat * (1 / perNm - 1 / nextPerNm) };
+  }
+  widthNm = next;
   zoomChosen = true;
-  zoom = Math.max(0, Math.min(ZOOMS_NM.length - 1, zoom + step));
   drawMap();
 }
 
-$("zoom-in").addEventListener("click", () => setZoom(-1));
-$("zoom-out").addEventListener("click", () => setZoom(1));
-$("map").addEventListener("wheel", (event) => { event.preventDefault(); setZoom(event.deltaY > 0 ? 1 : -1); },
-                          { passive: false });
+function pan(dx, dy) {  // move the camera by pixels on the map
+  const box = $("map");
+  if (!camera) return;
+  const perNm = box.clientWidth / widthNm, cosLat = Math.cos(camera.lat * Math.PI / 180);
+  camera = { lat: Math.max(-85, Math.min(85, camera.lat + dy / perNm / 60)),
+             lon: ((camera.lon - dx / perNm / 60 / cosLat + 540) % 360) - 180 };
+  follow = false;
+  drawMap();
+}
+
+function setChartTheme(theme) {
+  chartTheme = theme;
+  $("map").dataset.chart = theme;
+  $("map-theme").setAttribute("aria-pressed", String(theme === "night"));
+  try { localStorage.setItem("chart-theme", theme); } catch (error) { /* only for this window */ }
+  drawMap();
+}
+
+$("zoom-in").addEventListener("click", () => zoomBy(0.5));
+$("zoom-out").addEventListener("click", () => zoomBy(2));
+$("map-follow").addEventListener("click", () => { follow = true; drawMap(); });
+$("map-theme").addEventListener("click", () => setChartTheme(chartTheme === "night" ? "paper" : "night"));
+setChartTheme(chartTheme);
+$("map-canvas").addEventListener("wheel", (event) => {
+  event.preventDefault();
+  const r = event.currentTarget.getBoundingClientRect();
+  zoomBy(event.deltaY > 0 ? 1.25 : 0.8, event.clientX - r.left, event.clientY - r.top);
+}, { passive: false });
+let dragFrom = null;
+$("map-canvas").addEventListener("pointerdown", (event) => {
+  dragFrom = [event.clientX, event.clientY];
+  event.currentTarget.setPointerCapture(event.pointerId);
+  $("map").focus({ preventScroll: true });
+});
+$("map-canvas").addEventListener("pointermove", (event) => {
+  if (!dragFrom) return;
+  const dx = event.clientX - dragFrom[0], dy = event.clientY - dragFrom[1];
+  if (!dx && !dy) return;
+  dragFrom = [event.clientX, event.clientY];
+  pan(dx, dy);
+});
+for (const type of ["pointerup", "pointercancel"]) $("map-canvas").addEventListener(type, () => { dragFrom = null; });
+$("map").addEventListener("keydown", (event) => {
+  const step = $("map").clientWidth / 6;
+  const moves = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
+  if (moves[event.key]) pan(...moves[event.key]);
+  else if (event.key === "+" || event.key === "=") zoomBy(0.5);
+  else if (event.key === "-") zoomBy(2);
+  else return;
+  event.preventDefault();
+});
 new ResizeObserver(drawMap).observe($("map"));
 
 async function pollStatus() {
@@ -596,7 +1014,7 @@ function connect(from) {
   stream.onerror = () => { link.className = "link down"; text("link-text", "No link"); };
   stream.onmessage = (message) => {
     const e = JSON.parse(message.data);
-    if (e.kind === "system" && e.text.startsWith("session started")) { clearLog(e); mapData = null; }
+    if (e.kind === "system" && e.text.startsWith("session started")) { clearLog(e); mapData = null; follow = true; zoomChosen = false; }
     else addEvent(e);
     if (e.kind === "system" && (e.text.startsWith("session started") || e.text === "session ended")) refresh();
   };

@@ -7,6 +7,8 @@
 - POST /api/start        start a session (flight plan + options as JSON)
 - POST /api/say          a transmission or /command typed in the window
 - POST /api/stop         end the session
+- GET  /api/map/area?s=&w=&n=&e=   airports, frequencies, control zones and Center sectors in the map's view
+- GET  /api/map/airport?ident=     one airport in full, for its taxi chart
 - GET  /api/live?v=N     the words while push-to-talk is held: waits until they differ from version N (long poll)
 - GET  /overlay          the small window over the sim (static/overlay.html)
 - POST /api/overlay      show or hide it ({"visible": bool}), in the app window only
@@ -28,14 +30,16 @@ from atc import paths
 from atc.audio import ptt, setup
 from atc import settings_file
 from atc.config import Config, ConfigError
-from atc.controller.mapdata import map_data
+from atc.airspace.centers import CenterSectors, CentersError
+from atc.controller.mapdata import airport_chart, area, map_data
 from atc.controller.suggest import phrase_book
 from atc.phraseology.catalog import EXAMPLE, GROUPS, PHRASES
 from atc import preflight
 from atc.events import SPOKEN, Event
 from atc.flightlog import FlightLog, log_path
 from atc.runtime import run_live
-from atc.session import PlanRequest, Session, SessionOptions, SetupError, build_session
+from atc.session import (PlanRequest, Session, SessionOptions, SetupError, airport_sources, build_session,
+                         center_sectors, find_airport)
 from atc.units import parse_level
 
 STATIC = Path(__file__).parent / "static"
@@ -46,6 +50,7 @@ HEARTBEAT_S = 5  # keeps the stream alive; a failed write shows the page is gone
 MAX_BODY = 64 * 1024  # a flight plan or a transmission is far smaller
 GZIP_FROM = 1024  # answers this big or bigger are sent compressed
 GZIP_LEVEL = 6
+MAP_CHARTS = 8  # airport charts kept for the map: the flight's own and the ones looked at last
 LIVE_WAIT_S = 5  # a long poll of /api/live answers after this at the latest, changed or not
 
 
@@ -212,6 +217,11 @@ class App:
         self.lock = threading.Lock()
         self.live = LiveText()
         self.overlay = None  # the small window over the sim (atc/app/__main__.py), None in a browser
+        # The map's own sources, for wherever the pilot moves it (loaded on first use): airports, Center sectors
+        self.map_sources = None
+        self.map_centers: CenterSectors | None = None
+        self.map_charts: dict[str, dict | None] = {}
+        self.map_lock = threading.Lock()  # the server answers each request in its own thread
 
     @property
     def running(self) -> bool:
@@ -260,6 +270,42 @@ class App:
     def map(self) -> dict | None:
         """What the map draws that stays the same for a flight (A6); None without a flight."""
         return map_data(self.session.controller) if self.session and self.running else None
+
+    def _sources(self):
+        if self.map_sources is None:  # set once; a second thread at the same moment builds the same list
+            self.map_sources = self.inject.get("airports") or airport_sources(self.config)
+        return self.map_sources
+
+    def _centers(self) -> CenterSectors:
+        if self.session is not None:
+            return self.session.centers
+        if self.map_centers is None:
+            try:
+                self.map_centers = self.inject.get("centers") or center_sectors(self.config)
+            except CentersError:
+                self.map_centers = CenterSectors()  # the map still shows the airports
+        return self.map_centers
+
+    def map_area(self, query: dict) -> dict:
+        """What lies in the map's view, with or without a flight (O4). The box is south, west, north, east."""
+        try:
+            s, w, n, e = (float(query[k][0]) for k in ("s", "w", "n", "e"))
+        except (KeyError, ValueError):
+            raise ValueError("give the box as s, w, n, e in degrees") from None
+        if not (-90 <= s <= n <= 90 and -180 <= w <= 180 and -180 <= e <= 180):
+            raise ValueError("the box is out of range")
+        return area(self._sources(), self._centers(), s, w, n, e)
+
+    def map_airport(self, ident: str) -> dict | None:
+        """One airport in full for its taxi chart; None if no source knows it."""
+        ident = ident.strip().upper()
+        with self.map_lock:
+            if ident not in self.map_charts:
+                found = find_airport(self._sources(), ident) if ident.isalnum() and len(ident) <= 8 else None
+                if len(self.map_charts) >= MAP_CHARTS:
+                    self.map_charts.pop(next(iter(self.map_charts)))
+                self.map_charts[ident] = airport_chart(found[0]) if found else None
+            return self.map_charts[ident]
 
     def settings(self) -> dict:
         """What the Settings page shows: the values, the choices, where things are."""
@@ -441,6 +487,14 @@ def make_handler(app: App, heartbeat_s: float = HEARTBEAT_S):
                 return self._json(app.settings())
             if path == "/api/map":
                 return self._json(app.map())
+            if path == "/api/map/area":
+                try:
+                    return self._json(app.map_area(parse_qs(urlparse(self.path).query)))
+                except ValueError as e:
+                    return self._json({"error": str(e)}, 400)
+            if path == "/api/map/airport":
+                ident = parse_qs(urlparse(self.path).query).get("ident", [""])[0]
+                return self._json(app.map_airport(ident))
             if path == "/api/phrases":
                 return self._json(app.phrases())
             if path == "/api/events":

@@ -3,7 +3,7 @@ import json
 from atc.airport.geo import distance_nm, segment_distance_nm
 from pathlib import Path
 
-from atc.airport.model import Airport, ControlZone, Frequency, Ils, Parking, Runway, RunwayEnd, TaxiPath, VfrPoint
+from atc.airport.model import Airport, AirportSummary, ControlZone, Frequency, Ils, Parking, Runway, RunwayEnd, TaxiPath, VfrPoint
 
 
 class JsonAirportData:
@@ -13,6 +13,7 @@ class JsonAirportData:
 
     def __init__(self, directory: Path):
         self.directory = directory
+        self._brief: dict[str, tuple[float, AirportSummary, ControlZone | None]] = {}  # the map's, by file
 
     def get(self, ident: str) -> Airport | None:
         path = self.directory / f"{ident.upper()}.json"
@@ -34,6 +35,29 @@ class JsonAirportData:
         found = map(self.get, (p.stem for p in sorted(self.directory.glob("*.json"))))
         return [x.ident for x in found if x and any(f.type == "T" for f in x.frequencies)
                 and segment_distance_nm(x.lat, x.lon, a, b) <= max_nm]
+
+    def in_area(self, south: float, west: float, north: float, east: float, limit: int) -> list[AirportSummary]:
+        inside = [a for a, _ in self._briefs() if a.runways and south <= a.lat <= north
+                  and (west <= a.lon <= east if west <= east else (a.lon >= west or a.lon <= east))]
+        return sorted(inside, key=lambda a: (not a.controlled, -a.longest_runway_ft, a.ident))[:limit]
+
+    def control_zones(self, south: float, west: float, north: float, east: float) -> list[ControlZone]:
+        return [zone for _, zone in self._briefs() if zone and any(
+            south <= lat <= north and (west <= lon <= east if west <= east else (lon >= west or lon <= east))
+            for lat, lon in zone.polygon)]
+
+    def _briefs(self) -> list[tuple[AirportSummary, ControlZone | None]]:
+        """Every file's airport in short, read again only when the file changed: the map asks with every move."""
+        out = []
+        for path in sorted(self.directory.glob("*.json")):
+            mtime = path.stat().st_mtime
+            cached = self._brief.get(path.stem)
+            if cached is None or cached[0] != mtime:
+                if (a := self.get(path.stem)) is None:
+                    continue
+                cached = self._brief[path.stem] = (mtime, AirportSummary.of(a), a.control_zone)
+            out.append(cached[1:])
+        return out
 
     def save(self, airport: Airport) -> Path:
         self.directory.mkdir(parents=True, exist_ok=True)
@@ -67,10 +91,11 @@ def airport_from_dict(d: dict) -> Airport:
             Parking(p["name"], p["type"], p["lat"], p["lon"], p["heading"], tuple(p["airline_codes"]))
             for p in d.get("parking", [])
         ),
-        # [start_lat, start_lon, end_lat, end_lon, name, type, start_type, end_type]
+        # [start_lat, start_lon, end_lat, end_lon, name, type, start_type, end_type, width_ft (newer files)]
         taxi_paths=tuple(TaxiPath(*t) for t in d.get("taxi_paths", [])),
         vfr_points=tuple(VfrPoint(*p) for p in d.get("vfr_points", [])),  # [ident, lat, lon]
         control_zone=_zone(d.get("control_zone")),
+        aprons=tuple(tuple(tuple(p) for p in apron) for apron in d.get("aprons", [])),
     )
 
 
@@ -111,9 +136,10 @@ def airport_to_dict(a: Airport) -> dict:
         if a.control_zone else None,
         "taxi_paths": [
             [round(t.start_lat, 7), round(t.start_lon, 7), round(t.end_lat, 7), round(t.end_lon, 7),
-             t.name, t.type, t.start_type, t.end_type]
+             t.name, t.type, t.start_type, t.end_type, round(t.width_ft, 1)]
             for t in a.taxi_paths
         ],
+        "aprons": [[[round(lat, 7), round(lon, 7)] for lat, lon in apron] for apron in a.aprons],
     }
 
 

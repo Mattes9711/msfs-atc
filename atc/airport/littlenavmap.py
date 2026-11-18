@@ -10,7 +10,8 @@ import sqlite3
 from pathlib import Path
 
 from atc.airport.geo import M_PER_DEG_LAT, distance_nm, point_in_polygon, segment_distance_nm
-from atc.airport.model import Airport, ControlZone, Frequency, Ils, Parking, Runway, RunwayEnd, TaxiPath, VfrPoint
+from atc.airport.model import (CONTROLLER_TYPES, Airport, AirportSummary, ControlZone, Frequency, Ils, Parking, Runway,
+                               RunwayEnd, TaxiPath, VfrPoint)
 from atc.airport.procedures import Procedures, load_procedures
 from atc.airspace.littlenavmap import decode_polygon
 
@@ -72,10 +73,76 @@ class LittleNavmapAirportData:
             con.close()
         return [r["ident"] for r in rows if segment_distance_nm(r["laty"], r["lonx"], a, b) <= max_nm]
 
+    def in_area(self, south: float, west: float, north: float, east: float, limit: int) -> list[AirportSummary]:
+        lon_in, lon_args = _lon_between("lonx", west, east)
+        con = self._connect()
+        try:
+            rows = con.execute(
+                "select airport_id, ident, name, laty, lonx, altitude, longest_runway_length, "
+                "exists (select 1 from com c where c.airport_id = airport.airport_id "
+                f"and c.type in ({','.join('?' * len(CONTROLLER_TYPES))})) as controlled "
+                f"from airport where laty between ? and ? and {lon_in} and longest_runway_length > 0 and is_closed = 0 "
+                "order by controlled desc, longest_runway_length desc, ident limit ?",
+                (*CONTROLLER_TYPES, south, north, *lon_args, limit)).fetchall()
+            ids = [r["airport_id"] for r in rows]
+            marks = ",".join("?" * len(ids))
+            coms: dict[int, list[Frequency]] = {i: [] for i in ids}
+            names = {r["airport_id"]: (r["ident"], r["name"].title()) for r in rows}
+            for c in con.execute(f"select airport_id, type, name, frequency from com where airport_id in ({marks}) "
+                                 "order by type, frequency", ids):
+                ident, name = names[c["airport_id"]]
+                coms[c["airport_id"]].append(
+                    Frequency(c["type"], _station_name(c["name"], ident, name), round(c["frequency"] / 1000)))
+            lines: dict[int, list[tuple]] = {i: [] for i in ids}
+            for r in con.execute(
+                    "select r.airport_id, p.laty, p.lonx, s.laty, s.lonx from runway r "
+                    "join runway_end p on p.runway_end_id = r.primary_end_id "
+                    f"join runway_end s on s.runway_end_id = r.secondary_end_id where r.airport_id in ({marks})", ids):
+                lines[r[0]].append((r[1], r[2], r[3], r[4]))
+        finally:
+            con.close()
+        return [AirportSummary(r["ident"], r["name"].title(), r["laty"], r["lonx"], r["altitude"],
+                               r["longest_runway_length"], tuple(coms[r["airport_id"]]),
+                               tuple(lines[r["airport_id"]])) for r in rows]
+
+    def control_zones(self, south: float, west: float, north: float, east: float) -> list[ControlZone]:
+        lon_in, lon_args = _lon_overlap(west, east)
+        con = self._connect()
+        try:
+            rows = con.execute(
+                "select name, max_altitude, geometry from boundary where type = 'CD' and min_altitude = 0 "
+                f"and max_laty >= ? and min_laty <= ? and {lon_in} limit {MAX_ZONES}",
+                (south, north, *lon_args)).fetchall()
+        finally:
+            con.close()
+        zones = []
+        for r in rows:
+            polygon = tuple((round(p_lat, 6), round(p_lon, 6)) for p_lat, p_lon in decode_polygon(r["geometry"]))
+            if polygon:
+                zones.append(ControlZone((r["name"] or "").title(), r["max_altitude"], polygon))
+        return zones
+
     def _connect(self) -> sqlite3.Connection:
         con = sqlite3.connect(f"file:{self.db_path.as_posix()}?mode=ro", uri=True)
         con.row_factory = sqlite3.Row
         return con
+
+
+MAX_ZONES = 400  # control zones in one map view; far more than fit on the screen readably
+
+
+def _lon_between(column: str, west: float, east: float) -> tuple[str, tuple]:
+    """A longitude range in SQL; west > east is a box across the date line."""
+    if west <= east:
+        return f"{column} between ? and ?", (west, east)
+    return f"({column} >= ? or {column} <= ?)", (west, east)
+
+
+def _lon_overlap(west: float, east: float) -> tuple[str, tuple]:
+    """A boundary's longitude range (min_lonx..max_lonx) that overlaps west..east."""
+    if west <= east:
+        return "max_lonx >= ? and min_lonx <= ?", (west, east)
+    return "(max_lonx >= ? or min_lonx <= ?)", (west, east)
 
 
 def _load(con: sqlite3.Connection, ident: str) -> Airport | None:
@@ -117,7 +184,7 @@ def _load(con: sqlite3.Connection, ident: str) -> Airport | None:
     )
     taxi_paths = tuple(
         TaxiPath(t["start_laty"], t["start_lonx"], t["end_laty"], t["end_lonx"], t["name"] or "", t["type"],
-                 t["start_type"] or "N", t["end_type"] or "N")
+                 t["start_type"] or "N", t["end_type"] or "N", t["width"] or 0.0)
         for t in con.execute("select * from taxi_path where airport_id = ? order by taxi_path_id", (airport_id,))
     )
     vfr_points = tuple(
@@ -125,10 +192,14 @@ def _load(con: sqlite3.Connection, ident: str) -> Airport | None:
         for w in con.execute("select ident, laty, lonx from waypoint where airport_ident = ? and type = 'VFR' "
                              "order by ident", (ident,))
     )
+    aprons = tuple(
+        tuple((round(p_lat, 7), round(p_lon, 7)) for p_lat, p_lon in decode_polygon(v["vertices"]))
+        for v in con.execute("select vertices from apron where airport_id = ? order by apron_id", (airport_id,))
+        if v["vertices"])
     return Airport(
         ident=ident, name=name, lat=a["laty"], lon=a["lonx"], elevation_ft=a["altitude"], mag_var=a["mag_var"],
         frequencies=frequencies, runways=runways, parking=parking, taxi_paths=taxi_paths, vfr_points=vfr_points,
-        control_zone=_control_zone(con, a["laty"], a["lonx"]),
+        control_zone=_control_zone(con, a["laty"], a["lonx"]), aprons=tuple(p for p in aprons if len(p) >= 3),
     )
 
 

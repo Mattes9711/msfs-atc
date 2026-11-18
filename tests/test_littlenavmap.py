@@ -10,7 +10,8 @@ from atc.config import Config
 
 # The subset of Little Navmap's MSFS schema that the backend reads (column names as in the real database)
 SCHEMA = """
-create table airport (airport_id integer, ident text, name text, laty real, lonx real, altitude integer, mag_var real);
+create table airport (airport_id integer, ident text, name text, laty real, lonx real, altitude integer, mag_var real,
+                      longest_runway_length real default 0, is_closed integer default 0);
 create table com (airport_id integer, type text, frequency integer, name text);
 create table runway (runway_id integer, airport_id integer, primary_end_id integer, secondary_end_id integer,
                      length real, width real);
@@ -19,7 +20,8 @@ create table ils (ident text, frequency integer, loc_airport_ident text, loc_run
 create table parking (airport_id integer, type text, name text, number integer, suffix text, heading real,
                       airline_codes text, laty real, lonx real);
 create table taxi_path (taxi_path_id integer, airport_id integer, type text, name text, start_type text,
-                        end_type text, start_laty real, start_lonx real, end_laty real, end_lonx real);
+                        end_type text, start_laty real, start_lonx real, end_laty real, end_lonx real, width real);
+create table apron (apron_id integer, airport_id integer, vertices blob);
 create table waypoint (ident text, airport_ident text, type text, laty real, lonx real);
 create table boundary (type text, name text, min_altitude integer, max_altitude integer, min_laty real,
                        max_laty real, min_lonx real, max_lonx real, geometry blob);
@@ -41,7 +43,7 @@ def lnm(tmp_path):
     path = tmp_path / "little_navmap_msfs.sqlite"
     con = sqlite3.connect(path)
     con.executescript(SCHEMA)
-    con.execute("insert into airport values (1, 'EXMP', 'EXAMPLE CITY', 50.0, 8.0, 300, 2.5)")
+    con.execute("insert into airport (airport_id, ident, name, laty, lonx, altitude, mag_var) values (1, 'EXMP', 'EXAMPLE CITY', 50.0, 8.0, 300, 2.5)")
     con.executemany("insert into com values (1, ?, ?, ?)", [
         ("T", 118505000, "EXAMPLE CITY"),  # Hz, like the real database
         ("ATIS", 127000000, "EXMP"),  # ATIS named after the ICAO code
@@ -56,7 +58,9 @@ def lnm(tmp_path):
         ("RGAM", "P", 3, None, 90.0, None, 50.001, 8.001),
         ("GM", "G", 12, "A", 180.0, "DLH,EWG", 50.002, 8.002),
     ])
-    con.execute("insert into taxi_path values (1, 1, 'PT', '', 'N', 'HSND', 50.001, 8.0, 50.0005, 8.0)")
+    con.execute("insert into taxi_path values (1, 1, 'PT', '', 'N', 'HSND', 50.001, 8.0, 50.0005, 8.0, 75)")
+    con.execute("update airport set longest_runway_length = 9000")
+    con.execute("insert into apron values (1, 1, ?)", (polygon([(50.001, 8.0), (50.002, 8.0), (50.002, 8.002)]),))
     con.executemany("insert into waypoint values (?, ?, ?, ?, ?)", [
         ("NOVMR", "EXMP", "VFR", 50.125, 8.0), ("S1", "EXMP", "VFR", 49.875, 8.0),
         ("ABCDE", "EXMP", "WN", 50.5, 8.0),  # an IFR waypoint: not a reporting point
@@ -76,7 +80,7 @@ def test_nearest_airport_needs_a_runway_and_the_distance(lnm):
     assert lnm.nearest(50.01, 8.01, 5) == "EXMP"
     assert lnm.nearest(50.5, 8.0, 5) is None  # 30 nm away
     con = sqlite3.connect(lnm.db_path)
-    con.execute("insert into airport values (2, 'EXHP', 'HELIPORT', 50.011, 8.011, 300, 2.5)")  # no runway
+    con.execute("insert into airport (airport_id, ident, name, laty, lonx, altitude, mag_var) values (2, 'EXHP', 'HELIPORT', 50.011, 8.011, 300, 2.5)")  # no runway
     con.commit()
     con.close()
     assert lnm.nearest(50.011, 8.011, 5) == "EXMP"
@@ -84,7 +88,7 @@ def test_nearest_airport_needs_a_runway_and_the_distance(lnm):
 
 def test_towered_fields_near_a_line(lnm):
     con = sqlite3.connect(lnm.db_path)
-    con.execute("insert into airport values (2, 'EXUN', 'NO TOWER', 50.0, 8.1, 300, 2.5)")  # Info only
+    con.execute("insert into airport (airport_id, ident, name, laty, lonx, altitude, mag_var) values (2, 'EXUN', 'NO TOWER', 50.0, 8.1, 300, 2.5)")  # Info only
     con.execute("insert into com values (2, 'CTAF', 122600000, 'NO TOWER')")
     con.commit()
     con.close()
@@ -120,7 +124,37 @@ def test_parking_names_and_default_gate(lnm):
 
 def test_taxi_paths_are_loaded(lnm):
     [t] = lnm.get("EXMP").taxi_paths
-    assert (t.name, t.type, t.end_type) == ("", "PT", "HSND")
+    assert (t.name, t.type, t.end_type, t.width_ft) == ("", "PT", "HSND", 75)
+
+
+def test_aprons_are_loaded_as_outlines(lnm):
+    [apron] = lnm.get("EXMP").aprons
+    assert [(round(lat, 5), round(lon, 5)) for lat, lon in apron] == [(50.001, 8.0), (50.002, 8.0), (50.002, 8.002)]
+
+
+def test_airports_in_an_area_controlled_first(lnm):
+    con = sqlite3.connect(lnm.db_path)
+    con.executemany("insert into airport values (?, ?, ?, ?, ?, 100, 2.5, ?, ?)", [
+        (2, "EXUN", "NO TOWER", 50.2, 8.2, 12000, 0),  # longer runway, but uncontrolled
+        (3, "EXCL", "CLOSED", 50.1, 8.1, 5000, 1),
+        (4, "EXHP", "HELIPORT", 50.1, 8.1, 0, 0),
+        (5, "EXFA", "FAR AWAY", 55.0, 8.0, 5000, 0),
+    ])
+    con.execute("insert into com values (2, 'UC', 122600000, 'NO TOWER')")
+    con.commit()
+    con.close()
+    found = lnm.in_area(49.5, 7.5, 50.5, 8.5, 10)
+    assert [a.ident for a in found] == ["EXMP", "EXUN"]
+    assert found[0].controlled and not found[1].controlled and found[0].longest_runway_ft == 9000
+    assert found[0].runways == ((50.0, 7.98, 50.0, 8.02),)
+    assert {f.khz for f in found[0].frequencies} == {118505, 127000, 121900}
+    assert [a.ident for a in lnm.in_area(49.5, 7.5, 50.5, 8.5, 1)] == ["EXMP"]  # the limit keeps the controlled
+
+
+def test_control_zones_in_an_area(lnm):
+    zones = lnm.control_zones(49.95, 7.95, 50.05, 8.05)
+    assert sorted(z.name for z in zones) == ["Bigger Zone", "Example City"]  # from the ground up, CD only
+    assert lnm.control_zones(10, 10, 11, 11) == []
 
 
 def test_vfr_points_and_the_control_zone(lnm):

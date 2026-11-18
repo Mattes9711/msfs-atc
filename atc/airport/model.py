@@ -83,6 +83,7 @@ class TaxiPath:
     type: str  # Little Navmap: P = path to a parking spot, PT/T = taxiway
     start_type: str  # N = normal, HSND = hold short, P = parking
     end_type: str
+    width_ft: float = 0.0  # the paved width, for the map's taxi chart; 0 when unknown (old JSON files)
 
     @property
     def to_parking(self) -> bool:
@@ -119,6 +120,7 @@ class Airport:
     taxi_paths: tuple[TaxiPath, ...] = ()
     vfr_points: tuple[VfrPoint, ...] = ()
     control_zone: ControlZone | None = None
+    aprons: tuple[tuple[tuple[float, float], ...], ...] = ()  # paved areas as (lat, lon) outlines, for the map
 
     def runway_end(self, name: str) -> RunwayEnd | None:
         return next((e for r in self.runways for e in r.ends if e.name == name), None)
@@ -136,6 +138,30 @@ class Airport:
         return min(self.parking, key=lambda p: (not (p.is_ga if ga else p.is_gate), p.name), default=None)
 
 
+@dataclass(frozen=True)
+class AirportSummary:
+    """What the map shows of an airport that is not part of the flight: where it is, its runways and frequencies."""
+    ident: str
+    name: str
+    lat: float
+    lon: float
+    elevation_ft: float
+    longest_runway_ft: float
+    frequencies: tuple[Frequency, ...]
+    runways: tuple[tuple[float, float, float, float], ...]  # centrelines, (lat1, lon1, lat2, lon2)
+
+    @property
+    def controlled(self) -> bool:
+        return any(f.type in CONTROLLER_TYPES for f in self.frequencies)
+
+    @staticmethod
+    def of(a: "Airport") -> "AirportSummary":
+        return AirportSummary(a.ident, a.name, a.lat, a.lon, a.elevation_ft,
+                              max((r.length_ft for r in a.runways), default=0),
+                              a.frequencies, tuple((r.ends[0].lat, r.ends[0].lon, r.ends[1].lat, r.ends[1].lon)
+                                                   for r in a.runways))
+
+
 class AirportData(Protocol):
     name: str  # shown to the user, e.g. "Little Navmap"
 
@@ -149,3 +175,9 @@ class AirportData(Protocol):
 
     def towered_near(self, a: tuple[float, float], b: tuple[float, float], max_nm: float) -> list[str]:
         """Idents of the airports with a Tower whose reference point is within max_nm of the line a-b (lat, lon)."""
+
+    def in_area(self, south: float, west: float, north: float, east: float, limit: int) -> list[AirportSummary]:
+        """The airports with a runway inside the box, at most limit: controlled ones first, then the longest runway."""
+
+    def control_zones(self, south: float, west: float, north: float, east: float) -> list[ControlZone]:
+        """The control zones from the ground up that reach into the box."""

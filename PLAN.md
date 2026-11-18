@@ -1478,6 +1478,25 @@ O3. ✅ **Main window: the flight-strip console** (`static/app.css`, `index.html
     red only for warnings, which are the only banner left. **Type:** B612 and B612 Mono (Airbus cockpit fonts,
     made for legibility), regular weight only. No cards, gradients, shadows or motion beyond 120 ms colour
     changes. Below 760 px it stacks in one column. The overlay uses the same tokens and the narrowed frequency dot.
+O4. ✅ **The map as a chart, with a free camera** (`controller/mapdata.py`, `app/server.py`, `static/app.*`; user
+    request 2026-11-18). **Taxi chart** (narrower than 8 NM), drawn like a printed airport diagram: taxiways as
+    grey paved surfaces at their real width from Little Navmap (`taxi_path.width`, new `TaxiPath.width_ft`),
+    aprons (`Airport.aprons`), runways filled with a dashed centreline, threshold bars, number and magnetic heading
+    beyond each end and the length in feet and metres alongside, holding positions as a double bar, taxiway names
+    on the surface, stand numbers close in. Diagrams of other airports in view load from
+    `GET /api/map/airport?ident=` (8 cached). **Enroute chart:** airports from `GET /api/map/area?s=&w=&n=&e=`
+    (the 250 most important in the box, controlled first, then longest runway; `AirportData.in_area`), towered
+    fields blue and the others brown, a ring from afar and the runway pattern nearer, with a data block as on an
+    FAA sectional (NAME (ICAO), "CT" tower and ATIS frequency or INFO/UNICOM, elevation and longest runway in
+    100 ft); control zones dashed blue with name and ceiling (views up to 4° tall); Center sectors as a thin rule
+    with an outlined frequency box; SimBrief waypoints as triangles; a scale bar (metres close in, NM further out).
+    **Frequency band** along the top as on a Jeppesen airport chart: the airport nearest the camera, its
+    frequencies in the order used (ATIS, DEL, GND, TWR, DEP, APP, ...), then the Center sector the camera is in.
+    **Frequencies** as charts print them: 25 kHz channels without trailing zeros (118.2, 126.85), 8.33 kHz
+    channels with three digits (121.705); the radio stack keeps three digits, as a COM radio shows them.
+    **Camera:** drag or arrow keys to move, wheel to zoom about the cursor, + and −; "Follow" brings it back to
+    the aircraft. **Paper** (black on white, default) or **Night** (the console's inks), remembered in the page.
+    Amber stays "you": the aircraft and the taxi route. The band is one swipeable row below 640 px.
 
 ### Later versions (agreed, in rough order)
 
