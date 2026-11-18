@@ -1366,9 +1366,15 @@ B. ✅ **The landing runway before the TOD** (2026-11-17, `atc/controller/arriva
    traffic moves the runway only to the other direction, never to the parallel. **Open for E:** with the real EDDM
    data LAND2B ends at MIQ, and the MIQ transition has no vectors; the LANDU transition (vectors from DM429) starts
    at the STAR's first fix. Which transition to choose must be decided in E.
-C. **No direct off the route**: the Center's shortcut only en route, before the TOD, never past the first fix of
+C. ✅ **No direct off the route** (2026-11-18, `atc/controller/air.py`): the Center's shortcut only en route, before the TOD, never past the first fix of
    the STAR, and only when the track left still leaves room for the descent. A pilot's "request direct" on the
    arrival only to a fix ahead on the STAR/transition.
+   Done: the shortcut picks among the route points up to the STAR's first fix, none after the descent, and only
+   when the track left after it is at least the top-of-descent distance. The pilot's direct en route: route points
+   up to the STAR's first fix ("unable direct Miq, not ahead on your route"); after the descent only the fixes ahead
+   on the STAR and transition cleared (Little Navmap), else the plan's STAR points ("unable direct Vesix, not
+   ahead on your arrival"). On the test route a direct to LANDU is still possible from ALOSO to TIPAM (116–170 nm
+   left, the descent at 98 nm).
 D. **Descent by the constraints**: the Center's descent planned so the aircraft meets the STAR's first constraint
    (LANDU FL100 or below, 250 kt). Approach then gives the transition's altitudes step by step ("descend altitude
    five thousand feet") and speeds ("reduce speed two two zero knots") in time before each fix. And it notices

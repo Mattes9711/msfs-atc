@@ -8,7 +8,7 @@ from atc.controller import readback as rb
 from atc.controller.give_way import traffic_name
 from atc.controller import vectors, wake
 from atc.sim.traffic import M_PER_NM, Traffic
-from atc.controller.arrival import plan_arrival, spoken_arrival
+from atc.controller.arrival import entry_fix, plan_arrival, spoken_arrival
 from atc.flightplan.route import first_fix
 from atc.flightplan.track import track_to_go_nm
 from atc.intent.schema import Intent
@@ -70,6 +70,27 @@ class AirMixin:
         return [w for w in self.plan.waypoints if w.leg != "sid"
                 and distance_nm(w.lat, w.lon, dest.lat, dest.lon) < to_go - 1]
 
+    def _en_route_ahead(self, state: AircraftState) -> list:
+        """The route points ahead up to the arrival's entry fix (LANDU), not past it: what Center may send the
+        aircraft direct to before the descent (Milestone 10 C)."""
+        points = [w for w in self.plan.waypoints if w.leg != "sid"]
+        entry = entry_fix(self.plan, self.procedures)
+        last = next((i for i, w in enumerate(points) if w.ident == entry), None)
+        en_route = {id(w) for w in (points if last is None else points[:last + 1]) if w.leg == "route"}
+        return [w for w in self._route_ahead(state) if id(w) in en_route]
+
+    def _arrival_ahead(self, state: AircraftState) -> set[str]:
+        """The fixes ahead on the arrival cleared with the descent: the STAR and the transition to the approach
+        from Little Navmap, else the plan's STAR points and its entry fix."""
+        dest = self.destination
+        to_go = distance_nm(state.lat, state.lon, dest.lat, dest.lon)
+        if self.arrival and self.arrival.star:
+            legs = self.arrival.star.legs + (self.arrival.transition.legs if self.arrival.transition else ())
+            return {leg.ident for leg in legs if leg.ident and leg.lat is not None
+                    and distance_nm(leg.lat, leg.lon, dest.lat, dest.lon) < to_go - 1}
+        entry = entry_fix(self.plan, self.procedures)
+        return {w.ident for w in self._route_ahead(state) if w.leg == "star" or w.ident == entry}
+
     def _center_check_in(self, station: Station, state: AircraftState) -> list[Response]:
         """First call to a Center: identified, the rest of the climb to the cruise level, and a direct-to: the
         farthest route point ahead within DIRECT_MAX_NM (a shortcut, as Center often gives)."""
@@ -86,14 +107,18 @@ class AirMixin:
         """A direct-to Center gives on the check-in, only as a real shortcut (Milestone 8, A2, the user: "1-2 real
         shortcuts a flight"; the test flight got one at every check-in, Zucka and Landu twice): of the route points
         ahead within DIRECT_MAX_NM the one that saves most against the way the aircraft flies now, at least
-        SHORTCUT_MIN_NM; at most SHORTCUTS a flight, never the fix already given, never into the STAR."""
-        if self.shortcuts >= SHORTCUTS or self.destination is None:
+        SHORTCUT_MIN_NM; at most SHORTCUTS a flight, never the fix already given.
+        Only en route (Milestone 10 C; the test flight got "direct Landu" at the Frankfurt check-in, which cut the
+        top of descent away): never after the descent, never past the STAR's first fix, and only when the track
+        left after it still reaches to the top of descent."""
+        if self.shortcuts >= SHORTCUTS or self.destination is None or self.descent_given:
             return None
         dest = (self.destination.lat, self.destination.lon)
-        now = self._track_to_go_nm(state)
-        saved = {w.ident: now - track_to_go_nm(self.plan.waypoints, dest, state.lat, state.lon, w.ident)
-                 for w in self._route_ahead(state) if w.leg == "route" and w.ident != self.direct_fix
-                 and distance_nm(state.lat, state.lon, w.lat, w.lon) <= DIRECT_MAX_NM}
+        now, room = self._track_to_go_nm(state), self._top_of_descent_nm(state)
+        left = {w.ident: track_to_go_nm(self.plan.waypoints, dest, state.lat, state.lon, w.ident)
+                for w in self._en_route_ahead(state) if w.ident != self.direct_fix
+                and distance_nm(state.lat, state.lon, w.lat, w.lon) <= DIRECT_MAX_NM}
+        saved = {fix: now - miles for fix, miles in left.items() if miles >= room}
         fix = max(saved, key=saved.get, default=None)
         if fix is None or saved[fix] < SHORTCUT_MIN_NM:
             return None
@@ -115,13 +140,20 @@ class AirMixin:
         return [self._say(station, f"{self.cs}, {item.phrase}")]
 
     def _direct_request(self, intent: Intent, station: Station, state: AircraftState) -> list[Response]:
-        """Direct to a waypoint of the plan that is still ahead. Without waypoints (manual plan) any fix written in
-        the route is accepted, because there are no positions to check."""
+        """Direct to a waypoint of the plan that is still ahead: en route a route point up to the STAR's first fix,
+        after the descent only a fix ahead on the arrival cleared (Milestone 10 C: not off the arrival route).
+        Without waypoints (manual plan) any fix written in the route is accepted: there are no positions to check."""
         fix = intent.items["direct"]
-        known = ({w.ident for w in self._route_ahead(state)} if self.plan.waypoints
-                 else set(self.plan.route.upper().split()))
+        on_arrival = self.descent_given and self.destination is not None
+        if not self.plan.waypoints:
+            known = set(self.plan.route.upper().split())
+        elif on_arrival:
+            known = self._arrival_ahead(state)
+        else:
+            known = {w.ident for w in self._en_route_ahead(state)}
         if fix not in known:
-            return [self._say(station, f"{self.cs}, unable direct {fix.title()}, not ahead on your route")]
+            where = "arrival" if on_arrival and self.plan.waypoints else "route"
+            return [self._say(station, f"{self.cs}, unable direct {fix.title()}, not ahead on your {where}")]
         item = rb.direct(fix)
         self._set_pending([item], station.key)
         return [self._say(station, f"{self.cs}, {item.phrase}")]
