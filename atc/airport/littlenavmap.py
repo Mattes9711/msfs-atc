@@ -9,7 +9,7 @@ import math
 import sqlite3
 from pathlib import Path
 
-from atc.airport.geo import M_PER_DEG_LAT, distance_nm, point_in_polygon
+from atc.airport.geo import M_PER_DEG_LAT, distance_nm, point_in_polygon, segment_distance_nm
 from atc.airport.model import Airport, ControlZone, Frequency, Ils, Parking, Runway, RunwayEnd, TaxiPath, VfrPoint
 from atc.airport.procedures import Procedures, load_procedures
 from atc.airspace.littlenavmap import decode_polygon
@@ -56,6 +56,21 @@ class LittleNavmapAirportData:
         found = [(distance_nm(lat, lon, r["laty"], r["lonx"]), r["ident"]) for r in rows]
         found = [f for f in found if f[0] <= max_nm]
         return min(found)[1] if found else None
+
+    def towered_near(self, a: tuple[float, float], b: tuple[float, float], max_nm: float) -> list[str]:
+        dlat = max_nm * 1852 / M_PER_DEG_LAT
+        dlon = dlat / max(0.01, math.cos(math.radians(max(abs(a[0]), abs(b[0])))))
+        con = self._connect()
+        try:
+            rows = con.execute(
+                "select ident, laty, lonx from airport where laty between ? and ? and lonx between ? and ? "
+                "and exists (select 1 from com c where c.airport_id = airport.airport_id and c.type = 'T') "
+                "order by ident",
+                (min(a[0], b[0]) - dlat, max(a[0], b[0]) + dlat, min(a[1], b[1]) - dlon, max(a[1], b[1]) + dlon),
+            ).fetchall()
+        finally:
+            con.close()
+        return [r["ident"] for r in rows if segment_distance_nm(r["laty"], r["lonx"], a, b) <= max_nm]
 
     def _connect(self) -> sqlite3.Connection:
         con = sqlite3.connect(f"file:{self.db_path.as_posix()}?mode=ro", uri=True)

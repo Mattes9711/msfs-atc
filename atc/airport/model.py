@@ -146,3 +146,6 @@ class AirportData(Protocol):
 
     def nearest(self, lat: float, lon: float, max_nm: float) -> str | None:
         """Ident of the closest airport with a runway, measured to its reference point, or None."""
+
+    def towered_near(self, a: tuple[float, float], b: tuple[float, float], max_nm: float) -> list[str]:
+        """Idents of the airports with a Tower whose reference point is within max_nm of the line a-b (lat, lon)."""

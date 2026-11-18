@@ -1314,6 +1314,21 @@ E2. ✅ Arrival: within 15 NM the call is for the destination's Tower; "… 12 m
     new group "Control zone (VFR)". Tests: `tests/test_vfr_controlled.py`. Smoke tests EDHL → EDHE (out via
     Whiskey) and EDHE → EDHL (in via Whiskey, downwind, final, landed) offline.
 E3. Crossing a control zone ("request crossing of the control zone from November to Sierra").
+    User (2026-11-18): the zones from the line origin → destination, loaded at the start; a suggestion 10 NM before
+    the zone and an unspoken hint on entering without a clearance; an entry in the Phrases tab's zone group.
+    E3a. ✅ At the start (VFR with a destination) the fields with a Tower within 15 NM of the straight line
+         (`towered_near` in both sources), of them those whose CD zone comes within 2 NM of the line or crosses
+         it, one field per zone (the longest runway: Finkenwerder lies in Hamburg's zone), not the zones of origin
+         and destination. Uetersen → Lübeck: Hamburg; Sylt → Lübeck: Schleswig, Hohn. Their Tower: "request
+         crossing of the control zone from Sierra to November" → "cleared to cross the control zone via Sierra and
+         November, one thousand five hundred feet or below, report Sierra"; points not named (or unknown): the one
+         toward the aircraft in, the one toward the destination out; without points "from the south to the
+         north … report leaving the control zone". At the entry point (reported or passed) "roger, report
+         November"; at the exit point or out of the zone after being in it "leaving the control zone, frequency
+         change approved". "check altitude" as in E1. The request on another station: "contact Victor Tower …".
+         No QNH (no METAR of that field), the exit point not checked in the readback, only the straight line (no
+         VFR route). Tests: `tests/test_vfr_crossing.py`.
+    E3b. The suggestion 10 NM before the zone, the hint without a clearance, the Phrases entry, the panel.
 
 **Open questions (❓, answers first):**
 1. Language: English only, as today (BZF I phraseology), or German too (BZF II, what most ultralight pilots use at

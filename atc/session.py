@@ -21,6 +21,7 @@ VATSIM_SOURCE = "VATSIM data (Germany)"
 from atc import paths
 from atc.config import Config
 from atc.controller.controller import Controller, frequency_list
+from atc.controller.vfr import ZONE_SEARCH_NM, zones_along
 from atc.flightplan.model import FlightPlan
 from atc.flightplan.simbrief import SimbriefError, load_simbrief
 from atc.sim.base import SimSource
@@ -191,7 +192,8 @@ def build_session(request: PlanRequest, options: SessionOptions, config: Config,
     controller = Controller(airport, plan, metar, strict_freq=options.strict_freq, destination=destination,
                             destination_metar=dest_metar, centers=centers, chatter=config.traffic.chatter,
                             strict_readback=config.atc.strict_readback,
-                            procedures=find_procedures(sources, destination.ident) if destination else None)
+                            procedures=find_procedures(sources, destination.ident) if destination else None,
+                            crossing_fields=crossing_fields(sources, plan, airport, destination))
     return Session(config, options, plan, plan_source, airport, source_name, destination, metar, dest_metar,
                    centers, sim, controller, weather, notices, winds)
 
@@ -307,6 +309,17 @@ def find_airport(sources: list[AirportData], ident: str) -> tuple[Airport, str] 
         if airport := source.get(ident):
             return airport, source.name
     return None
+
+
+def crossing_fields(sources: list[AirportData], plan: FlightPlan, origin: Airport,
+                    destination: Airport | None) -> tuple[Airport, ...]:
+    """VFR: the other fields whose control zone lies on the straight line (Milestone 9 E3)."""
+    if plan.rules != "VFR" or destination is None or destination.ident == origin.ident:
+        return ()
+    a, b = (origin.lat, origin.lon), (destination.lat, destination.lon)
+    idents = sorted({i for s in sources if hasattr(s, "towered_near") for i in s.towered_near(a, b, ZONE_SEARCH_NM)})
+    fields = [found[0] for i in idents if (found := find_airport(sources, i))]
+    return zones_along(fields, origin, destination)
 
 
 def find_procedures(sources: list[AirportData], ident: str):

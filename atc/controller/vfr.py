@@ -18,12 +18,19 @@ inside the zone, and whether the point was passed.
                 "joining" told to join downwind, downwind not yet reported
                 "final_due" downwind reported, final not yet
                 "final"  on final: the landing clearance follows (or "continue approach")
+                "crossing" cleared through another field's zone (E3), not out of it again yet
+
+Crossing (E3): a zone of another field on the way (zones_along, loaded at the start). Its Tower: "request crossing of
+the control zone from November to Sierra" gets "cleared to cross the control zone via November and Sierra, one
+thousand five hundred feet or below, report November"; at November "report Sierra"; at Sierra (or out of the zone)
+"leaving the control zone, frequency change approved". A point the pilot doesn't name (or the field doesn't have):
+the one toward the aircraft to enter by, the one toward the destination to leave by.
 """
 import math
 import re
 from dataclasses import dataclass
 
-from atc.airport.geo import bearing_deg, distance_nm, point_in_polygon
+from atc.airport.geo import bearing_deg, distance_nm, point_in_polygon, segment_distance_nm, segments_cross
 from atc.airport.model import Airport, VfrPoint
 from atc.controller import readback as rb
 from atc.controller.circuit import circuit_leg, circuit_side, leg_words
@@ -38,6 +45,8 @@ PASSED_MARGIN_NM = 0.5
 ALTITUDE_MARGIN_FT = 300  # above the limit by more than this: "check altitude"
 COMPASS = ("north", "east", "south", "west")
 ZONE_STAGES = ("in", "joining", "final_due", "final")
+ZONE_SEARCH_NM = 15  # fields this close to the line origin-destination may have a zone on the way (E3)
+ZONE_NEAR_NM = 2  # a zone this close to the line is on the way
 
 
 @dataclass(frozen=True)
@@ -119,6 +128,49 @@ def zone_point(airport: Airport, lat: float, lon: float) -> ZonePoint:
     return ZonePoint(side.upper(), side, None)
 
 
+def named_point(airport: Airport, code: str | None) -> ZonePoint | None:
+    """The point the pilot named, if the field has it (of N1 and N2 the one farther out); a direction only at a
+    field without points."""
+    if not code:
+        return None
+    if not airport.vfr_points:
+        return ZonePoint(code, code.lower(), None) if code.lower() in COMPASS else None
+    found = [p for p in airport.vfr_points if point_code(p.ident) == code]
+    if not found:
+        return None
+    p = max(found, key=lambda p: distance_nm(airport.lat, airport.lon, p.lat, p.lon))
+    return ZonePoint(code, point_words(p.ident), p)
+
+
+def zones_along(fields, origin: Airport, dest: Airport) -> tuple[Airport, ...]:
+    """The fields whose control zone is on the way from origin to dest (E3), nearest first, one per zone: the
+    zone's own field, the one with the longest runway (Finkenwerder lies in Hamburg's zone). Not the zones of
+    origin and destination."""
+    a, b = (origin.lat, origin.lon), (dest.lat, dest.lon)
+    ends = {z.polygon for z in (origin.control_zone, dest.control_zone) if z}
+    owners: dict = {}
+    for f in fields:
+        zone = f.control_zone
+        if (zone is None or tuple(zone.polygon) in ends or f.ident in (origin.ident, dest.ident)
+                or not _has_tower(f) or not _on_the_way(zone.polygon, a, b)):
+            continue
+        held = owners.get(tuple(zone.polygon))
+        if held is None or _longest(f) > _longest(held):
+            owners[tuple(zone.polygon)] = f
+    return tuple(sorted(owners.values(), key=lambda f: distance_nm(*a, f.lat, f.lon)))
+
+
+def _longest(airport: Airport) -> float:
+    return max((r.length_ft for r in airport.runways), default=0)
+
+
+def _on_the_way(polygon, a: tuple[float, float], b: tuple[float, float]) -> bool:
+    poly = list(polygon)
+    return (any(segment_distance_nm(lat, lon, a, b) <= ZONE_NEAR_NM for lat, lon in poly)
+            or any(segments_cross(a, b, p, q) for p, q in zip(poly, poly[1:] + poly[:1]))
+            or point_in_polygon(*a, poly))
+
+
 def _has_tower(airport: Airport | None) -> bool:
     return airport is not None and any(f.type == "T" for f in airport.frequencies)
 
@@ -170,6 +222,7 @@ class VfrMixin:
 
     def _ctr_leave(self, station: Station, state: AircraftState | None = None) -> list[Response]:
         self.phase, self.ctr_stage, self.ctr_point = "enroute", None, None
+        self.crossing, self.ctr_exit, self.ctr_entered = None, None, False
         text = f"{self.cs}, leaving the control zone, frequency change approved"
         return self._transmit(station, text, state) if state else [self._say(station, text)]
 
@@ -248,6 +301,83 @@ class VfrMixin:
     def _ctr_final(self, station: Station, state: AircraftState, called: bool = False) -> list[Response]:
         self.phase, self.ctr_stage = "final", "final"
         return self._final_call(station, state, auto=not called)
+
+    # --- crossing (E3) ------------------------------------------------------------------------------------------
+
+    def _zone_tower(self, airport: Airport) -> Station | None:
+        towers = [f for f in airport.frequencies if f.type == "T"]
+        return Station(airport.ident, min(towers, key=lambda f: f.khz)) if towers else None
+
+    def _crossing_field(self, station: Station) -> Airport | None:
+        return next((a for a in self.crossing_fields if a.ident == station.ident and station.freq.type == "T"), None)
+
+    def _crossing_call(self, intent, station: Station, state: AircraftState) -> list[Response] | None:
+        """A call to the Tower of a zone on the way; None: not one, the usual answers."""
+        if not self.vfr or state.on_ground or self.phase not in ("airborne", "climb", "enroute"):
+            return None
+        field, kind = self._crossing_field(station), intent.kind
+        if field is None:
+            if kind != "request_crossing" or self.ctr_stage is not None or not self.crossing_fields:
+                return None
+            ahead = min(self.crossing_fields, key=lambda a: distance_nm(state.lat, state.lon, a.lat, a.lon))
+            return self._redirect(station, self._zone_tower(ahead), "tower")  # the wrong station: whose zone it is
+        if self.ctr_stage is None:
+            if kind == "request_crossing":
+                return self._crossing_clearance(intent, field, station, state)
+            if kind in ("checkin", "inbound", "point_report"):
+                return [self._say(station, f"{self.cs}, {station.name}, go ahead")]
+            return None
+        if self.ctr_stage != "crossing" or self.crossing is not field:
+            return None
+        if kind in ("acknowledge", "readback"):
+            return []
+        if kind == "unknown":
+            return [self._say(station, f"{self.cs}, say again")]
+        said = intent.items.get("vfr_point", "")
+        if kind == "leaving_frequency" or (kind == "point_report" and said in ("", self.ctr_exit.code)):
+            return self._ctr_leave(station)
+        if kind == "point_report" and said == self.ctr_point.code:
+            self._crossing_next()
+        return [self._say(station, f"{self.cs}, roger, {self._ctr_report_text()}")]
+
+    def _crossing_clearance(self, intent, field: Airport, station: Station, state: AircraftState) -> list[Response]:
+        """"cleared to cross the control zone via November and Sierra, one thousand five hundred feet or below,
+        report November"."""
+        dest = self.destination
+        entry = named_point(field, intent.items.get("vfr_point")) or zone_point(field, state.lat, state.lon)
+        exit_ = named_point(field, intent.items.get("vfr_exit")) or zone_point(field, dest.lat, dest.lon)
+        self.crossing, self.ctr_point, self.ctr_exit = field, entry, exit_
+        self.ctr_stage, self.ctr_closest, self.ctr_altitude_told, self.ctr_entered = "crossing", math.inf, False, False
+        how = (f"via {entry.words} and {exit_.words}" if entry.point and exit_.point
+               else f"from the {entry.words} to the {exit_.words}")
+        limit = ctr_limit_ft(field)
+        items = [rb.Item("vfr_point", entry.code, f"cleared to cross the control zone {how}"),
+                 rb.Item("altitude_ft", limit, f"{spoken.altitude(limit)} or below")]
+        self._set_pending(items, station.key)
+        return [self._say(station, f"{self.cs}, {station.name}, {rb.instruction_text(items)}, "
+                                   f"{self._ctr_report_text()}")]
+
+    def _crossing_next(self) -> None:
+        """The entry point reached: from now on the exit point."""
+        if self.ctr_point is not self.ctr_exit:
+            self.ctr_point, self.ctr_closest = self.ctr_exit, math.inf
+
+    def _crossing_tick(self, state: AircraftState) -> list[Response]:
+        if self.pending and not all(i.key == "frequency_khz" for i in self.pending):
+            return []  # the crossing clearance not read back yet
+        field = self.crossing
+        tower = self._zone_tower(field)
+        inside = in_zone(field, state.lat, state.lon, state.alt_msl_ft)
+        if check := self._ctr_altitude_check(field, tower, inside, state):
+            return check
+        self.ctr_entered = self.ctr_entered or inside
+        if self._ctr_passed(state):
+            if self.ctr_point is self.ctr_exit:
+                return self._ctr_leave(tower, state)
+            self._crossing_next()
+        if self.ctr_entered and not inside:
+            return self._ctr_leave(tower, state)
+        return []
 
     # --- both ---------------------------------------------------------------------------------------------------
 

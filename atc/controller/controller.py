@@ -57,7 +57,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
     def __init__(self, airport: Airport, plan: FlightPlan, metar: Metar | None, strict_freq: bool = False,
                  destination: Airport | None = None, destination_metar: Metar | None = None,
                  rng: random.Random | None = None, centers: CenterSectors | None = None, chatter: bool = True,
-                 strict_readback: bool = False, procedures: Procedures | None = None):
+                 strict_readback: bool = False, procedures: Procedures | None = None,
+                 crossing_fields: tuple[Airport, ...] = ()):
         self.airport = airport
         self.plan = plan
         self.metar = metar
@@ -197,6 +198,12 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
         self.ctr_point = None
         self.ctr_closest = float("inf")
         self.ctr_altitude_told = False
+        # Crossing another field's zone (E3): the fields with a zone on the way, the one being crossed, the point to
+        # leave it by (ctr_point is the next point to report), whether the aircraft was inside yet
+        self.crossing_fields = crossing_fields
+        self.crossing: Airport | None = None
+        self.ctr_exit = None
+        self.ctr_entered = False
         self.dest_atis = Atis(destination) if destination else None
         if self.dest_atis:
             self.dest_atis.update(destination_metar, self.arrival_runway)
@@ -352,6 +359,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
         # The previous Center too (D1): it handed over and waits for the readback, while self.center is already the
         # next one; without it the co-pilot saw no readback due, only a check-in, and never tuned: stuck for good
         candidates = [self.station(role) for role in ROLES] + [self.center, self.previous_center]
+        candidates += [self._zone_tower(a) for a in self.crossing_fields]
         return next((s for s in candidates if s is not None and s.key == key), None)
 
     def current_airport(self) -> Airport:
@@ -396,6 +404,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
                 return reminder
         if self.ctr_stage == "out" and (out := self._ctr_tick(state)) is not None:
             return out  # leaving the origin's control zone (Milestone 9 E)
+        if self.ctr_stage == "crossing":
+            return self._crossing_tick(state)  # through another field's zone (E3)
         if (info := self._info_tick(state)) is not None:
             return info  # at an uncontrolled field (Milestone 9 B)
         if self.pending and not all(i.key == "frequency_khz" for i in self.pending):
@@ -486,6 +496,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
                 self._set_pending(())  # handed off and the pilot switched: that counts
         if info_here:
             return self._info_call(intent, station, state)  # Info informs, it doesn't clear (Milestone 9 B)
+        if (crossing := self._crossing_call(intent, station, state)) is not None:
+            return crossing  # through another field's control zone (Milestone 9 E3)
         if intent.kind == "request_other":  # a request ATC doesn't know: always an answer (C3, "ground services")
             return [self._say(station, f"{self.cs}, say again")]
         role = self._role_for(intent)
@@ -727,8 +739,9 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
     # --- helpers ----------------------------------------------------------------------------------------------
 
     def station_at(self, khz: int) -> Station | None:
-        """The controller on this frequency: airport stations of origin and destination, and Center sectors."""
-        found = [Station(a.ident, f) for a in (self.airport, self.destination) if a
+        """The controller on this frequency: airport stations of origin, destination and the zones on the way, and
+        Center sectors."""
+        found = [Station(a.ident, f) for a in (self.airport, self.destination, *self.crossing_fields) if a
                  for f in a.frequencies if f.khz == khz and f.station]
         found += [center_station(s) for s in self.centers.on_frequency(khz) if self._near(s)]
         if not found:

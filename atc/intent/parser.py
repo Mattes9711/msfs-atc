@@ -217,10 +217,12 @@ def extract_items(tokens: list[str], t: str) -> dict:
     if taxiways := _taxiways(tokens):
         items["taxiways"] = taxiways
     # "leave the control zone via November", "enter the control zone via S1", "... to the north" (Milestone 9 E):
-    # the point, not a taxi route
+    # the point, not a taxi route. Crossing a zone (E3): "from November to Sierra", "via November and Sierra".
     if re.search(r"\b(?:control zone|ctr)\b", t):
-        if m := re.search(r"\bvia (?:point )?([a-z][a-z0-9]*)(?: (\d{1,2})\b)?", t):
-            items["vfr_point"] = point_code(m[1], m[2])
+        if m := re.search(rf"\b(?:via|from) {ZONE_POINT}(?: (?:and|to) {ZONE_POINT})?", t):
+            items["vfr_point"] = zone_point_code(m[1], m[2], m[3])
+            if m[4] or m[5]:
+                items["vfr_exit"] = zone_point_code(m[4], m[5], m[6])
             items.pop("taxiways", None)
         elif m := re.search(r"\b(?:to|from) the (north|east|south|west)\b", t):
             items["vfr_point"] = m[1].upper()
@@ -243,6 +245,14 @@ def extract_items(tokens: list[str], t: str) -> dict:
     if m := re.search(r"\b(?:intersection|from) (?:departure )?([a-z]) ?(\d{1,2})\b", t):
         items["intersection"] = f"{m[1].upper()}{m[2]}"
     return items
+
+
+# A point in a zone clearance or request: "n 1", "point ewest", or a direction, "the north"
+ZONE_POINT = r"(?:point )?(?:the (north|east|south|west)\b|(?!the\b)([a-z][a-z0-9]*)(?: (\d{1,2})\b)?)"
+
+
+def zone_point_code(direction: str | None, word: str | None, number: str | None) -> str:
+    return direction.upper() if direction else point_code(word, number)
 
 
 def point_code(word: str, number: str | None = None) -> str:
@@ -312,6 +322,8 @@ def classify(t: str, items: dict) -> str:
     # At a runway crossing (or the departure runway): "holding short runway 05", "ready to cross runway 05",
     # "request crossing runway 05". A readback of "cross runway 05" ("crossing runway 05") is not one, and a
     # readback of a taxi clearance that ends in "holding short runway 05" has taxiways in it.
+    if re.search(r"\brequest(?:ing)? (?:to )?cross(?:ing)? (?:of )?(?:the )?(?:control zone|ctr)\b", t):
+        return "request_crossing"  # through a control zone (Milestone 9 E3), not a runway
     if (re.search(r"\bholding short\b|\bready to cross\b|\brequest(?:ing)? (?:to )?cross(?:ing)?\b", t)
             and "taxiways" not in items):
         return "holding_short"

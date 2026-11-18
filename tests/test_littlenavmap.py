@@ -82,6 +82,16 @@ def test_nearest_airport_needs_a_runway_and_the_distance(lnm):
     assert lnm.nearest(50.011, 8.011, 5) == "EXMP"
 
 
+def test_towered_fields_near_a_line(lnm):
+    con = sqlite3.connect(lnm.db_path)
+    con.execute("insert into airport values (2, 'EXUN', 'NO TOWER', 50.0, 8.1, 300, 2.5)")  # Info only
+    con.execute("insert into com values (2, 'CTAF', 122600000, 'NO TOWER')")
+    con.commit()
+    con.close()
+    assert lnm.towered_near((49.0, 7.9), (51.0, 7.9), 10) == ["EXMP"]  # 3.9 nm beside the line
+    assert lnm.towered_near((49.0, 7.0), (51.0, 7.0), 10) == []  # 39 nm
+
+
 def test_unknown_airport_is_none(lnm):
     assert lnm.get("ZZZZ") is None
 

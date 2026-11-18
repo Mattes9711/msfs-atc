@@ -8,6 +8,7 @@ KINDS = (
     "confirm", "going_around", "vacated", "checkin", "readback", "acknowledge",
     "leaving_frequency", "inbound", "on_final", "circuit_report",  # calls at a small field (Milestone 9 B, C)
     "point_report",  # over a visual reporting point, or leaving the control zone (Milestone 9 E)
+    "request_crossing",  # "request crossing of the control zone from November to Sierra" (Milestone 9 E3)
     "radio_check", "say_again", "unknown",
 )
 
@@ -33,6 +34,7 @@ ITEMS = {
     "hold_position": bool,  # "hold position" read back ("holding position")
     "progressive": bool,  # "request progressive taxi": Ground calls each turn
     "vfr_point": str,  # a visual reporting point: "N", "S1", "EWEST", or a direction out of the zone: "NORTH"
+    "vfr_exit": str,  # crossing a control zone: the point to leave it by, "S" (the entry is vfr_point)
 }
 
 

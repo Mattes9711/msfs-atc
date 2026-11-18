@@ -58,6 +58,12 @@ def point_segment_distance(p: Point, a: Point, b: Point) -> float:
     return distance(p, (a[0] + t * ab[0], a[1] + t * ab[1]))
 
 
+def segment_distance_nm(lat: float, lon: float, a: tuple[float, float], b: tuple[float, float]) -> float:
+    """How far (lat, lon) is from the line a-b, flat around the point: fine up to a few hundred nm."""
+    proj = LocalProjection(lat, lon)
+    return point_segment_distance((0.0, 0.0), proj.xy(*a), proj.xy(*b)) / 1852
+
+
 def segments_cross(p1: Point, p2: Point, q1: Point, q2: Point) -> bool:
     """True if the two segments intersect (touching counts)."""
     def side(a: Point, b: Point, c: Point) -> float:

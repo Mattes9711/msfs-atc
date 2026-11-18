@@ -1,6 +1,6 @@
 import json
 
-from atc.airport.geo import distance_nm
+from atc.airport.geo import distance_nm, segment_distance_nm
 from pathlib import Path
 
 from atc.airport.model import Airport, ControlZone, Frequency, Ils, Parking, Runway, RunwayEnd, TaxiPath, VfrPoint
@@ -29,6 +29,11 @@ class JsonAirportData:
                  for a in map(self.get, (p.stem for p in sorted(self.directory.glob("*.json")))) if a and a.runways]
         found = [f for f in found if f[0] <= max_nm]
         return min(found)[1] if found else None
+
+    def towered_near(self, a: tuple[float, float], b: tuple[float, float], max_nm: float) -> list[str]:
+        found = map(self.get, (p.stem for p in sorted(self.directory.glob("*.json"))))
+        return [x.ident for x in found if x and any(f.type == "T" for f in x.frequencies)
+                and segment_distance_nm(x.lat, x.lon, a, b) <= max_nm]
 
     def save(self, airport: Airport) -> Path:
         self.directory.mkdir(parents=True, exist_ok=True)
