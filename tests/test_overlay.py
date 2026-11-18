@@ -13,6 +13,7 @@ class FakeWindow:
     def __init__(self):
         self.shown = 0
         self.hidden = 0
+        self.size = None
         self.events = SimpleNamespace(moved=Hooks())
 
     def show(self):
@@ -20,6 +21,9 @@ class FakeWindow:
 
     def hide(self):
         self.hidden += 1
+
+    def resize(self, width, height):
+        self.size = (width, height)
 
 
 class Hooks(list):
@@ -65,6 +69,7 @@ def test_overlay_shown_during_a_flight_and_remembered(server, tmp_path):
     app.overlay = o = overlay(tmp_path)
     assert post(base + "/api/start", PLAN)[0] == 200
     assert o.window.shown == 1  # wanted: shown with the flight
+    assert o.window.size == SIZE  # sized again once shown: pywebview's first size includes the frame it drops
     assert json.loads(get(base + "/api/status")[2])["overlay"] is True
     assert post(base + "/api/overlay", {"visible": False}) == (200, {"visible": False})
     assert o.window.hidden == 1 and json.loads((tmp_path / "overlay.json").read_text()) == {

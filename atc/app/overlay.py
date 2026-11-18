@@ -60,6 +60,9 @@ class Overlay:
     def show(self) -> None:
         if self.window is not None:
             self.window.show()
+            # pywebview sizes the window with its frame and only then drops the frame: the page is the frame
+            # smaller (324 x 193 instead of 340 x 232) and the say box is cut off. Sized again, it is the page.
+            self.window.resize(*SIZE)
 
     def hide(self) -> None:
         if self.window is not None:
