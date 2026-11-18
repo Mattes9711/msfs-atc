@@ -33,7 +33,7 @@ from atc.units import format_khz
 from atc.airport.procedures import Procedures
 from atc.weather.metar import Metar
 from atc.weather.runway_choice import choose_runway
-from atc.controller.common import (AIRBORNE_AGL_FT, APPROACH_HANDOFF_NM, CALL_KINDS, NEAR_HOLDING_POINT_M, PHASES,
+from atc.controller.common import (AIR_PHASES, AIRBORNE_AGL_FT, APPROACH_HANDOFF_NM, CALL_KINDS, NEAR_HOLDING_POINT_M, PHASES,
                                    PHASE_ROLE, READBACK_REMINDER_S, RESERVED_SQUAWKS, ROLES, SECTOR_NEAR_DEG,
                                    CIRCUIT_NM, INFO_CALL_NM, TOWER_HANDOFF_NM, VFR_SQUAWK,
                                    VACATE_SPEED_KT, Response, Station, _wind, center_station, describe_intent,
@@ -155,6 +155,10 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
         self.speed_gap = 0.0  # the gap to it when we were last told to slow down
         self.runway_change: str | None = None  # landing runway changed after the STAR was given: tell the pilot (B3)
         self.star_changed = False  # ... and with it the STAR (Milestone 10 B): the new one is said
+        self.arrival_preview = None  # the arrival as planned before the descent, for its constraints (Milestone 10 D)
+        # The last descent given, watched until the aircraft is down (Milestone 10 D): (target ft, the item, (time,
+        # altitude) when it last lost 300 ft, asked "confirm descending")
+        self.descent_watch: tuple | None = None
         self.copilot_on = False  # the co-pilot has the radio (C2)
         self.direct_fix: str | None = None  # the last fix ATC cleared the aircraft direct to (A1)
         self.approach_cleared = False  # cleared for the approach: the landing runway stays (B1)
@@ -384,6 +388,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
             return []  # waiting for a readback before the next instruction
         if waited := self._traffic_waits(state):
             return waited
+        if self.phase in AIR_PHASES and (check := self._descent_check(state, now)):
+            return check
         if (zone := self._ctr_tick(state)) is not None:
             return zone  # into the destination's control zone (Milestone 9 E)
         if self.phase == "taxi":
@@ -613,6 +619,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
                 self.cleared_level = f"FL{item.value:03d}"
             elif item.key == "altitude_ft":
                 self.cleared_level = f"{item.value} FT"
+            if item.key in ("flight_level", "altitude_ft"):
+                self._watch_descent(item)
 
     def _check_readback(self, intent: Intent, station: Station, state: AircraftState) -> list[Response]:
         if intent.kind != "readback" and all(i.key == "frequency_khz" for i in self.pending):

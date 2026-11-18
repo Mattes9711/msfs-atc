@@ -21,7 +21,7 @@ def arriving(eddh, eddm):
     return s
 
 
-def at(s, eddm, along, across, heading_true, alt=5000):
+def at(s, eddm, along, across, heading_true, alt=4500):  # at the approach altitude
     """Put the aircraft into the final's frame: along nm out in front of the threshold, across nm to its left."""
     end = eddm.runway_end(s.atc.arrival_runway)
     lat, lon = vectors.point(end, along, across)

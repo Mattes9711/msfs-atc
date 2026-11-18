@@ -41,6 +41,9 @@ GO_AROUND_BELOW_AGL_FT, GO_AROUND_CLIMB_FT = 300, 200  # low on final, then clim
 RESERVED_SQUAWKS = {"1000", "1200", "2000", "7000"}  # 75xx/76xx/77xx can't occur: first digit is 1-6
 INTERSECTION_MARGIN_M = 60  # a taxiway end this far beside the runway edge still leads onto it
 READBACK_REMINDER_S = 20
+# "confirm descending" (Milestone 10 D): asked once when the aircraft hasn't lost DESCENDING_FT in DESCENT_CHECK_S
+# since the descent was read back (or since it last did); within LEVEL_REACHED_FT of the level it is there
+DESCENT_CHECK_S, DESCENDING_FT, LEVEL_REACHED_FT = 90, 300, 300
 PUSH_BEHIND_M = 150  # a taxiing aircraft this close behind the stand holds the pushback (L3)
 STOPPED_BEHIND_M = 80  # one standing still this close behind, off the stands, holds it too (B2)
 AT_STAND_M = 25  # an aircraft this close to a parking position is parked there, not in the way

@@ -16,7 +16,8 @@ from atc.phraseology import spoken
 from atc.sim.base import AircraftState
 from atc.units import format_khz
 from atc.controller.common import (APPROACH_SPEED_KT, CENTER_HANDOFF_FT, CENTER_HANDOFF_NM, CLOSE_PARALLEL_M,
-                                   CLOSING_KT, DEPARTURE_CEILING_FL, DESCENT_ALTITUDE_FT, DESCENT_FL, DESCENT_LEAD_NM,
+                                   CLOSING_KT, DEPARTURE_CEILING_FL, DESCENT_CHECK_S, DESCENDING_FT,
+                                   LEVEL_REACHED_FT, DESCENT_ALTITUDE_FT, DESCENT_FL, DESCENT_LEAD_NM,
                                    DESCENT_MARGIN_NM, DIRECT_MAX_NM, FINAL_CONE_DEG, FINAL_CONE_NM, FINAL_FIX_NM,
                                    FINAL_SPEED_KT, GAP_SHRINK_NM, INTERCEPT_ANGLE, MAX_FL,
                                    ON_COURSE_DEG, PATTERN_AGL_FT, PATTERN_NM, SHORTCUTS, SHORTCUT_MIN_NM,
@@ -215,9 +216,40 @@ class AirMixin:
             top = max(state.alt_msl_ft, planned or 0)  # already lower: the point must not move back
             tod = track_to_go_nm(self.plan.waypoints, (self.destination.lat, self.destination.lon), *self.plan.tod)
             above = (top - (planned or top)) / 1000 * 3
-            return max(0.0, tod + above) + DESCENT_LEAD_NM
+            return max(max(0.0, tod + above) + DESCENT_LEAD_NM, self._constraint_descent_nm(state))
         top = max(state.alt_msl_ft, self.plan.cruise_ft or 0)
-        return max(0.0, top - DESCENT_ALTITUDE_FT) / 1000 * 3 + DESCENT_MARGIN_NM
+        return max(max(0.0, top - DESCENT_ALTITUDE_FT) / 1000 * 3 + DESCENT_MARGIN_NM,
+                   self._constraint_descent_nm(state))
+
+    def _expected_arrival(self):
+        """The arrival as it would be planned now for the landing runway (fixed with the descent, Milestone 10 B);
+        None without Little Navmap's procedures. Kept until the runway or the procedures change."""
+        if self.arrival is not None or self.procedures is None or self.destination is None:
+            return self.arrival
+        runway, procedures, arrival = self.arrival_preview or (None, None, None)
+        if arrival is None or runway != self.arrival_runway or procedures is not self.procedures:
+            arrival = plan_arrival(self.destination, self.arrival_runway, self.plan, self.procedures)
+            self.arrival_preview = (self.arrival_runway, self.procedures, arrival)
+        return arrival
+
+    def _constraint_descent_nm(self, state: AircraftState) -> float:
+        """Track miles to go at which the descent must come to meet the STAR's "at or below" constraints (Milestone
+        10 D: LANDU at or below FL100), by the 3-in-1 rule from the level flown now, plus DESCENT_LEAD_NM."""
+        arrival = self._expected_arrival()
+        if arrival is None or arrival.star is None:
+            return 0.0
+        dest, top = (self.destination.lat, self.destination.lon), max(state.alt_msl_ft, self.plan.cruise_ft or 0)
+        need = [track_to_go_nm(self.plan.waypoints, dest, leg.lat, leg.lon) + (top - leg.ceiling_ft) / 1000 * 3
+                for leg in arrival.star.legs if leg.ceiling_ft and leg.lat is not None and top > leg.ceiling_ft]
+        return max(need) + DESCENT_LEAD_NM if need else 0.0
+
+    def _descent_level_ft(self) -> int:
+        """Center's descent: to FL100, lower when the STAR's first fix must be crossed lower (Milestone 10 D)."""
+        arrival = self._expected_arrival()
+        first = arrival.star.legs[0] if arrival and arrival.star and arrival.star.legs else None
+        if first is None or not first.ceiling_ft:
+            return DESCENT_FL * 100
+        return min(DESCENT_FL * 100, first.ceiling_ft // 100 * 100)
 
     def _descent(self, station: Station | None, state: AircraftState) -> list[Response]:
         if self.descent_given or self.destination is None or station is None:
@@ -226,9 +258,10 @@ class AirMixin:
         # The landing runway is fixed now, with the STAR and the approach that fit it (Milestone 10 B)
         self.arrival = plan_arrival(self.destination, self.arrival_runway, self.plan, self.procedures)
         star = spoken_arrival(self.arrival, self.plan)
-        if state.alt_msl_ft > DESCENT_FL * 100 + 1000:
+        level_ft = self._descent_level_ft()
+        if state.alt_msl_ft > level_ft + 1000 and level_ft > DESCENT_ALTITUDE_FT:
             # In steps: Center to FL100 (and the arrival route); Approach gives the altitude and the QNH
-            items = [rb.level(DESCENT_FL, "descend")]
+            items = [rb.level(level_ft // 100, "descend")]
         else:
             items = [rb.altitude(DESCENT_ALTITUDE_FT, "descend")]
             if self.destination_metar and self.destination_metar.qnh_hpa:
@@ -238,6 +271,35 @@ class AirMixin:
         text = ", ".join([rb.instruction_text(items), *([f"cleared {star}"] if star else []),
                           f"expect {self.arrival.approach_kind} approach runway {spoken.runway(self.arrival_runway)}"])
         return self._transmit(station, f"{self.cs}, {text}", state)
+
+    def _watch_descent(self, item: rb.Item) -> None:
+        """A level or altitude given: a descent is watched until the aircraft is there, a climb ends the watch."""
+        feet = item.value * 100 if item.key == "flight_level" else item.value
+        if item.phrase.startswith("descend "):
+            if self.descent_watch is None or self.descent_watch[0] != feet:
+                self.descent_watch = (feet, item, None, False)
+        elif item.phrase.startswith("climb "):
+            self.descent_watch = None
+
+    def _descent_check(self, state: AircraftState, now: float | None) -> list[Response]:
+        """The aircraft doesn't leave its level after a descent (Milestone 10 D): "confirm descending altitude four
+        thousand fife hundred feet", once per descent, read back like the descent. Only with the live clock."""
+        if self.descent_watch is None or now is None or state.on_ground:
+            return []
+        feet, item, since, asked = self.descent_watch
+        if state.alt_msl_ft <= feet + LEVEL_REACHED_FT:
+            self.descent_watch = None
+            return []
+        if since is None or since[1] - state.alt_msl_ft >= DESCENDING_FT:
+            self.descent_watch = (feet, item, (now, state.alt_msl_ft), asked)
+            return []
+        station = self.expected_station()
+        if asked or now - since[0] < DESCENT_CHECK_S or station is None:
+            return []
+        self.descent_watch = (feet, item, since, True)
+        confirm = rb.Item(item.key, item.value, "confirm descending " + item.phrase.removeprefix("descend "))
+        self._set_pending([confirm], station.key)
+        return self._transmit(station, f"{self.cs}, {confirm.phrase}", state)
 
     def _final_geometry(self, state: AircraftState) -> tuple:
         """(runway end, final course true, distance to the threshold, side): side > 0 = left of the final course
@@ -322,7 +384,15 @@ class AirMixin:
         return self._transmit(station, f"{self.cs}, {item.phrase}", state)
 
     def _approach_altitude(self) -> int:
-        return -(-(int(self.destination.elevation_ft) + 3000) // 100) * 100  # round up to 100 ft
+        """The altitude for the vectors to the final: the approach's final approach fix altitude (EDDM ILS 26R:
+        5000 ft, Milestone 10 D), else 3000 ft above the airport, rounded up to 100 ft."""
+        elevation = int(self.destination.elevation_ft)
+        arrival = self._expected_arrival()
+        faf = arrival.approach.faf if arrival and arrival.approach else None
+        faf_ft = (faf.floor_ft or faf.alt_ft) if faf else None
+        if faf_ft and elevation + 1000 <= faf_ft <= elevation + 6000:
+            return faf_ft
+        return -(-(elevation + 3000) // 100) * 100
 
     def _approach_clearance(self, station: Station, state: AircraftState, intercept: bool = False) -> list[Response]:
         """Cleared for the approach: after vectors with a turn onto the localizer (30 degrees to the course, from the
@@ -444,8 +514,7 @@ class AirMixin:
         self.phase, self.approach_cleared = "approach", True
         end = self.destination.runway_end(self.arrival_runway)
         approach_type = "ILS" if end.ils else "RNAV"
-        altitude = -(-(int(self.destination.elevation_ft) + 3000) // 100) * 100  # round up to 100 ft
-        items = [rb.altitude(altitude, "descend")]
+        items = [rb.altitude(self._approach_altitude(), "descend")]
         if self.destination_metar and self.destination_metar.qnh_hpa:
             items.append(rb.qnh(self.destination_metar.qnh_hpa))  # below the transition level: altitudes on QNH
         items.append(rb.Item("runway", end.name,

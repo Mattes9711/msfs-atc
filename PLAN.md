@@ -1375,14 +1375,21 @@ C. ✅ **No direct off the route** (2026-11-18, `atc/controller/air.py`): the Ce
    on the STAR and transition cleared (Little Navmap), else the plan's STAR points ("unable direct Vesix, not
    ahead on your arrival"). On the test route a direct to LANDU is still possible from ALOSO to TIPAM (116–170 nm
    left, the descent at 98 nm).
-D. **Descent by the constraints**: the Center's descent planned so the aircraft meets the STAR's first constraint
-   (LANDU FL100 or below, 250 kt). Approach then gives the transition's altitudes step by step ("descend altitude
-   five thousand feet") and speeds ("reduce speed two two zero knots") in time before each fix. And it notices
-   when the aircraft doesn't leave its level: "Lufthansa 7M, confirm descending altitude four thousand five
-   hundred feet".
+D. ✅ **Descent by the constraints** (2026-11-18, `atc/controller/air.py`): the Center's descent planned so the
+   aircraft meets the STAR's first constraint (LANDU FL100 or below, 250 kt). And it notices when the aircraft
+   doesn't leave its level: "Lufthansa 7M, confirm descending altitude four thousand five hundred feet".
+   Done: the top of descent is the later of SimBrief's (or the 3-in-1 rule's) and the one the STAR's "at or below"
+   fixes need (3 nm per 1000 ft from the level flown to each fix's ceiling, plus the 5 nm lead). On the test
+   route: 122 nm out instead of 83 (SimBrief's TOD is for the airport, LANDU would be crossed near FL130). The
+   descent goes to the first fix's ceiling when it is below FL100 ("descend flight level six zero"). Approach's
+   altitude is the final approach fix's (5000 ft), else 3000 ft above the airport. A descent read back but not
+   started (less than 300 ft lost in 90 s, live clock only) gets one "confirm descending flight level one
+   hundred". Moved to E: the altitudes and speeds step by step along the transition, as they need the aircraft
+   to fly it.
 E. **Transition + vectors**: Approach's first call names the transition ("radar contact, descend altitude 5000
    feet, QNH 993, transition LANDU, ILS approach runway 26R"). The pilot flies it in the FMC; ATC follows the
-   position along the legs. At the vectors leg (after DM429) Approach turns base by heading, so the intercept is
+   position along the legs and gives the transition's altitudes ("descend altitude five thousand feet") and
+   speeds ("reduce speed two two zero knots") in time before each fix (moved from D). At the vectors leg (after DM429) Approach turns base by heading, so the intercept is
    at 10–12 NM at the FAF altitude: "turn right heading 170", then "turn right heading 230, cleared ILS approach
    runway 26R". With traffic ahead the downwind gets longer (trombone). With traffic far behind the base turn
    may come earlier, but never a direct off the transition.
