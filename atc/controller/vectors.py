@@ -10,7 +10,10 @@ heading 075. Now the controller flies the aircraft through a pattern and watches
     intercept  within INTERCEPT_ACROSS_NM of the centreline (or across it): 30 degrees onto the localizer and the
                approach clearance (atc/controller/air.py _approach_clearance).
 
-An aircraft already far out in front of the runway skips the downwind and is turned in at once.
+An aircraft far out in front of the runway and near enough to the final skips the downwind: a 30-degree intercept
+heading at once, when it meets the centreline at least ESTABLISHED_BY_NM out (Milestone 10 F). Far beside the
+final it flies to the base point first (from in front a long base), never 45 degrees straight at the final: the
+2026-11-17 flight was turned in from 20 NM beside and met the localizer at the threshold.
 
 The frame: "along" is how far out the aircraft is on the extended centreline (positive in front of the threshold,
 on the approach side), "across" how far beside it, positive on the left when facing the runway.
@@ -24,6 +27,7 @@ DOWNWIND_NM = 5  # the downwind's distance beside the centreline
 BASE_WITHIN_NM = 2  # this close to the base point: turn base
 INTERCEPT_ACROSS_NM = 2.5  # this close beside the centreline on base: intercept and cleared
 STRAIGHT_IN_ALONG_NM = 14  # farther out in front than this: no downwind, straight towards the final
+ESTABLISHED_BY_NM = 8  # a straight-in intercept must meet the centreline at least this far out
 CORRECT_DEG = 20  # the way to the base point this far off the assigned heading: a corrected heading
 CORRECT_EVERY_S = 30  # not more often than this
 
@@ -57,6 +61,13 @@ def base_heading_true(end, across_now: float) -> float:
     """At right angles towards the centreline: from the left side (facing the runway) that is a turn to the right
     of the final course."""
     return (end.heading_true + 90 * side_of(across_now)) % 360
+
+
+def straight_in(along: float, across: float) -> bool:
+    """Far enough out in front, and near enough to the final, that a 30-degree intercept heading meets the
+    centreline ESTABLISHED_BY_NM out or farther."""
+    met = along - abs(across) / math.tan(math.radians(30))
+    return along >= STRAIGHT_IN_ALONG_NM and met >= ESTABLISHED_BY_NM
 
 
 def turn_direction(from_heading: float, to_heading: float) -> str:

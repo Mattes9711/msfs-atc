@@ -112,6 +112,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
         self.vector_heading: int | None = None  # the last heading given
         self.vector_at: float | None = None  # when it was given (live clock)
         self.vector_own = False  # the downwind is the transition's, flown on its course: only the base turn (E)
+        self.vector_inbound = False  # flying in towards the base point from farther out in front (F)
         # The approach transition (Milestone 10 E): its fixes still followed (None: not on it), the one flown to, the
         # point before it, the altitude and speed given on it, the Approach station; flown once (then vectors)
         self.transition_legs: list | None = None
@@ -121,6 +122,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
         self.transition_speed: int | None = None
         self.transition_station: Station | None = None
         self.transition_flown = False
+        self.transition_star = False  # no transition: the STAR's fixes followed, vectors after its last (F)
         self.apron_handed = False  # Apron has handed the departure over to Ground
         self.apron_in = False  # Ground has handed the arrival over to Apron
         self.route_in: TaxiRoute | None = None

@@ -9,6 +9,10 @@ base turn (later with traffic ahead, the "trombone"), then the intercept (atc/co
 A transition flown to its end without vectors ends in the approach clearance.
 
 An aircraft far off the transition (not flying it, or a runway change) gets the radar vectors as before.
+
+Without a transition (no procedure data, or an approach without one) the STAR is followed the same way, from
+Little Navmap's legs or the flight plan's STAR points: "descend altitude …, QNH …, expect vectors ILS approach
+runway …", and the vectors come only after its last fix (Milestone 10 F).
 A part of Controller (atc/controller/controller.py), split off to keep the files short; it uses the controller's
 state through self.
 """
@@ -16,8 +20,9 @@ from atc.airport.geo import LocalProjection, distance_nm, point_segment_distance
 from atc.airport.procedures import Leg
 from atc.controller import readback as rb
 from atc.controller import vectors, wake
-from atc.controller.arrival import Arrival
-from atc.controller.common import Response, Station
+from atc.flightplan.model import FlightPlan
+from atc.controller.arrival import Arrival, entry_fix
+from atc.controller.common import APPROACH_SPEED_KT, Response, Station
 from atc.phraseology import spoken
 from atc.sim.base import AircraftState
 from atc.sim.traffic import M_PER_NM
@@ -41,10 +46,23 @@ def path_legs(arrival: Arrival) -> list[Leg]:
     return [leg for leg in legs[:end + 1] if leg.lat is not None]
 
 
+def star_legs(arrival: Arrival, plan: FlightPlan) -> list[Leg]:
+    """Without a transition: the STAR's fixes up to a vectors leg (Little Navmap), else the flight plan's STAR
+    points from its entry fix (SimBrief: LANDU, MIQ). Legs without a position are left out."""
+    if arrival.star:
+        legs = list(arrival.star.legs)
+        end = next((i for i, leg in enumerate(legs) if leg.vectors), len(legs) - 1)
+        legs = legs[:end + 1]
+    else:
+        entry = entry_fix(plan, None)
+        legs = [Leg(w.ident, w.lat, w.lon, "TF") for w in plan.waypoints if w.leg == "star" or w.ident == entry]
+    return [leg for leg in legs if leg.lat is not None]
+
+
 def later_legs(arrival: Arrival) -> list[Leg]:
     """After the path, down to the final approach fix: the transition's legs after the vectors and the approach's
     up to the FAF. Their lowest altitudes still count for the altitude Approach gives."""
-    legs = list(arrival.transition.legs)
+    legs = list(arrival.transition.legs) if arrival.transition else []
     start = next((i + 1 for i, leg in enumerate(legs) if leg.vectors), len(legs))
     approach = list(arrival.approach.legs) if arrival.approach else []
     faf = arrival.approach.faf if arrival.approach else None
@@ -81,14 +99,15 @@ def off_path_nm(before: tuple[float, float], fix: tuple[float, float], lat: floa
 
 class TransitionMixin:
     def _start_transition(self, station: Station, state: AircraftState) -> list[Response]:
-        """Approach's first call when the arrival has a transition and the aircraft is on its way along it:
-        altitude, QNH, a speed when one is due, "cleared transition …". [] when it can't be flown (then vectors)."""
+        """Approach's first call when the aircraft is on its way along the transition: altitude, QNH, a speed when
+        one is due, "cleared transition …". Without a transition along the STAR: "expect vectors …". [] when
+        neither can be flown (then vectors at once)."""
         arrival = self.arrival
-        if (arrival is None or arrival.transition is None or self.transition_flown
-                or arrival.runway != self.arrival_runway):
+        if arrival is None or self.transition_flown or arrival.runway != self.arrival_runway:
             return []
-        legs = path_legs(arrival)
-        if not legs:
+        star = arrival.transition is None
+        legs = star_legs(arrival, self.plan) if star else path_legs(arrival)
+        if len(legs) < 2:
             return []
         target, off = nearest([(leg.lat, leg.lon) for leg in legs], state.lat, state.lon)
         if off > OFF_PATH_NM:
@@ -96,14 +115,15 @@ class TransitionMixin:
         self.phase, self.transition_flown, self.transition_station = "approach", True, station
         self.transition_legs, self.transition_at = legs, target
         self.transition_from = (state.lat, state.lon) if target == 0 else (legs[target - 1].lat, legs[target - 1].lon)
-        self.transition_alt, self.transition_speed = None, None
+        self.transition_alt, self.transition_speed, self.transition_star = None, None, star
         items = self._transition_items(state)
         if self.destination_metar and self.destination_metar.qnh_hpa:
             at = 1 if items and items[0].key == "altitude_ft" else 0
             items.insert(at, rb.qnh(self.destination_metar.qnh_hpa))
         self._set_pending(items, station.key)
-        text = ", ".join([*(i.phrase for i in items), f"cleared transition {arrival.transition.name.title()}",
-                          f"expect {arrival.approach_kind} approach runway {spoken.runway(arrival.runway)}"])
+        approach = f"{arrival.approach_kind} approach runway {spoken.runway(arrival.runway)}"
+        said = [f"expect vectors {approach}"] if star else             [f"cleared transition {arrival.transition.name.title()}", f"expect {approach}"]
+        text = ", ".join([*(i.phrase for i in items), *said])
         return [self._say(station, f"{self.cs}, {station.name}, {text}")]
 
     def _transition_items(self, state: AircraftState) -> list[rb.Item]:
@@ -142,7 +162,7 @@ class TransitionMixin:
                 or off_path_nm(self.transition_from, (fix.lat, fix.lon), state.lat, state.lon) > OFF_PATH_NM):
             self.transition_legs = None
             return self._vectors_instead(station, state)
-        if (not legs[-1].vectors and self.transition_at == len(legs) - 1
+        if (not legs[-1].vectors and not self.transition_star and self.transition_at == len(legs) - 1
                 and distance_nm(state.lat, state.lon, fix.lat, fix.lon) <= CLEARANCE_AHEAD_NM):
             self.transition_legs = None
             return self._transition_clearance(station, state)
@@ -153,7 +173,9 @@ class TransitionMixin:
 
     def _transition_end(self, station: Station, state: AircraftState, last: Leg, now: float | None):
         """The vectors fix passed: Approach vectors from here, the downwind flown on the procedure's course until the
-        base turn. A transition without vectors: the approach clearance."""
+        base turn. A transition without vectors: the approach clearance. The STAR's last fix: the vectors."""
+        if self.transition_star:
+            return self._vectors_instead(station, state, said=True)
         if not last.vectors:
             return self._transition_clearance(station, state)
         end = self.destination.runway_end(self.arrival_runway)
@@ -166,12 +188,19 @@ class TransitionMixin:
         self.vector_heading, self.vector_own = round(course / 5) * 5 % 360 or 360, True
         return []
 
-    def _vectors_instead(self, station: Station, state: AircraftState) -> list[Response]:
-        """Off the transition: radar vectors, the first heading as a turn."""
+    def _vectors_instead(self, station: Station, state: AircraftState, said: bool = False) -> list[Response]:
+        """Off the transition: radar vectors, the first heading as a turn. After the STAR (said: "expect vectors"
+        was in the first call) the heading and the approach speed, without the vectors repeated."""
         self.vectoring, self.vector_own = station, False
         end = self.destination.runway_end(self.arrival_runway)
         heading = self._first_vector(end, state)
         items = [rb.heading(heading, vectors.turn_direction(state.heading_mag, heading))]
+        if said:
+            if (self.transition_speed or STAR_SPEED_KT) > APPROACH_SPEED_KT:
+                speed = rb.speed(APPROACH_SPEED_KT)
+                items.append(rb.Item(speed.key, speed.value, f"reduce {speed.phrase}"))
+            self._set_pending(items, station.key)
+            return self._transmit(station, f"{self.cs}, " + rb.instruction_text(items), state)
         self._set_pending(items, station.key)
         kind = "ILS" if end.ils else "RNAV"
         return self._transmit(station, f"{self.cs}, {items[0].phrase}, vectors {kind} approach runway "

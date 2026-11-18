@@ -338,13 +338,15 @@ class AirMixin:
                           f", vectors {approach_type} approach runway {spoken.runway(end.name)}")]
 
     def _first_vector(self, end, state: AircraftState) -> int:
-        """The first leg: far out in front of the runway straight towards the final (45 degrees), else the
-        downwind to the base point. Returns the magnetic heading and remembers the leg."""
+        """The first leg: far out in front of the runway and near the final a 30-degree intercept heading, else to
+        the base point (a downwind, or from far beside in front a long base; Milestone 10 F). Returns the magnetic
+        heading and remembers the leg."""
         along, across = vectors.frame(end, state.lat, state.lon)
         self.vector_side, self.vector_at = vectors.side_of(across), None
-        if along >= vectors.STRAIGHT_IN_ALONG_NM:
+        self.vector_inbound = along > vectors.BASE_ALONG_NM
+        if vectors.straight_in(along, across):
             self.vector_leg = "base"
-            true = (end.heading_true + 45 * self.vector_side) % 360
+            true = (end.heading_true + INTERCEPT_ANGLE * self.vector_side) % 360
         else:
             self.vector_leg = "downwind"
             true = bearing_deg(state.lat, state.lon, *vectors.base_point(end, across))
@@ -370,8 +372,8 @@ class AirMixin:
             return []
         if self.vector_leg == "downwind":
             base = vectors.base_point(end, self.vector_side * vectors.DOWNWIND_NM)
-            if (distance_nm(state.lat, state.lon, *base) <= vectors.BASE_WITHIN_NM
-                    or along >= vectors.BASE_ALONG_NM):
+            level = along <= vectors.BASE_ALONG_NM if self.vector_inbound else along >= vectors.BASE_ALONG_NM
+            if distance_nm(state.lat, state.lon, *base) <= vectors.BASE_WITHIN_NM or level:
                 self.vector_leg = "base"
                 return self._give_vector(station, state, vectors.base_heading_true(end, self.vector_side), now)
             wanted = self._magnetic(bearing_deg(state.lat, state.lon, *base))
@@ -416,6 +418,13 @@ class AirMixin:
             return self._transmit(station, f"{self.cs}, {sequence}" + rb.instruction_text(items), state)
         if intercept:
             target = self._magnetic(course + (INTERCEPT_ANGLE if offset > 0 else -INTERCEPT_ANGLE))
+            if target == self.vector_heading and abs((target - state.heading_mag + 540) % 360 - 180) <= 10:
+                # Already on the intercept heading (a straight-in): no turn, only the clearance (Milestone 10 F)
+                items = [cleared, rb.speed(FINAL_SPEED_KT)]
+                text = (f"{self.cs}, {sequence}maintain {spoken.altitude(self._approach_altitude())} until "
+                        f"established, {cleared.phrase}, {items[1].phrase}")
+                self._set_pending(items, station.key)
+                return self._transmit(station, text, state)
             turn = "right" if (target - state.heading_mag + 540) % 360 - 180 > 0 else "left"
             items = [rb.heading(target, turn), cleared, rb.speed(FINAL_SPEED_KT)]
             text = (f"{self.cs}, {sequence}{items[0].phrase}, maintain {spoken.altitude(self._approach_altitude())} "

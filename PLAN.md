@@ -1403,8 +1403,15 @@ E. ✅ **Transition + vectors** (2026-11-18, `atc/controller/transition.py`): Ap
    vectors instead. The choice (open from B): of the transitions from the STAR's fixes, the one that ends in
    vectors, searched from the last fix back (Munich: LAND2B ends at MIQ, whose transition has none, so LANDU's);
    else the last fix's. Not done: the earlier base turn with traffic far behind.
-F. **Better vectors without data**: never 45° straight at the final from far beside it, but a downwind and a base,
+F. ✅ **Better vectors without data** (2026-11-18, `atc/controller/vectors.py`, `transition.py`): never 45° straight at the final from far beside it, but a downwind and a base,
    the intercept at 30° 8–12 NM out at the approach altitude. Vectors only after the STAR's last fix.
+   Done: far out in front a 30° intercept heading only when it meets the centreline 8 NM out or farther (then the
+   clearance without a turn: "maintain … until established, cleared ILS …"); else to the base point (12 NM out,
+   5 NM beside), from in front as a long base, the base turn when it is reached, not at once. The intercept from
+   the base: 30° at 2.5 NM beside, on the localizer about 8–9 NM out, at the approach altitude. Without a
+   transition Approach follows the STAR (Little Navmap's legs, else the plan's STAR points: LANDU, MIQ) like a
+   transition: "descend altitude …, QNH …, expect vectors ILS approach runway …", then at its last fix "turn …
+   heading …, reduce speed two two zero knots". Off the STAR at check-in: vectors at once, as before.
 G. **Tests and a replay**: the 2026-11-17 flight's geometry as a test (Munich-like procedures built in code), and
    the smoke test.
 
