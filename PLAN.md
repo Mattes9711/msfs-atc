@@ -1466,6 +1466,18 @@ O2. ✅ **Overlay** (`atc/app/overlay.py`, `static/overlay.*`): a second pywebvi
     push-to-talk is held. Shown when a flight starts, hidden when it ends; × and the chip "Overlay" on the flight
     view switch it, remembered with its position in `overlay.json`. Only over MSFS in windowed or borderless mode.
     **To check in MSFS:** dragging it, and that it stays over the sim.
+O3. ✅ **Main window: the flight-strip console** (`static/app.css`, `index.html`, `app.js`; user OK 2026-11-18). The
+    window reads like a strip board, not a web app. **Top:** one flight strip in ruled cells (callsign, route,
+    runway, SID/STAR, cleared, squawk, QNH, phase, link, UTC), its lead cell edged amber while a flight runs.
+    **Left:** the radio stack: active COM large, the next frequency in amber, the field with its frequency table
+    (the tuned one marked), and the views (Flight, Map, Phrases, Settings) at its foot. **Log:** a radio script:
+    station and frequency as a small line, ATC in full ink, your own calls indented in mono under a hairline,
+    "✓ Readback correct" under the readback, more space only between exchanges (over 15 s apart, never before an
+    answer or a due readback). The next call is one amber line with "Use". **Colour:** near-black surfaces and
+    hairlines; amber only for "your turn" (next call, next frequency, PTT while talking, own aircraft on the map),
+    red only for warnings, which are the only banner left. **Type:** B612 and B612 Mono (Airbus cockpit fonts,
+    made for legibility), regular weight only. No cards, gradients, shadows or motion beyond 120 ms colour
+    changes. Below 760 px it stacks in one column. The overlay uses the same tokens and the narrowed frequency dot.
 
 ### Later versions (agreed, in rough order)
 

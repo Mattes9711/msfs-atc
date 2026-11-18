@@ -1,306 +1,372 @@
-/* MSFS ATC app window (redesign 2026-11-16): the layout of an ATC add-on's desktop window, after the user's pick,
-   with a look of our own. A rail of views on the left, the radio bar on top; on the flight view the calls you can
-   make, the board with the airport's frequencies beside the flight, and the radio log as rows of frequency, station
-   and message. Settings are a page of their own with their sections on the left, inside the app.
-   Colour follows cockpit displays (Airbus ECAM), so it always means the same: green = active (your frequency, the
-   transponder, what ATC cleared), cyan = standby and what you can press, amber = something to do, red = warning.
-   Everything else is graphite.
+/* MSFS ATC app window (redesign 2026-11-18): a flight-strip console. The window reads like the other end of the
+   radio: a controller's ruled flight strip across the top, the radio stack on the left with your frequency as the
+   largest thing on screen, and the transcript written as a script, without bubbles or boxes.
+   One signal colour: amber means "your turn" (the next frequency, the call that is due, transmitting, the edge of
+   the active strip). Red is only for warnings (stop, go around). Everything else is graphite and three inks; there is
+   no bold, hierarchy comes from size and brightness.
    Fonts: B612 and B612 Mono, designed by Airbus and Intactile for cockpit displays, SIL Open Font License 1.1
-   (fonts/OFL.txt), bundled so the app works offline.
-   Spacing on a 4px grid, one radius, one easing curve, no gradients or glows, after unslop by Damir Sokolovsky
-   (@heydamir), https://github.com/heydamir/unslop, CC BY 4.0. */
+   (fonts/OFL.txt), bundled so the app works offline. Mono for everything you read out or dial.
+   Spacing on a 4px grid, one easing curve, colour transitions only, no gradients or glows, after unslop by Damir
+   Sokolovsky (@heydamir), https://github.com/heydamir/unslop, CC BY 4.0. */
 
 @font-face { font-family: "B612"; src: url("fonts/B612-Regular.ttf") format("truetype"); font-weight: 400; }
-@font-face { font-family: "B612"; src: url("fonts/B612-Bold.ttf") format("truetype"); font-weight: 700; }
 @font-face { font-family: "B612 Mono"; src: url("fonts/B612Mono-Regular.ttf") format("truetype"); font-weight: 400; }
-@font-face { font-family: "B612 Mono"; src: url("fonts/B612Mono-Bold.ttf") format("truetype"); font-weight: 700; }
 
 :root {
   color-scheme: dark;
-  --rail: #0b0d10;        /* the rail and the radio bar: the frame */
-  --bg: #111418;          /* the window */
-  --deep: #0d1013;        /* inputs, the board, the map */
-  --panel: #181c21;       /* cards */
-  --raised: #1f242a;      /* chips, hovered rows */
-  --line: #262c33;
-  --line-strong: #37404a;
-  --text: #e6eaee;
-  --soft: #c2c9d0;        /* your own transmissions */
-  --label: #8c97a2;       /* labels, others on the frequency */
-  --green: #78cc98;       /* active */
-  --green-bg: #162219;
-  --cyan: #6cc3d6;        /* standby, what you can press */
-  --cyan-bg: #12202a;
-  --amber: #dcae5f;       /* something to do */
-  --amber-bg: #251f14;
-  --red: #e5837b;         /* warnings: stop, go around */
-  --red-bg: #2a1716;
+  /* surfaces, darkest to lightest */
+  --well: #0a0c0e;        /* inputs, the map */
+  --console: #0c0e10;     /* the radio stack: the hardware */
+  --board: #121518;       /* the working area */
+  --strip: #181b1f;       /* the flight strip, the say bar, the briefing */
+  --line: rgba(232, 235, 238, 0.08);         /* rules between rows */
+  --line-strong: rgba(232, 235, 238, 0.14);  /* rules between areas, control borders */
+  /* three inks */
+  --ink: #e8eaec;         /* ATC, values */
+  --ink-2: #a8afb6;       /* your own lines, station names */
+  --ink-3: #808891;       /* labels, meta, others on the frequency (4.5:1 on every surface) */
+  /* the two signals */
+  --amber: #e6b450;       /* your turn */
+  --amber-bg: #2a2416;
+  --amber-hover: #352d1b;
+  --red: #e5675c;         /* warnings only */
+  --red-bg: #2b1614;
+
+  /* names the map drawing reads (app.js color()) */
+  --text: #e8eaec;
+  --soft: #a8afb6;
+  --label: #808891;
+  --accent: #e6b450;
 
   --font: "B612", "Segoe UI", sans-serif;
   --mono: "B612 Mono", "Cascadia Mono", Consolas, monospace;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --radius: 4px;
-  --rail-w: 72px;
+  --radius: 6px;          /* controls only; strips and rows are square */
+  --stack-w: 232px;
 }
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 400 14px/20px var(--font); }
+body { margin: 0; background: var(--console); color: var(--ink); font: 400 14px/20px var(--font); }
 [hidden] { display: none !important; }
-h1, h2 { margin: 0; font-weight: 700; }
-h1 { font-size: 20px; line-height: 28px; }
-h2 { font-size: 14px; line-height: 20px; }
+h1, h2 { margin: 0; font-weight: 400; }
+h1 { font-size: 22px; line-height: 28px; }
+h2 { font-size: 13px; line-height: 20px; color: var(--ink-2); }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .num { font-family: var(--mono); }
-.live { color: var(--green); }
-.soft { color: var(--label); }
-.key { color: var(--label); font-size: 12px; }
+.live { color: var(--ink); }
+.soft { color: var(--ink-3); }
+.key { color: var(--ink-3); font-size: 11px; line-height: 16px; }
+.sep { margin: 0 -0.26em 0 -0.06em; }  /* the dot in 121.705 reads as a gap in a mono font */
 
-/* --- the frame: rail on the left, radio bar on top ----------------------------------------------------------- */
+/* --- the frame: strip across the top, stack on the left ------------------------------------------------------- */
 
-.app { height: 100%; display: flex; }
-.rail {
-  flex: none; width: var(--rail-w); display: flex; flex-direction: column; gap: 4px; padding: 8px;
-  background: var(--rail); border-right: 1px solid var(--line);
+.app {
+  height: 100%; display: grid;
+  grid-template-rows: auto minmax(0, 1fr); grid-template-columns: var(--stack-w) minmax(0, 1fr);
 }
-.rail-item {
+
+/* The flight strip: ruled cells, a label over each value */
+.strip {
+  grid-column: 1 / -1; display: flex; align-items: stretch; min-height: 56px; min-width: 0;
+  background: var(--strip); border-bottom: 1px solid var(--line-strong);
+}
+.cell {
+  flex: 0 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  padding: 8px 16px; border-right: 1px solid var(--line); white-space: nowrap;
+}
+.cell > :last-child { overflow: hidden; text-overflow: ellipsis; }
+.cell.lead { flex: none; width: var(--stack-w); border-right-color: var(--line-strong); }
+.running .cell.lead { box-shadow: inset 3px 0 var(--amber); }  /* the active strip */
+.callsign { font-size: 18px; line-height: 24px; color: var(--ink); }
+.strip-flight:not([hidden]) { display: contents; }
+.strip-end { margin-left: auto; display: flex; align-items: center; gap: 16px; padding-right: 16px; white-space: nowrap; }
+.strip-end .cell { align-self: stretch; border-right: 0; border-left: 1px solid var(--line); }
+.link, .ptt { display: flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: 12px; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); flex: none; }
+.link.ok .dot { background: var(--ink-2); }
+.link.down { color: var(--red); }
+.link.down .dot { background: var(--red); }
+.utc { color: var(--ink-2); font-size: 13px; }
+
+/* The radio stack: active, next, the field's frequencies, the views at its foot */
+.stack {
+  grid-row: 2; min-height: 0; display: flex; flex-direction: column; overflow-y: auto;
+  background: var(--console); border-right: 1px solid var(--line-strong);
+}
+.com { padding: 16px; display: flex; flex-direction: column; gap: 2px; border-bottom: 1px solid var(--line); }
+.com-freq { font-size: 28px; line-height: 36px; color: var(--ink); }
+.com-station { color: var(--ink-2); font-size: 13px; min-height: 20px; overflow-wrap: anywhere; }
+.com.next { box-shadow: inset 3px 0 var(--amber); }
+.com.next .key, .com.next .com-freq { color: var(--amber); }
+.com.next .com-freq { font-size: 20px; line-height: 28px; }
+
+.field-freqs { padding: 16px 0 12px; display: flex; flex-direction: column; }
+.field-head { padding: 0 16px; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.icao { font-size: 16px; color: var(--ink); flex: none; }
+.field-name { color: var(--ink-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.field-info { padding: 4px 16px 12px; color: var(--ink-3); font-size: 12px; line-height: 18px; }
+.freqs { display: flex; flex-direction: column; }
+.freq {
+  display: flex; justify-content: space-between; gap: 12px; padding: 6px 16px; border-top: 1px solid var(--line);
+  font-family: var(--mono); font-size: 13px; color: var(--ink-2);
+}
+.freq:last-child { border-bottom: 1px solid var(--line); }
+.freq .key { font-family: var(--font); font-size: 12px; line-height: 20px; }
+.freq.tuned { color: var(--ink); box-shadow: inset 2px 0 var(--ink-2); }
+.freq.tuned .key { color: var(--ink-2); }
+
+.views {
+  margin-top: auto; position: sticky; bottom: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  background: var(--console); border-top: 1px solid var(--line-strong);
+}
+.view-button {
   height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-  background: none; border: 0; border-radius: var(--radius); color: var(--label); font-size: 12px; line-height: 16px;
-  position: relative;
+  background: none; border: 0; border-right: 1px solid var(--line); color: var(--ink-3); font-size: 11px; line-height: 16px;
 }
-.rail-item:hover:not(:disabled) { background: var(--raised); color: var(--text); }
-.rail-item[aria-selected="true"] { background: var(--raised); color: var(--text); }
-.rail-item[aria-selected="true"]::before {  /* which view: a bar on the edge, like a selected page in a binder */
-  content: ""; position: absolute; left: -8px; top: 12px; bottom: 12px; width: 2px; background: var(--cyan);
-}
-.rail-item:disabled { color: var(--line-strong); cursor: default; }
-.rail-bottom { margin-top: auto; }
+.view-button:last-child { border-right: 0; }
+.view-button:hover:not(:disabled) { color: var(--ink); }
+.view-button[aria-selected="true"] { color: var(--ink); background: var(--board); box-shadow: inset 0 2px var(--ink-2); }
+.view-button:disabled { color: var(--line-strong); cursor: default; }
 
-.main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.topbar {
-  flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; padding: 8px 16px;
-  background: var(--rail); border-bottom: 1px solid var(--line);
-}
-.radios { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 28px; font-family: var(--mono); }
-.radio .key { font-family: var(--mono); font-size: 12px; margin-right: 8px; }
-.radio .num { font-size: 20px; line-height: 28px; }
-.radio.active .num { color: var(--green); }
-.radio.standby .num { color: var(--cyan); }
-.radio .sub { color: var(--label); font-size: 12px; margin-left: 8px; }
-.sep { letter-spacing: -0.3em; margin-right: 0.3em; }  /* the dot in 121.705 reads as a gap in a mono font */
-.who { display: flex; align-items: center; gap: 16px; margin-left: auto; }
-.flight { display: flex; flex-direction: column; text-align: right; line-height: 18px; }
-.callsign { font-weight: 700; }
-.route { color: var(--label); font-size: 12px; }
-.link, .ptt { display: flex; align-items: center; gap: 8px; color: var(--label); font-size: 12px; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); }
-.link.ok .dot, .ptt.ready .dot { background: var(--green); }
-.link.down .dot, .ptt.off .dot { background: var(--red); }
-.ptt.talking { color: var(--amber); border-color: var(--amber); }
-.ptt.talking .dot { background: var(--amber); }
-.ptt.talking ~ .say-field #say-input::placeholder, #say-input.talking::placeholder { color: var(--text); }
-.utc { color: var(--label); }
+.main { grid-row: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--board); }
+.screen { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
-.screen { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+/* --- controls ------------------------------------------------------------------------------------------------- */
 
-/* --- buttons and inputs --------------------------------------------------------------------------------------- */
-
-button { font: inherit; cursor: pointer; transition: background-color 150ms var(--ease), border-color 150ms var(--ease), color 150ms var(--ease); }
-button.primary { height: 40px; padding: 0 20px; background: var(--cyan); color: var(--rail); border: 0; border-radius: var(--radius); font-weight: 700; }
-button.primary:hover { background: #8fd3e2; }
-button.primary:disabled { background: var(--panel); color: var(--label); cursor: default; }
-button.secondary { height: 36px; padding: 0 16px; background: var(--panel); color: var(--soft); border: 1px solid var(--line); border-radius: var(--radius); }
-button.secondary:hover { border-color: var(--line-strong); color: var(--text); }
-button.quiet { background: none; }
-.icon-button { width: 40px; height: 40px; display: grid; place-items: center; background: var(--panel); color: var(--soft); border: 1px solid var(--line); border-radius: var(--radius); font-size: 16px; }
-.icon-button:hover { border-color: var(--line-strong); color: var(--text); }
+button { font: inherit; cursor: pointer; transition: background-color 120ms var(--ease), border-color 120ms var(--ease), color 120ms var(--ease); }
+button.primary { height: 40px; padding: 0 20px; background: var(--ink); color: var(--console); border: 0; border-radius: var(--radius); }
+button.primary:hover { background: #ffffff; }
+button.primary:disabled { background: var(--strip); color: var(--ink-3); cursor: default; }
+button.secondary { height: 36px; padding: 0 16px; background: none; color: var(--ink-2); border: 1px solid var(--line-strong); border-radius: var(--radius); }
+button.secondary:hover { border-color: var(--ink-3); color: var(--ink); }
+button.secondary:disabled { color: var(--ink-3); cursor: default; }
+.icon-button { width: 36px; height: 36px; display: grid; place-items: center; background: var(--strip); color: var(--ink-2); border: 1px solid var(--line-strong); border-radius: var(--radius); font-size: 16px; }
+.icon-button:hover { border-color: var(--ink-3); color: var(--ink); }
 input:not([type]), input[type="text"], select {
-  width: 100%; height: 40px; padding: 0 12px; background: var(--deep); color: var(--text);
-  border: 1px solid var(--line); border-radius: var(--radius); font: 400 14px/20px var(--font);
+  width: 100%; height: 40px; padding: 0 12px; background: var(--well); color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: var(--radius); font: 400 14px/20px var(--font);
 }
 input.code, #say-input { font-family: var(--mono); }
 input.code { text-transform: uppercase; }
-input::placeholder { color: var(--label); text-transform: none; }
-input:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
-input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color: var(--cyan); }
-input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; margin: 0; }
+input::placeholder { color: var(--ink-3); text-transform: none; }
+input:focus-visible, button:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 1px; }
+input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color: #c9ced3; }
+input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; margin: 0; flex: none; }
 
-/* --- flight view: calls, board, banner, log ----------------------------------------------------------------- */
+/* --- flight view: warning, transcript, next call, calls --------------------------------------------------------- */
 
-.view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+.view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
-.chips { flex: none; display: flex; flex-wrap: wrap; gap: 8px; }
-.chip {
-  height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 8px; max-width: 100%;
-  background: var(--raised); color: var(--soft); border: 1px solid var(--line); border-radius: var(--radius); font-size: 13px;
+.banner {
+  flex: none; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin: 12px 16px 0; padding: 10px 16px;
+  background: var(--red-bg); box-shadow: inset 3px 0 var(--red); color: var(--red);
 }
-.chip:hover { border-color: var(--cyan); color: var(--text); }
-.chip.suggested { flex: 1 1 240px; min-width: 0; background: var(--cyan-bg); border-color: var(--cyan); color: var(--text); }
-.chip.suggested .key { color: var(--cyan); flex: none; }
-.chip.suggested .num { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#copilot-button[aria-pressed="true"] { background: var(--green-bg); border-color: var(--green); color: var(--green); }
-
-.board {
-  flex: none; display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  background: var(--deep); border: 1px solid var(--line); border-radius: var(--radius);
-}
-.board-airport { padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.airport-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
-.icao { font-family: var(--mono); font-weight: 700; font-size: 16px; }
-.ap-info { font-size: 12px; }
-.freqs { margin-top: 8px; display: grid; grid-template-columns: repeat(auto-fill, minmax(144px, 1fr)); gap: 4px 16px; font-family: var(--mono); }
-.freqs .key { font-family: var(--mono); font-size: 12px; margin-right: 8px; }
-.freqs .tuned { color: var(--green); }
-.facts {
-  padding: 12px 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 16px; align-content: start;
-  border-left: 1px solid var(--line);
-}
-.fact { display: flex; flex-direction: column; min-width: 0; }
-.fact > :last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.banner { flex: none; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; padding: 8px 16px; background: var(--amber-bg); border: 1px solid var(--amber); border-radius: var(--radius); color: var(--amber); }
-.banner.warn { background: var(--red-bg); border-color: var(--red); color: var(--red); }
-.banner-title { font-weight: 700; }
+.banner-title { font-size: 12px; }
 .banner-text { font-family: var(--mono); }
 
-/* The radio log: one row per transmission, frequency | station | what was said */
+/* The transcript as a script: a quiet meta line, then what was said. ATC in full ink at the margin, your own lines
+   indented behind a hairline. Tight within an exchange, air between exchanges. */
 .log {
-  flex: 1; min-height: 120px; margin: 0; padding: 0; list-style: none; overflow-y: auto;
-  background: var(--deep); border: 1px solid var(--line); border-radius: var(--radius);
+  flex: 1; min-height: 120px; margin: 0; padding: 20px 32px 24px; list-style: none; overflow-y: auto;
   overflow-anchor: none; /* the browser's own scroll adjustments would fight "stay at the newest line" */
 }
-.log li { display: grid; grid-template-columns: 72px 168px minmax(0, 1fr); gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--line); }
-.log li:last-child { border-bottom: 0; }
-.log .lf { font-family: var(--mono); font-size: 13px; color: var(--label); }
-.log .ls { font-size: 13px; color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.log .msg { overflow-wrap: anywhere; }
-.log .time { color: var(--label); font-family: var(--mono); font-size: 12px; margin-right: 8px; }
-.log li.atc .lf, .log li.atis .lf { color: var(--green); }
-.log li.atc .ls, .log li.atis .ls { color: var(--green); }
-.log li.pilot .msg, .log li.copilot .msg { color: var(--soft); }
-.log li.pilot .ls, .log li.copilot .ls { color: var(--cyan); }
-.log .tick { color: var(--green); }
-.log li.chatter .msg, .log li.cabin .msg, .log li.chatter .ls, .log li.cabin .ls { color: var(--label); }
-.log li.missed_call { background: var(--amber-bg); }
+.log li { max-width: 76ch; margin-top: 10px; }
+.log li:first-child { margin-top: 0; }
+.log li.gap { margin-top: 28px; }
+.log .meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 12px; font-size: 12px; line-height: 18px; color: var(--ink-3); }
+.log .ls { color: var(--ink-2); }
+.log .lf, .log .time { font-family: var(--mono); font-size: 11px; }
+.log .msg { font-size: 15px; line-height: 22px; color: var(--ink); overflow-wrap: anywhere; }
+.log li.pilot, .log li.copilot { position: relative; padding-left: 24px; }
+.log li.pilot::before, .log li.copilot::before { content: ""; position: absolute; left: 8px; top: 3px; bottom: 3px; width: 1px; background: var(--line-strong); }
+.log li.pilot .msg, .log li.copilot .msg { color: var(--ink-2); font-family: var(--mono); font-size: 14px; }
+.log .meta.ok { margin-top: 2px; color: var(--ink-3); }
+.log .meta.ok::before { content: "✓"; color: var(--ink-2); }
+.log li.chatter .msg, .log li.cabin .msg { color: var(--ink-3); font-size: 14px; }
+.log li.chatter .ls, .log li.cabin .ls { color: var(--ink-3); }
+.log li.missed_call { position: relative; padding-left: 16px; box-shadow: inset 3px 0 var(--amber); }
 .log li.missed_call .ls, .log li.missed_call .msg { color: var(--amber); }
-.log li.warn { background: var(--red-bg); }
+.log li.warn { position: relative; padding-left: 16px; box-shadow: inset 3px 0 var(--red); }
 .log li.warn .ls, .log li.warn .msg, .log li.warn .lf { color: var(--red); }
-.log li.note { display: block; padding: 4px 16px; font-size: 12px; line-height: 18px; color: var(--label); }
-.log li.note.readback { color: var(--green); }
+.log li.note { margin-top: 6px; font-size: 12px; line-height: 18px; color: var(--ink-3); }
+.log li.note.readback { color: var(--ink-2); }
+
+/* The call that is due: the one bright line, right above where you speak */
+.next-call {
+  flex: none; display: flex; align-items: center; gap: 16px; margin: 0; padding: 10px 16px 10px 29px; width: 100%;
+  background: var(--amber-bg); border: 0; border-top: 1px solid var(--line); box-shadow: inset 3px 0 var(--amber);
+  border-radius: 0; text-align: left; color: var(--ink);
+}
+.next-call:hover { background: var(--amber-hover); }
+.next-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.next-call .key { color: var(--amber); }
+.next-text { font: 400 15px/22px var(--mono); overflow-wrap: anywhere; }
+.use { flex: none; color: var(--amber); font-size: 12px; }
+
+.calls { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 16px; border-top: 1px solid var(--line); }
+.calls-gap { flex: 1; }
+.chip {
+  height: 28px; padding: 0 10px; display: inline-flex; align-items: center; max-width: 100%;
+  background: none; color: var(--ink-2); border: 1px solid var(--line-strong); border-radius: var(--radius); font-size: 12px;
+}
+.chip:hover { border-color: var(--ink-3); color: var(--ink); }
+.chip[aria-pressed="true"] { background: var(--strip); border-color: var(--ink-2); color: var(--ink); }
 
 /* --- map ------------------------------------------------------------------------------------------------------ */
 
-.map { position: relative; overflow: hidden; background: var(--deep); border: 1px solid var(--line); border-radius: var(--radius); min-height: 300px; }
+.map { flex: 1; position: relative; overflow: hidden; background: var(--well); min-height: 300px; }
 .map canvas { display: block; }
-.map-zoom { position: absolute; top: 12px; left: 12px; display: flex; flex-direction: column; gap: 4px; }
-.map-scale { position: absolute; left: 12px; bottom: 12px; font-family: var(--mono); font-size: 12px; color: var(--label); }
+.map-zoom { position: absolute; top: 16px; left: 16px; display: flex; flex-direction: column; gap: 4px; }
+.map-scale { position: absolute; left: 16px; bottom: 16px; font-family: var(--mono); font-size: 12px; color: var(--ink-3); }
+
+/* --- tabs: phrase groups, settings sections ----------------------------------------------------------------- */
+
+.groups, .side { flex: none; display: flex; flex-wrap: wrap; padding: 0 24px; border-bottom: 1px solid var(--line-strong); }
+.tab {
+  height: 40px; padding: 0 12px; background: none; border: 0; border-radius: 0; box-shadow: inset 0 -2px transparent;
+  color: var(--ink-3); white-space: nowrap;
+}
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--ink); box-shadow: inset 0 -2px var(--ink-2); }
+.tab.now::after { content: " ·"; color: var(--amber); }  /* the calls of this phase */
 
 /* --- phrases -------------------------------------------------------------------------------------------------- */
 
-.groups { flex: none; display: flex; flex-wrap: wrap; gap: 4px; }
-.tab { height: 36px; padding: 0 16px; background: none; border: 1px solid transparent; border-radius: var(--radius); color: var(--label); text-align: left; }
-.tab:hover { color: var(--text); }
-.tab[aria-selected="true"] { background: var(--raised); border-color: var(--line-strong); color: var(--text); }
-.tab.now::after { content: " ·"; color: var(--green); }
-.phrase-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; background: var(--deep); border: 1px solid var(--line); border-radius: var(--radius); }
-.phrase { padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid var(--line); }
-.phrase:last-child { border-bottom: 0; }
-.phrase .title { color: var(--label); font-size: 12px; }
-.phrase .pilot { padding: 0; background: none; border: 0; text-align: left; color: var(--text); font: 400 14px/20px var(--mono); }
-.phrase .pilot:hover { color: var(--cyan); }
-.phrase .atc, .phrase .note { color: var(--label); font-size: 12px; }
+.phrases { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.phrase-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 32px 24px; }
+.phrase { max-width: 76ch; padding: 16px 0; display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid var(--line); }
+.phrase .title { color: var(--ink-3); font-size: 12px; }
+.phrase .pilot {
+  padding: 0; background: none; border: 0; text-align: left; color: var(--ink); font: 400 15px/22px var(--mono);
+  text-decoration: underline transparent; text-underline-offset: 4px;
+}
+.phrase .pilot:hover { text-decoration-color: var(--ink-3); }
+.phrase .atc, .phrase .note { color: var(--ink-3); font-size: 12px; }
 
-/* --- speak or type ---------------------------------------------------------------------------------------------- */
+/* --- speak or type: the base of the console ---------------------------------------------------------------------- */
 
-.say { flex: none; display: flex; align-items: center; gap: 8px; }
-.ptt { height: 40px; padding: 0 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); white-space: nowrap; color: var(--soft); }
+.say {
+  flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+  background: var(--strip); border-top: 1px solid var(--line-strong);
+}
+.ptt {
+  height: 40px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: var(--radius);
+  white-space: nowrap; color: var(--ink-2); font-family: var(--mono);
+}
+.ptt.ready .dot { background: var(--ink-2); }
+.ptt.off { color: var(--red); }
+.ptt.off .dot { background: var(--red); }
+.ptt.talking { color: var(--amber); border-color: var(--amber); background: var(--amber-bg); }
+.ptt.talking .dot { background: var(--amber); }
+.ptt.talking ~ .say-field #say-input { border-color: var(--amber); }
+.ptt.talking ~ .say-field #say-input::placeholder { color: var(--ink); }
 .say-field { flex: 1; min-width: 0; }
-.say .quiet { height: 40px; }
+.say .secondary { height: 40px; }
+button.quiet { border-color: transparent; color: var(--ink-3); }
+button.quiet:hover { border-color: var(--line-strong); color: var(--ink); }
 
-/* --- new flight ----------------------------------------------------------------------------------------------- */
+/* --- pages: new flight, settings ------------------------------------------------------------------------------ */
 
-.setup { width: 100%; max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
-.card { padding: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); display: flex; flex-direction: column; gap: 12px; }
+.page { overflow-y: auto; padding: 32px; }
+.setup { width: 100%; max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; }
+.setup h1 { margin-bottom: 24px; }
+
+/* A section is ruled off, not boxed */
+.card { padding: 20px 0 24px; border-top: 1px solid var(--line-strong); display: flex; flex-direction: column; gap: 12px; }
+.card h2:not(:first-child) { margin-top: 12px; padding-top: 20px; border-top: 1px solid var(--line); }
 .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.field > span { color: var(--label); font-size: 12px; }
-.row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.check { display: flex; align-items: center; gap: 8px; }
-.field.mixer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 12px; }
+.field > span { color: var(--ink-3); font-size: 12px; }
+.row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.check { display: flex; align-items: flex-start; gap: 10px; color: var(--ink-2); }
+.check input { margin-top: 2px; }
+.field.mixer { display: grid; grid-template-columns: minmax(0, 1fr) 5ch; align-items: center; column-gap: 12px; }
 .field.mixer > span { grid-column: 1 / -1; }
-.field.mixer > output { min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; color: var(--label); }
-.choice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
-.choice > span { color: var(--label); font-size: 12px; }
+.field.mixer > output { text-align: right; font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+.choice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; color: var(--ink-2); }
+.choice > span { color: var(--ink-3); font-size: 12px; }
 .choice label { display: flex; align-items: center; gap: 8px; }
-.error { margin: 0; padding: 8px 16px; background: var(--red-bg); border: 1px solid var(--red); border-radius: var(--radius); color: var(--red); }
-.actions { display: flex; justify-content: flex-end; }
+.error { margin: 0 0 16px; padding: 10px 16px; background: var(--red-bg); box-shadow: inset 3px 0 var(--red); color: var(--red); }
+.actions { display: flex; justify-content: flex-end; padding-top: 20px; border-top: 1px solid var(--line-strong); }
 .load-row { display: flex; align-items: flex-end; gap: 12px; }
 .load-row .field { flex: 1; }
 .load-row button { height: 40px; }
 .manual { display: flex; flex-direction: column; gap: 12px; }
-.manual > summary { cursor: pointer; color: var(--label); font-size: 12px; width: max-content; }
-.manual > summary:hover { color: var(--text); }
+.manual > summary { cursor: pointer; color: var(--ink-3); font-size: 12px; width: max-content; max-width: 100%; }
+.manual > summary:hover { color: var(--ink); }
+.hint { margin: 0; color: var(--ink-3); font-size: 12px; line-height: 18px; }
 
-/* The briefing: who, from where to where, with runway and weather at both ends */
-.brief-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
-.brief-callsign { font-size: 20px; line-height: 28px; font-weight: 700; }
-.brief-say { color: var(--cyan); }
-.brief-airports { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 12px; align-items: start; }
-.brief-airport { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 12px; background: var(--deep);
-                 border: 1px solid var(--line); border-radius: var(--radius); }
-.brief-ident { font-size: 24px; line-height: 32px; font-weight: 700; }
-.brief-arrow { align-self: center; font-size: 20px; }
-.brief-metar { color: var(--label); font-size: 12px; line-height: 16px; overflow-wrap: anywhere; }
-.brief-route { display: flex; gap: 8px; align-items: baseline; }
-.brief-route .num { overflow-wrap: anywhere; }
-.brief-notes { margin: 0; padding-left: 20px; }
+/* The briefing is the strip ATC will work with: ruled cells, the amber edge of the strip that is next */
+.briefing { margin-bottom: 24px; background: var(--strip); border: 1px solid var(--line-strong); box-shadow: inset 3px 0 var(--amber); }
+.brief-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; padding: 12px 16px 12px 19px; border-bottom: 1px solid var(--line); }
+.brief-callsign { font-size: 22px; line-height: 28px; }
+.brief-say { color: var(--ink-2); }
+.brief-airports { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.brief-airport { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 12px 16px 12px 19px; }
+.brief-airport + .brief-airport { border-left: 1px solid var(--line); padding-left: 16px; }
+.brief-ident { font-size: 24px; line-height: 32px; }
+.brief-metar { color: var(--ink-3); font-size: 12px; line-height: 16px; overflow-wrap: anywhere; }
+.brief-route { display: flex; gap: 12px; align-items: baseline; padding: 10px 16px 10px 19px; border-top: 1px solid var(--line); }
+.brief-route .num { overflow-wrap: anywhere; min-width: 0; }
+.brief-notes { margin: 0; padding: 10px 16px 12px 36px; border-top: 1px solid var(--line); }
 .brief-notes:empty { display: none; }
 
-/* --- settings: a page with its sections on the left ---------------------------------------------------------- */
-
-#settings { padding: 0; gap: 0; }
-.settings-head { flex: none; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px; border-bottom: 1px solid var(--line); }
+/* Settings: the sections as tabs on top, one at a time */
+#settings { overflow: hidden; }
+.settings-head { flex: none; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 32px 32px 20px; }
 .settings-head p { margin: 4px 0 0; font-size: 12px; }
-.settings-body { flex: 1; min-height: 0; display: flex; }
-.side { flex: none; width: 200px; display: flex; flex-direction: column; gap: 4px; padding: 12px 8px; border-right: 1px solid var(--line); background: var(--rail); }
-.side .tab { width: 100%; border: 0; position: relative; }
-.side .tab[aria-selected="true"]::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 2px; background: var(--cyan); }
 .settings-pane { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.settings-content { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.settings-content .card { max-width: 760px; }
-.hint { margin: 0; color: var(--label); font-size: 12px; }
+.settings-content { flex: 1; min-height: 0; overflow-y: auto; padding: 0 32px 24px; }
+.settings-content .card { max-width: 760px; border-top: 0; }
 .binding { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.binding-label { flex: 0 0 112px; color: var(--label); font-size: 12px; }
-.binding-name { flex: 1 1 160px; color: var(--green); }
-.about { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 16px; font-size: 13px; }
-.about dt { color: var(--label); }
-.about dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
-.credits { margin: 0; padding-left: 20px; color: var(--soft); font-size: 13px; }
-.settings-actions { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--line); }
-.settings-actions .error { color: var(--red); }
+.binding-label { flex: 0 0 112px; color: var(--ink-3); font-size: 12px; }
+.binding-name { flex: 1 1 160px; color: var(--ink); }
+.about { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; font-size: 13px; }
+.about dt { color: var(--ink-3); }
+.about dd { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--ink-2); overflow-wrap: anywhere; }
+.credits { margin: 0; padding-left: 20px; color: var(--ink-2); font-size: 13px; line-height: 22px; }
+.settings-actions {
+  flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 12px 32px;
+  background: var(--strip); border-top: 1px solid var(--line-strong);
+}
+.settings-actions .error { margin: 0; padding: 0; background: none; box-shadow: none; }
 
-/* --- a small window next to the sim ----------------------------------------------------------------------------- */
+/* --- a window narrower than the strip -------------------------------------------------------------------------- */
+
+@media (max-width: 1080px) {
+  .link #link-text { display: none; }
+  .cell { padding: 8px 12px; }
+}
+
+/* --- a small window next to the sim ------------------------------------------------------------------------------ */
 
 @media (max-width: 760px) {
-  :root { --rail-w: 60px; }
-  .rail { padding: 8px 4px; }
-  .rail-item[aria-selected="true"]::before { left: -4px; }
-  .screen { padding: 12px; }
-  .topbar { padding: 8px 12px; gap: 4px 16px; }
-  .radios { gap: 4px 16px; }
-  .radio .num { font-size: 16px; line-height: 24px; }
-  .who { margin-left: 0; }
-  .flight { text-align: left; }
-  .board { grid-template-columns: minmax(0, 1fr); }
-  .facts { border-left: 0; border-top: 1px solid var(--line); }
-  .log li { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 8px 12px; }
-  .log .lf { display: none; }
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
+  .strip { flex-wrap: wrap; }
+  .cell.lead { width: auto; flex: 1 0 auto; }
+  .cell { border-bottom: 1px solid var(--line); }
+  .strip-end { padding-left: 12px; }
+  .stack { grid-row: 2; flex-direction: row; flex-wrap: wrap; overflow: visible; border-right: 0; border-bottom: 1px solid var(--line-strong); }
+  .com { flex: 1 1 160px; padding: 10px 16px; border-bottom: 0; border-right: 1px solid var(--line); }
+  .com-freq { font-size: 22px; line-height: 28px; }
+  .com.next .com-freq { font-size: 18px; }
+  .field-freqs { flex: 1 1 100%; padding: 8px 0; border-top: 1px solid var(--line); }
+  .field-info { padding-bottom: 4px; }
+  .freqs { flex-direction: row; flex-wrap: wrap; padding: 0 4px; }
+  .freq, .freq:last-child { border: 0; padding: 2px 12px; gap: 8px; }
+  .views { flex: 1 1 100%; position: static; }
+  .view-button { height: 44px; flex-direction: row; gap: 8px; }
+  .main { grid-row: 3; }
+  .log { padding: 16px; }
+  .page { padding: 20px 16px; }
   .row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .brief-airports { grid-template-columns: minmax(0, 1fr); }
-  .brief-arrow { display: none; }
-  .settings-body { flex-direction: column; }
-  .side { width: auto; flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--line); }
-  .side .tab { width: auto; }
-  .side .tab[aria-selected="true"]::before { display: none; }
+  .brief-airport + .brief-airport { border-left: 0; border-top: 1px solid var(--line); padding-left: 19px; }
+  .groups, .side { padding: 0 8px; flex-wrap: nowrap; overflow-x: auto; }
+  .phrase-list { padding: 0 16px 16px; }
+  .settings-head { padding: 20px 16px 12px; }
+  .settings-content { padding: 0 16px 16px; }
+  .settings-actions { padding: 12px 16px; }
   .say { flex-wrap: wrap; }
   .say-field { flex: 1 1 100%; order: -1; }
 }

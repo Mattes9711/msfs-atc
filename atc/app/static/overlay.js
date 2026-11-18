@@ -14,12 +14,22 @@ function text(id, value) {
   if ($(id).textContent !== value) $(id).textContent = value;
 }
 
+function setFreq(id, value) {
+  // In a monospace font the dot is a full character wide and reads like a gap ("121. 705"): narrow it, as in app.js
+  if ($(id).textContent === value) return;
+  const at = value.lastIndexOf(".");
+  const dot = document.createElement("span");
+  dot.className = "sep";
+  dot.textContent = ".";
+  $(id).replaceChildren(value.slice(0, at), dot, value.slice(at + 1));
+}
+
 function showStatus(s) {
   if (!s) return;
-  text("com", freq(s.com1_khz));
+  setFreq("com", freq(s.com1_khz));
   text("tuned", s.tuned || (s.on_frequency === false ? "no station" : ""));
   $("next").hidden = !s.next;
-  if (s.next) text("next", "→ " + freq(s.next.khz));
+  if (s.next) setFreq("next", "→ " + freq(s.next.khz));
   $("next").title = s.next ? s.next.name : "";
   text("cleared", s.cleared || "-");
   text("squawk", s.squawk || "----");

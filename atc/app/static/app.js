@@ -58,9 +58,16 @@ function show(state) {
     screenBeforeSettings = running ? "flight" : "setup";  // shown when the settings are closed
   }
   const p = state.plan;
+  document.body.classList.toggle("running", running);
+  for (const id of ["strip-flight", "callsign-key", "phase-cell", "field"]) $(id).hidden = !running;
+  if (!running) {
+    $("next-com").hidden = true;
+    text("st-com", "---.---");
+    text("st-tuned", "No flight");
+  }
   text("flight-callsign", running && p ? p.callsign : "MSFS ATC");
-  text("flight-route", running && p ? [p.aircraft, `${p.departure} → ${p.destination || "----"}`,
-    p.cruise_ft ? level(p.cruise_ft) : ""].filter(Boolean).join(" · ") : "");
+  text("flight-route", running && p ? `${p.departure} → ${p.destination || "----"}` : "");
+  $("flight-route").title = running && p ? [p.aircraft, p.cruise_ft ? level(p.cruise_ft) : ""].filter(Boolean).join(" · ") : "";
   if (!running && state.config.simbrief_username && !$("start-form").simbrief.value) {
     $("start-form").simbrief.value = state.config.simbrief_username;
   }
@@ -78,8 +85,8 @@ function show(state) {
   if (!running && $("settings").hidden) markRail("tab-atc");
 }
 
-function markRail(id) {  // the rail shows which view is open
-  for (const item of document.querySelectorAll(".rail-item")) item.setAttribute("aria-selected", String(item.id === id));
+function markRail(id) {  // the views at the foot of the stack show which one is open
+  for (const item of document.querySelectorAll(".view-button")) item.setAttribute("aria-selected", String(item.id === id));
 }
 let setupShownFor = null;  // the session the start screen was last prepared after
 
@@ -96,23 +103,26 @@ function showStatus(s) {
   if (!s) return;
   callsign = s.callsign || callsign;
   showFreq($("st-com"), s.com1_khz);
+  text("st-tuned", s.tuned || (s.on_frequency === false ? "No station on this frequency" : ""));
+  $("next-com").hidden = !s.next;
   if (s.next) { showFreq($("st-next"), s.next.khz); text("st-next-name", s.next.name); }
   else { text("st-next", "---.---"); text("st-next-name", ""); }
   text("st-squawk", s.squawk || "----");
 
   const a = s.airport;
+  text("st-qnh", a.qnh || "----");
   text("ap-ident", a.ident);
   text("ap-name", a.name);
-  text("ap-info", [a.runway && `Runway ${a.runway} in use`, s.atis && `ATIS ${s.atis}`, a.qnh && `QNH ${a.qnh}`,
+  text("ap-info", [a.runway && `Runway ${a.runway} in use`, s.atis && `ATIS ${s.atis}`,
                    a.wind && `wind ${a.wind}`].filter(Boolean).join(" · "));
-  $("ap-freqs").replaceChildren(...a.frequencies.map((f) => {
-    const item = document.createElement("span");
+  $("ap-freqs").replaceChildren(...a.frequencies.map((f) => {  // a ruled list: label | frequency
+    const item = document.createElement("div");
+    item.className = "freq" + (f.khz === s.com1_khz ? " tuned" : "");
     const key = document.createElement("span");
     key.className = "key";
     key.textContent = f.label;
     const value = document.createElement("span");
     showFreq(value, f.khz);
-    if (f.khz === s.com1_khz) value.className = "tuned";
     item.append(key, value);
     stationKhz.set(f.station, f.khz);
     return item;
@@ -122,15 +132,13 @@ function showStatus(s) {
   if (s.controller && s.controller_khz) stationKhz.set(s.controller, s.controller_khz);
   for (const label of document.querySelectorAll(".ls[data-station]")) {  // rows written before we knew the frequency
     const khz = stationKhz.get(label.dataset.station);
-    if (khz) { label.previousElementSibling.textContent = freq(khz); delete label.dataset.station; }
+    if (khz) { label.parentElement.querySelector(".lf").textContent = freq(khz); delete label.dataset.station; }
   }
 
   text("st-phase", s.phase.replace("_", " ").replace(/^./, (c) => c.toUpperCase()));
   text("st-runway", s.runway || "--");
-  text("st-sid", s.flight.sid || "-");
+  text("st-sid", [s.flight.sid, s.flight.star].filter(Boolean).join(" / ") || "-");
   text("st-cleared", s.cleared || "-");
-  text("st-dest", s.flight.destination || "-");
-  text("st-star", s.flight.star || "-");
 
   $("copilot-button").setAttribute("aria-pressed", String(Boolean(s.copilot)));
   text("copilot-button", s.copilot ? "Co-pilot radio: on" : "Co-pilot radio: off");
@@ -139,20 +147,24 @@ function showStatus(s) {
   $("overlay-button").hidden = s.overlay === null || s.overlay === undefined;  // only in the app window
   $("overlay-button").setAttribute("aria-pressed", String(Boolean(s.overlay)));
   text("overlay-button", s.overlay ? "Overlay: on" : "Overlay: off");
-  text("ptt-text", s.ptt === "ready" ? "PTT " + s.ptt_key.toUpperCase() : s.ptt === "off" ? "PTT off" : "PTT …");
-  showBanner(s);
+  showPtt();
+  showBanner();
+}
+
+function showPtt() {  // "Transmitting" while push-to-talk is held, else which key it is
+  const s = status;
+  text("ptt-text", talking ? "Transmitting" : !s ? "PTT"
+    : s.ptt === "ready" ? "PTT " + s.ptt_key.toUpperCase() : s.ptt === "off" ? "PTT off" : "PTT …");
 }
 
 let lastWarning = null;  // {text, time} of the last "stop immediately" / "go around"
 
-function showBanner(s) {
-  // Only when something is due: a warning (for 30 s), else a readback
+function showBanner() {
+  // Only for a warning, for 30 s; the readback that is due is the next call above the say bar
   const warning = lastWarning && Date.now() / 1000 - lastWarning.time < 30 ? lastWarning : null;
-  const readback = s.suggestion && s.suggestion.title === "Read back" ? s.suggestion.text : null;
-  $("banner").hidden = !warning && !readback;
-  $("banner").className = "banner" + (warning ? " warn" : "");
-  text("banner-title", warning ? "ATC:" : "Read back:");
-  text("banner-text", warning ? warning.text : readback || "");
+  $("banner").hidden = !warning;
+  text("banner-title", "ATC");
+  text("banner-text", warning ? warning.text : "");
 }
 
 // --- suggested next call --------------------------------------------------------------------------------------
@@ -168,7 +180,9 @@ function putInTextBox(value) {  // a suggestion is never sent by itself: the pil
 function showSuggestion(s) {
   const next = s && s.suggestion;
   $("next").hidden = !next;
-  if (!next || next.text === suggested) return;
+  if (!next) return;
+  text("next-title", next.title === "Read back" ? "Read back" : next.station ? `Next call · ${next.station}` : "Next call");
+  if (next.text === suggested) return;
   suggested = next.text;
   text("next-text", next.text);
 }
@@ -189,6 +203,7 @@ let talking = false;
 function showLive(live) {
   talking = live.state !== "idle";
   $("ptt").classList.toggle("talking", talking);
+  showPtt();
   $("say-input").placeholder = !talking ? SAY_PLACEHOLDER
     : (live.text || "Listening") + (live.state === "speaking" ? " …" : " (recognising)");
 }
@@ -268,7 +283,7 @@ function showPhrases() {
 
 // --- views ---------------------------------------------------------------------------------------------------
 
-const VIEWS = { atc: "view-atc", map: "map", phrases: "phrases" };  // rail item → the element it shows
+const VIEWS = { atc: "view-atc", map: "map", phrases: "phrases" };  // view button → the element it shows
 
 function showView(name) {
   if (!$("settings").hidden) closeSettings();
@@ -388,10 +403,10 @@ function drawMap() {
       }
     }
   }
-  // The taxi route ATC gave: green, on top of the taxiways
+  // The taxi route ATC gave: amber, on top of the taxiways
   const route = (mapMoving && mapMoving.taxi_route) || [];
   if (route.length > 1 && ZOOMS_NM[zoom] <= 10) {
-    g.strokeStyle = color("--green");
+    g.strokeStyle = color("--accent");
     g.lineWidth = 3;
     g.beginPath();
     route.forEach(([lat, lon], i) => { const [x, y] = xy(lat, lon); i ? g.lineTo(x, y) : g.moveTo(x, y); });
@@ -407,7 +422,7 @@ function drawMap() {
     g.fillStyle = color("--label");
     g.fillText(t.callsign + (t.on_ground ? "" : " " + level(t.alt_ft)), x + 9, y);
   }
-  if (own) arrow(g, w / 2, h / 2, own.heading, 9, color("--green"));  // us: green, in the middle
+  if (own) arrow(g, w / 2, h / 2, own.heading, 9, color("--accent"));  // us: amber, in the middle
 }
 
 function drawTaxiways(g, airport, xy, w, h, perNm) {
@@ -505,14 +520,23 @@ function row(e) {
     label.dataset.station = e.station;  // its frequency is filled in later
   }
   if (e.kind === "pilot" && !(status && status.com1_khz)) label.dataset.station = "You";
-  const msg = document.createElement("span");
-  msg.className = "msg";
-  const time = document.createElement("span");
-  time.className = "time";
-  time.textContent = utc(e.time);
-  msg.append(time, e.text);
-  li.append(frequency, label, msg);
+  // A script: who, on which frequency, when; then what was said
+  const meta = element("div", "meta");
+  meta.append(label, frequency, element("span", "time", utc(e.time)));
+  li.append(meta, element("div", "msg", e.text));
   return li;
+}
+
+let lastRadioTime = 0, lastRadioKind = "";  // a pause on the radio starts a new exchange: more air above it
+const MINE = new Set(["pilot", "copilot"]);
+
+function markExchange(li, e) {
+  if (!RADIO.has(e.kind)) return;
+  const answer = !MINE.has(e.kind) && MINE.has(lastRadioKind);  // ATC answering us
+  const readback = MINE.has(e.kind) && status && status.suggestion && status.suggestion.title === "Read back";
+  if (lastRadioTime && e.time - lastRadioTime > 15 && !answer && !readback) li.classList.add("gap");
+  lastRadioTime = e.time;
+  lastRadioKind = e.kind;
 }
 
 // The log sticks to its newest line unless the pilot scrolled up to read. A ResizeObserver keeps it there when the
@@ -538,21 +562,20 @@ const HIDDEN = new Set(["understood"]);  // the parser's view: in the flight log
 
 function addEvent(e) {
   if (HIDDEN.has(e.kind)) return;
-  if (e.kind === "readback") {  // a tick behind the pilot's own transmission instead of a line of its own
-    const mine = [...log.querySelectorAll("li.pilot .msg")].pop();
-    if (mine) {
-      const tick = document.createElement("span");
-      tick.className = "tick";
-      tick.textContent = " ✓";
-      tick.title = "Readback correct";
-      mine.append(tick);
+  if (e.kind === "readback") {  // a quiet line under the pilot's own transmission instead of a row of its own
+    const mine = [...log.querySelectorAll("li.pilot, li.copilot")].pop();
+    if (mine && !mine.querySelector(".meta.ok")) {
+      mine.classList.remove("gap");  // a readback belongs to the exchange it answers
+      mine.append(element("div", "meta ok", " Readback correct"));
+      toEnd();
       return;
     }
   }
   const li = row(e);
+  markExchange(li, e);
   log.append(li);
   keepAtEnd.observe(li);
-  if (isWarning(e)) { lastWarning = { text: e.text, time: e.time }; if (status) showBanner(status); }
+  if (isWarning(e)) { lastWarning = { text: e.text, time: e.time }; showBanner(); }
   toEnd();
 }
 
@@ -562,6 +585,8 @@ function clearLog(first) {
   log.replaceChildren(row(first));
   stickToEnd = true;
   lastWarning = null;
+  lastRadioTime = 0;
+  lastRadioKind = "";
 }
 
 function connect(from) {
