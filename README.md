@@ -4,8 +4,8 @@ Voice ATC for Microsoft Flight Simulator 2020, running entirely on your own PC: 
 no cloud. You talk on push-to-talk; Clearance, Ground, Tower, Departure, Center and Approach answer in ICAO
 phraseology, with a voice of their own for each controller.
 
-> **Early test version (0.1.4).** Most of it has been flown in MSFS, the newest parts (co-pilot calls, GSX,
-> cabin sound) only in practice mode so far. Reports are welcome in the Issues.
+> **Early test version (0.2.0).** Most of it has been flown in MSFS, the newest parts (VFR flights, the overlay,
+> live speech text, co-pilot calls, GSX, cabin sound) only in practice mode so far. Reports are welcome in the Issues.
 
 > **MSFS 2024: not tested yet.** It connects through SimConnect the same way, and MSFS ATC reads Little Navmap's
 > MSFS 2024 database while MSFS 2024 runs (load the scenery library for MSFS 2024 in Little Navmap 3.0.14 or
@@ -16,6 +16,12 @@ phraseology, with a voice of their own for each controller.
 - **The whole flight:** IFR clearance with SID and squawk, pushback, taxi with every named taxiway, holding point
   and runway crossings, takeoff, handoffs, Center sectors with direct-tos, the descent at the planned top of
   descent, STAR, radar vectors to the ILS, landing, taxi to the stand.
+- **VFR flights:** from small fields with their Info station or none, the traffic circuit, through or across
+  the control zone of a controlled field.
+- **Arrival procedures** from Little Navmap: STAR and approach transition flown, descent by their constraints.
+- **The app window:** a flight-strip console with your frequencies and what to say next, a map drawn like a
+  chart (taxi diagram at the airport, frequencies of the area wherever you move it), the words while you speak,
+  and a small overlay over the sim (windowed or borderless mode).
 - **Readbacks are checked**, numbers spoken digit by digit; strict readbacks for training.
 - **Real traffic** from LiveTraffic, FSLTL or MSFS: runway in use from the traffic, give way and follow on the
   ground, departure and wake turbulence spacing, the approach sequence, the other pilots on the frequency.
