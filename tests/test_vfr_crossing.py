@@ -3,6 +3,7 @@ from Sierra to November")."""
 from dataclasses import replace
 
 from atc.airport.model import Frequency
+from atc.controller.suggest import phrase_book, suggestion
 from atc.controller.vfr import zones_along
 from atc.intent.parser import parse
 from tests.test_info import FULL, SHORT, Flight
@@ -113,3 +114,45 @@ def test_the_towered_fields_near_the_line(eddh, eddm):
     near = source.towered_near((eddh.lat, eddh.lon), (eddm.lat, eddm.lon), 15)
     assert "EDDH" in near and "EDDM" in near
     assert zones_along([eddh, eddm], eddh, eddm) == ()
+
+
+def test_e3b_the_suggestions_fly_the_crossing():
+    f = on_the_way()
+    airborne_at(f, 180, 20, 1400, field=CROSS)  # 12 nm before the zone: not yet
+    assert f.atc.crossing_ahead() is None
+    airborne_at(f, 180, 17, 1400, field=CROSS)  # 9 nm before it
+    sug = suggestion(f.atc)
+    assert sug == {"title": "Request crossing", "station": "Victor Tower", "khz": TWR_V,
+                   "text": f"Victor Tower, {FULL}, 17 miles south, 1400 feet, request crossing of the control zone "
+                           "from Sierra to November"}
+    assert f.atc.expected_station().name == "Victor Tower"
+    f.say(TWR_V, sug["text"])
+    sug = suggestion(f.atc)
+    assert sug["text"] == f"cleared to cross the control zone via Sierra and November, 1500 feet or below, {SHORT}"
+    assert f.say(TWR_V, sug["text"])[0] == "(readback correct)"
+    airborne_at(f, 180, 5, 1400, field=CROSS)
+    assert suggestion(f.atc)["text"] == f"Victor Tower, {SHORT}, Sierra"
+    f.say(TWR_V, suggestion(f.atc)["text"])
+    airborne_at(f, 0, 5, 1400, field=CROSS)
+    assert f.say(TWR_V, suggestion(f.atc)["text"]) == [
+        f"{SHORT}, leaving the control zone, frequency change approved"]
+    assert f.atc.crossing_ahead() is None and "EDXV" in f.atc.crossed
+
+
+def test_e3b_the_phrase_book_marks_the_zone_group():
+    f = on_the_way()
+    airborne_at(f, 180, 15, 1400, field=CROSS)
+    [first, *_] = phrase_book(f.atc)
+    assert first["group"] == "Control zone (VFR)"
+    request = next(p for p in first["phrases"] if p["title"] == "Request crossing")
+    assert request["pilot"].startswith(f"Victor Tower, {FULL}, ")
+
+
+def test_e3b_into_the_zone_without_a_clearance_a_hint_once():
+    f = on_the_way()
+    assert airborne_at(f, 180, 7, 1400, field=CROSS) == [
+        "(you are in the control zone of Victor without a clearance: call Victor Tower 120.100 and request "
+        "crossing)"]
+    assert airborne_at(f, 180, 5, 1400, field=CROSS) == []
+    airborne_at(f, 0, 9, 1400, field=CROSS)  # out again
+    assert "EDXV" in f.atc.crossed and f.atc.crossing_ahead() is None

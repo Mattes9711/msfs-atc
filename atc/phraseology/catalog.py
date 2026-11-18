@@ -236,6 +236,16 @@ PHRASES = (
     Phrase("Control zone (VFR)", "Final", "{station}, {callsign}, final runway {runway}",
            "The landing clearance, or \"continue approach\"", "on_final",
            note="Tower also calls by itself when it sees you on final."),
+    Phrase("Control zone (VFR)", "Request crossing",
+           "{station}, {callsign}, 10 miles south, 2000 feet, request crossing of the control zone from November to "
+           "Sierra", "\"cleared to cross the control zone via November and Sierra, 1500 feet or below, report "
+           "November\"", "request_crossing", {"vfr_point": "N", "vfr_exit": "S"},
+           note="A control zone on the way (another field with a Tower): call its Tower about 10 miles before it. "
+                "Without a clearance you must stay out of it."),
+    Phrase("Control zone (VFR)", "Read back the crossing",
+           "Cleared to cross the control zone via November and Sierra, 1500 feet or below, {callsign}", CORRECT,
+           "readback", {"vfr_point": "N", "vfr_exit": "S", "altitude_ft": 1500},
+           note="Then report November, and Sierra on the way out."),
     # --- Any time ----------------------------------------------------------------------------------------------
     Phrase("Any time", "Radio check", "{station}, {callsign}, radio check",
            "\"read you five\"", "radio_check"),

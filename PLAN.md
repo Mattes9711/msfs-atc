@@ -1328,7 +1328,13 @@ E3. Crossing a control zone ("request crossing of the control zone from November
          change approved". "check altitude" as in E1. The request on another station: "contact Victor Tower …".
          No QNH (no METAR of that field), the exit point not checked in the readback, only the straight line (no
          VFR route). Tests: `tests/test_vfr_crossing.py`.
-    E3b. The suggestion 10 NM before the zone, the hint without a clearance, the Phrases entry, the panel.
+    E3b. ✅ From 10 NM before the zone (sideways distance to its border) the suggestion "Victor Tower, …, 9 miles
+         south, 1400 feet, request crossing of the control zone from Sierra to November", the readback with both
+         points, then "Sierra" and "November"; NEXT in the radio box is that Tower. In the zone without a
+         clearance once a hint on the screen, not spoken ("you are in the control zone of Victor without a
+         clearance: call Victor Tower 120.100 and request crossing"); out of it again, the zone counts as
+         crossed. The Phrases tab's zone group has "Request crossing" and "Read back the crossing" and is the
+         current group meanwhile. Smoke test EDHE → EDHL offline: Hamburg Tower "via November one and Delta".
 
 **Open questions (❓, answers first):**
 1. Language: English only, as today (BZF I phraseology), or German too (BZF II, what most ultralight pilots use at

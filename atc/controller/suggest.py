@@ -13,7 +13,7 @@ import re
 from atc.airport.geo import bearing_deg, distance_nm
 from atc.controller import readback as rb
 from atc.controller.circuit import circuit_side, leg_words
-from atc.controller.vfr import COMPASS as DIRECTIONS, point_written
+from atc.controller.vfr import COMPASS as DIRECTIONS, point_written, zone_point
 from atc.phraseology import spoken
 from atc.phraseology.airlines import TELEPHONY
 from atc.phraseology.catalog import EXAMPLE, GROUPS, PHRASES
@@ -64,7 +64,9 @@ def readback_part(item: rb.Item) -> str:
     if key == "vfr_point":  # "leave the control zone via November", "... to the north"
         if value.lower() in DIRECTIONS:
             return phrase
-        return f"{phrase.split(' via ')[0]} via {point_written(value)}"
+        head, _, tail = phrase.partition(" via ")
+        exit_ = tail.partition(" and ")[2]  # crossing: "via Sierra and November" (E3)
+        return f"{head} via {point_written(value)}" + (f" and {_digits(exit_)}" if exit_ else "")
     if key == "heading":
         return f"{phrase.split('heading')[0].strip()} heading {value:03d}".strip()
     if key == "pushback":
@@ -84,6 +86,13 @@ def readback_part(item: rb.Item) -> str:
             "line_up": "line up and wait"}[key]
 
 
+def _digits(words: str) -> str:
+    """"Sierra one" → "Sierra 1", as the pilot writes a point."""
+    digits = {w: str(i) for i, w in enumerate(("zero", "one", "two", "tree", "four", "fife", "six", "seven",
+                                                "eight", "niner"))}
+    return re.sub(r"(\d) (?=\d)", r"\1", " ".join(digits.get(w, w) for w in words.split()))
+
+
 def suggestion(atc) -> dict | None:
     """{"title", "text", "station", "khz"} or None when nothing is due (e.g. taxiing, cruising). `station` is who
     to say it to: a readback goes to the controller who gave the instruction, even a "contact …"."""
@@ -91,6 +100,8 @@ def suggestion(atc) -> dict | None:
         cs = _callsign_for(atc, waiting)
         return {"title": "Read back", "text": ", ".join(readback_part(i) for i in atc.pending) + f", {cs}",
                 "station": waiting.name, "khz": waiting.freq.khz}
+    if field := atc.crossing_ahead():
+        return _crossing_suggestion(atc, field)  # a control zone on the way (Milestone 9 E3)
     if atc._ctr_role():
         return _ctr_suggestion(atc)  # through a control zone (Milestone 9 E)
     if role := atc._info_role():
@@ -182,6 +193,31 @@ def _ctr_suggestion(atc) -> dict | None:
     return None
 
 
+def _crossing_suggestion(atc, field) -> dict | None:
+    """Through another field's zone (E3): the request, then the points to report."""
+    station, state = atc._zone_tower(field), atc.state
+    if station is None or state is None:
+        return None
+    name, cs = station.name, _callsign_for(atc, station)
+
+    def call(title: str, text: str) -> dict:
+        return {"title": title, "text": f"{name}, {cs}, {text}", "station": name, "khz": station.freq.khz}
+
+    if atc.ctr_stage == "crossing":
+        point = atc.ctr_point
+        if point.point:
+            return call("Reporting point", point_written(point.code))
+        return call("Leaving the control zone", "leaving the control zone")
+    dest = atc.destination
+    entry, exit_ = zone_point(field, state.lat, state.lon), zone_point(field, dest.lat, dest.lon)
+    how = (f"from {point_written(entry.code)} to {point_written(exit_.code)}" if entry.point and exit_.point
+           else f"from the {entry.words} to the {exit_.words}")
+    nm = round(distance_nm(field.lat, field.lon, state.lat, state.lon))
+    side = COMPASS[round(bearing_deg(field.lat, field.lon, state.lat, state.lon) / 45) % 8]
+    return call("Request crossing", f"{nm} miles {side}, {round(state.alt_msl_ft, -2):.0f} feet, request crossing "
+                                    f"of the control zone {how}")
+
+
 def _info_suggestion(atc, role: str) -> dict | None:
     """At an uncontrolled field (Milestone 9 B): the calls to its Info, or the blind calls "Uetersen traffic, ..."
     where it has none, on the frequency tuned: the data has no frequency of its own for such a field (its UNICOM
@@ -259,6 +295,7 @@ def phrase_book(atc) -> list[dict]:
         field = atc.airport if info_role == "info" else atc.destination
         values["info"] = info.name if info else f"{field.name} traffic"
     zone_role = atc._ctr_role()  # through a control zone: its group is the current one (Milestone 9 E)
+    zone_role = zone_role or ("crossing" if atc.crossing_ahead() else None)  # ... or one on the way (E3)
     groups = []
     for group, phases in GROUPS.items():
         role = GROUP_ROLE.get(group)

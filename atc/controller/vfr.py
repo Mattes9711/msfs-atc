@@ -47,6 +47,7 @@ COMPASS = ("north", "east", "south", "west")
 ZONE_STAGES = ("in", "joining", "final_due", "final")
 ZONE_SEARCH_NM = 15  # fields this close to the line origin-destination may have a zone on the way (E3)
 ZONE_NEAR_NM = 2  # a zone this close to the line is on the way
+CROSSING_CALL_NM = 10  # this close to a zone on the way: the suggestion to request the crossing
 
 
 @dataclass(frozen=True)
@@ -160,6 +161,17 @@ def zones_along(fields, origin: Airport, dest: Airport) -> tuple[Airport, ...]:
     return tuple(sorted(owners.values(), key=lambda f: distance_nm(*a, f.lat, f.lon)))
 
 
+def zone_distance_nm(airport: Airport, lat: float, lon: float) -> float:
+    """How far (lat, lon) is from the field's control zone, 0 inside it (sideways: the ceiling isn't looked at)."""
+    zone = airport.control_zone
+    if zone is None:
+        return max(0.0, distance_nm(lat, lon, airport.lat, airport.lon) - NO_ZONE_NM)
+    poly = list(zone.polygon)
+    if point_in_polygon(lat, lon, poly):
+        return 0.0
+    return min(segment_distance_nm(lat, lon, p, q) for p, q in zip(poly, poly[1:] + poly[:1]))
+
+
 def _longest(airport: Airport) -> float:
     return max((r.length_ft for r in airport.runways), default=0)
 
@@ -222,6 +234,8 @@ class VfrMixin:
 
     def _ctr_leave(self, station: Station, state: AircraftState | None = None) -> list[Response]:
         self.phase, self.ctr_stage, self.ctr_point = "enroute", None, None
+        if self.crossing is not None:
+            self.crossed.add(self.crossing.ident)
         self.crossing, self.ctr_exit, self.ctr_entered = None, None, False
         text = f"{self.cs}, leaving the control zone, frequency change approved"
         return self._transmit(station, text, state) if state else [self._say(station, text)]
@@ -307,6 +321,37 @@ class VfrMixin:
     def _zone_tower(self, airport: Airport) -> Station | None:
         towers = [f for f in airport.frequencies if f.type == "T"]
         return Station(airport.ident, min(towers, key=lambda f: f.khz)) if towers else None
+
+    def crossing_ahead(self) -> Airport | None:
+        """The field whose zone to call now: the one being crossed, else the nearest one on the way within
+        CROSSING_CALL_NM not crossed yet (for the suggestion and the station to tune)."""
+        if self.ctr_stage == "crossing":
+            return self.crossing
+        state = self.state
+        if (self.ctr_stage is not None or not self.crossing_fields or state is None or state.on_ground
+                or self.phase not in ("airborne", "climb", "enroute")):
+            return None
+        near = [(zone_distance_nm(f, state.lat, state.lon), f.ident, f) for f in self.crossing_fields
+                if f.ident not in self.crossed]
+        near = [n for n in near if n[0] <= CROSSING_CALL_NM]
+        return min(near)[2] if near else None
+
+    def _zone_hint(self, state: AircraftState) -> list[Response]:
+        """In a zone on the way without a clearance: once, a hint on the screen (not spoken) whom to call. Out of
+        it again, the zone counts as crossed."""
+        if not self.vfr or self.ctr_stage is not None or state.on_ground:
+            return []
+        for f in self.crossing_fields:
+            inside = in_zone(f, state.lat, state.lon, state.alt_msl_ft)
+            if f.ident in self.crossing_hinted:
+                if not inside:
+                    self.crossed.add(f.ident)
+                continue
+            if inside and f.ident not in self.crossed and (tower := self._zone_tower(f)) is not None:
+                self.crossing_hinted.add(f.ident)
+                return [Response(f"you are in the control zone of {f.name} without a clearance: call {tower.name} "
+                                 f"{tower.freq.khz / 1000:.3f} and request crossing", spoken=False)]
+        return []
 
     def _crossing_field(self, station: Station) -> Airport | None:
         return next((a for a in self.crossing_fields if a.ident == station.ident and station.freq.type == "T"), None)

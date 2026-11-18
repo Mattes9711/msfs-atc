@@ -204,6 +204,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
         self.crossing: Airport | None = None
         self.ctr_exit = None
         self.ctr_entered = False
+        self.crossed: set[str] = set()  # fields whose zone we were cleared through, or flew through anyway
+        self.crossing_hinted: set[str] = set()  # ... entered without a clearance: the hint shown
         self.dest_atis = Atis(destination) if destination else None
         if self.dest_atis:
             self.dest_atis.update(destination_metar, self.arrival_runway)
@@ -309,6 +311,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
         expected = self._station_by_key(self.handoff_to) if self.handoff_to else None
         if expected is None and self.call_next is not None:
             expected = self.call_next
+        if expected is None and (field := self.crossing_ahead()):
+            expected = self._zone_tower(field)  # a control zone on the way (Milestone 9 E3)
         if expected is None:
             expected = self.station(self._phase_role())
         return expected
@@ -406,6 +410,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
             return out  # leaving the origin's control zone (Milestone 9 E)
         if self.ctr_stage == "crossing":
             return self._crossing_tick(state)  # through another field's zone (E3)
+        if hint := self._zone_hint(state):
+            return hint
         if (info := self._info_tick(state)) is not None:
             return info  # at an uncontrolled field (Milestone 9 B)
         if self.pending and not all(i.key == "frequency_khz" for i in self.pending):
