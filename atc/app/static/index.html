@@ -118,6 +118,7 @@
             <button type="button" class="chip" data-call="radio check">Radio check</button>
             <button type="button" class="chip" id="copilot-button" aria-pressed="false" title="The co-pilot reads back, tunes and checks in, and makes the calls as you go; also: say &quot;copilot, you have the radio&quot;">Co-pilot radio: off</button>
             <button type="button" class="chip" id="copilot-next" hidden title="The co-pilot makes the call that is due">Co-pilot: next call</button>
+            <button type="button" class="chip" id="overlay-button" hidden aria-pressed="false" title="A small window over the sim with frequency, last call, cleared altitude, squawk, QNH and what to say (MSFS in windowed or borderless mode)">Overlay: off</button>
           </div>
 
           <!-- The board: where you are and its frequencies, beside the flight -->
@@ -223,6 +224,7 @@
                 <label class="check"><input type="checkbox" name="cabin.announcements"> Cabin announcements: boarding, doors closed, take-off, descent, landing, arrival; in the airline's language (German for Lufthansa, Eurowings, Condor, …) and English</label>
                 <h2>Microphone</h2>
                 <label class="field"><span>Input</span><select name="whisper.mic" id="mic-select"></select></label>
+                <label class="check"><input type="checkbox" name="whisper.live_text"> Show the words while you speak (on a slow PC the final text can come up to a second later)</label>
               </section>
 
               <section class="card" data-section="controls">

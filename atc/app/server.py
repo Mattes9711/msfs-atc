@@ -7,6 +7,9 @@
 - POST /api/start        start a session (flight plan + options as JSON)
 - POST /api/say          a transmission or /command typed in the window
 - POST /api/stop         end the session
+- GET  /api/live?v=N     the words while push-to-talk is held: waits until they differ from version N (long poll)
+- GET  /overlay          the small window over the sim (static/overlay.html)
+- POST /api/overlay      show or hide it ({"visible": bool}), in the app window only
 
 Only 127.0.0.1 is served. POSTs must be JSON from our own page (Origin check), so another website open in the
 browser can't send transmissions to it.
@@ -43,6 +46,7 @@ HEARTBEAT_S = 5  # keeps the stream alive; a failed write shows the page is gone
 MAX_BODY = 64 * 1024  # a flight plan or a transmission is far smaller
 GZIP_FROM = 1024  # answers this big or bigger are sent compressed
 GZIP_LEVEL = 6
+LIVE_WAIT_S = 5  # a long poll of /api/live answers after this at the latest, changed or not
 
 
 class EventLog:
@@ -62,6 +66,29 @@ class EventLog:
             if len(self.events) <= index:
                 self.changed.wait(timeout)
             return list(enumerate(self.events))[index:]
+
+
+class LiveText:
+    """The words while push-to-talk is held (atc/audio/voice.py), for the window and the overlay. Not an Event:
+    they change several times a transmission and stay out of the log; what counts comes as "heard" afterwards."""
+
+    def __init__(self):
+        self.version, self.text, self.state = 0, "", "idle"
+        self.changed = threading.Condition()
+
+    def set(self, text: str, state: str) -> None:
+        with self.changed:
+            if (text, state) == (self.text, self.state):
+                return
+            self.version += 1
+            self.text, self.state = text, state
+            self.changed.notify_all()
+
+    def wait(self, version: int, timeout: float = LIVE_WAIT_S) -> dict:
+        """As soon as the version differs from the one given (at once if it already does), else after timeout."""
+        with self.changed:
+            self.changed.wait_for(lambda: self.version != version, timeout)
+            return {"v": self.version, "text": self.text, "state": self.state}
 
 
 class WindowInput:
@@ -183,6 +210,8 @@ class App:
         self.thread: threading.Thread | None = None
         self.session_from = 0  # first event of the current session
         self.lock = threading.Lock()
+        self.live = LiveText()
+        self.overlay = None  # the small window over the sim (atc/app/__main__.py), None in a browser
 
     @property
     def running(self) -> bool:
@@ -206,7 +235,19 @@ class App:
         if not (self.session and self.running):
             return None
         return {**self.session.controller.status(), "ptt": self.ptt_state,
-                "ptt_key": binding_name(self.config.whisper.ptt_key)}
+                "ptt_key": binding_name(self.config.whisper.ptt_key),
+                "overlay": None if self.overlay is None else self.overlay.wanted}
+
+    def set_overlay(self, visible: bool) -> dict:
+        """The overlay's × and the Overlay chip: shown during a flight or not, remembered for the next one."""
+        if self.overlay is None:
+            raise SetupError("the overlay is only there in the app window")
+        self.overlay.wanted = visible
+        if visible and self.running:
+            self.overlay.show()
+        else:
+            self.overlay.hide()
+        return {"visible": visible}
 
     def phrases(self) -> list[dict]:
         """The phrase book: with the running flight's stations and values, or the catalogue's examples."""
@@ -280,6 +321,8 @@ class App:
             self.thread = threading.Thread(target=self._run, args=(session, sink), daemon=True)
             self.thread.start()
             threading.Thread(target=self._start_voice, args=(sink, self.push_to_talk), daemon=True).start()
+            if self.overlay is not None and self.overlay.wanted:
+                self.overlay.show()
         return self.state()
 
     def _start_voice(self, sink: AppSink, push_to_talk: DeferredInput) -> None:
@@ -307,6 +350,8 @@ class App:
             listener = setup.make_whisper_input(self.config, self.transcriber)
             session = self.session
             listener.context = lambda: session.controller.speech_context()  # this flight's words for whisper
+            if getattr(listener, "live_wanted", False):
+                listener.live = self.live.set  # the words while speaking (Settings: live text)
             push_to_talk.ready(listener)
             progress(f"Push-to-talk ready: hold [{binding_name(self.config.whisper.ptt_key)}] while you speak")
             self.ptt_state = "ready"
@@ -325,6 +370,9 @@ class App:
             traceback.print_exc()
         finally:
             session.close()
+            self.live.set("", "idle")
+            if self.overlay is not None:
+                self.overlay.hide()
             sink.emit(Event("system", "session ended"))
             if sink.flight_log is not None:
                 sink.flight_log.close()
@@ -378,6 +426,11 @@ def make_handler(app: App, heartbeat_s: float = HEARTBEAT_S):
             path = urlparse(self.path).path
             if path == "/":
                 return self._file(STATIC / "index.html")
+            if path == "/overlay":
+                return self._file(STATIC / "overlay.html")
+            if path == "/api/live":
+                v = parse_qs(urlparse(self.path).query).get("v", ["-1"])[0]
+                return self._json(app.live.wait(int(v) if v.lstrip("-").isdigit() else -1))
             if path.startswith("/static/"):
                 return self._file(STATIC / path.removeprefix("/static/"))
             if path == "/api/state":
@@ -428,6 +481,8 @@ def make_handler(app: App, heartbeat_s: float = HEARTBEAT_S):
                     return self._json(app.state())
                 if path == "/api/ptt/capture":
                     return self._json(app.capture_ptt())
+                if path == "/api/overlay":
+                    return self._json(app.set_overlay(bool(body.get("visible"))))
                 if path == "/api/settings":
                     values = body.get("values")
                     if not isinstance(values, dict):

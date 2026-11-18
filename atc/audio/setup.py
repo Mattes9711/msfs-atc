@@ -138,7 +138,9 @@ def ptt_held(config: Config) -> Callable[[], bool]:
 
 def make_whisper_input(config: Config, transcriber: WhisperTranscriber) -> WhisperInput:
     save = paths.recordings_dir() if config.whisper.save_recordings else None
-    return WhisperInput(make_recorder(config), transcriber, save_dir=save)
+    listener = WhisperInput(make_recorder(config), transcriber, save_dir=save)
+    listener.live_wanted = config.whisper.live_text  # the window sets listener.live if this is on
+    return listener
 
 
 TTS_ENGINES = ("piper", "sapi")

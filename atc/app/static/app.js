@@ -135,7 +135,10 @@ function showStatus(s) {
   $("copilot-button").setAttribute("aria-pressed", String(Boolean(s.copilot)));
   text("copilot-button", s.copilot ? "Co-pilot radio: on" : "Co-pilot radio: off");
   $("copilot-next").hidden = !s.copilot;
-  $("ptt").className = "ptt " + (s.ptt || "");
+  $("ptt").className = "ptt " + (s.ptt || "") + (talking ? " talking" : "");
+  $("overlay-button").hidden = s.overlay === null || s.overlay === undefined;  // only in the app window
+  $("overlay-button").setAttribute("aria-pressed", String(Boolean(s.overlay)));
+  text("overlay-button", s.overlay ? "Overlay: on" : "Overlay: off");
   text("ptt-text", s.ptt === "ready" ? "PTT " + s.ptt_key.toUpperCase() : s.ptt === "off" ? "PTT off" : "PTT …");
   showBanner(s);
 }
@@ -171,6 +174,38 @@ function showSuggestion(s) {
 }
 
 $("next").addEventListener("click", () => putInTextBox(suggested));
+
+$("overlay-button").addEventListener("click", async () => {
+  const on = $("overlay-button").getAttribute("aria-pressed") !== "true";
+  await api("/api/overlay", { visible: on });
+  if (status) { status.overlay = on; showStatus(status); }
+});
+
+// --- the words while push-to-talk is held (/api/live): shown in the text box until the full text is heard --------
+
+const SAY_PLACEHOLDER = $("say-input").placeholder;
+let talking = false;
+
+function showLive(live) {
+  talking = live.state !== "idle";
+  $("ptt").classList.toggle("talking", talking);
+  $("say-input").placeholder = !talking ? SAY_PLACEHOLDER
+    : (live.text || "Listening") + (live.state === "speaking" ? " …" : " (recognising)");
+}
+
+async function followLive() {
+  let v = -1;
+  for (;;) {
+    try {
+      const live = await (await fetch("/api/live?v=" + v)).json();
+      v = live.v;
+      showLive(live);
+    } catch {
+      await new Promise((ok) => setTimeout(ok, 2000));
+    }
+  }
+}
+followLive();
 
 for (const button of document.querySelectorAll("[data-call]")) {  // "Hamburg Ground, Lufthansa 4AB, say again"
   button.addEventListener("click", () => {

@@ -84,7 +84,7 @@ def test_tracker_keeps_the_last_normal_geometry():
 
 def test_closing_the_window_stops_session_and_server(monkeypatch, capsys):
     calls = []
-    monkeypatch.setattr(launcher, "run_window", lambda url: calls.append(("window", url)) or True)
+    monkeypatch.setattr(launcher, "run_window", lambda url, app=None: calls.append(("window", url)) or True)
     real_shutdown = launcher.shutdown
     monkeypatch.setattr(launcher, "shutdown", lambda app, server: (calls.append("shutdown"), real_shutdown(app, server)))
     launcher.main(["--port", "0"])
@@ -96,9 +96,9 @@ def test_browser_flag_and_fallback(monkeypatch):
     opened = []
     monkeypatch.setattr(launcher.webbrowser, "open", opened.append)
     monkeypatch.setattr(launcher, "wait_for_ctrl_c", lambda: None)
-    monkeypatch.setattr(launcher, "run_window", lambda url: pytest.fail("no window with --browser"))
+    monkeypatch.setattr(launcher, "run_window", lambda url, app=None: pytest.fail("no window with --browser"))
     launcher.main(["--port", "0", "--browser"])
-    monkeypatch.setattr(launcher, "run_window", lambda url: False)  # e.g. no WebView2 runtime
+    monkeypatch.setattr(launcher, "run_window", lambda url, app=None: False)  # e.g. no WebView2 runtime
     launcher.main(["--port", "0"])
     assert len(opened) == 2
 

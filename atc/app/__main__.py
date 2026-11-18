@@ -15,6 +15,7 @@ from pathlib import Path
 
 from atc import paths
 from atc.app import window_state
+from atc.app.overlay import SIZE as OVERLAY_SIZE, Overlay
 from atc.app.server import App, make_server
 from atc.config import ConfigError, load_config
 from atc.sim import livetraffic
@@ -26,6 +27,10 @@ BACKGROUND = "#0b0d14"  # the page's background: no white flash while the window
 
 def window_state_file() -> Path:
     return paths.data_dir() / "window.json"
+
+
+def overlay_file() -> Path:
+    return paths.data_dir() / "overlay.json"
 
 
 def bind(app: App, port: int):
@@ -77,8 +82,9 @@ class GeometryTracker:
         return window_state.Geometry(g.x, g.y, g.width, g.height, self.maximized)
 
 
-def run_window(url: str) -> bool:
-    """Show the app in its own window until it is closed. False if that isn't possible (then use a browser)."""
+def run_window(url: str, app: App | None = None) -> bool:
+    """Show the app in its own window until it is closed. False if that isn't possible (then use a browser).
+    With the app given, also the overlay over the sim (hidden until a flight starts)."""
     try:
         import webview
     except ImportError:
@@ -91,6 +97,16 @@ def run_window(url: str) -> bool:
                                    min_size=window_state.MIN_SIZE, background_color=BACKGROUND)
     tracker = GeometryTracker(saved)
     tracker.attach(window)
+    overlay = None
+    if app is not None:
+        overlay = Overlay.load(overlay_file(), webview.screens)
+        small = webview.create_window(f"{TITLE} overlay", url + "overlay", width=OVERLAY_SIZE[0],
+                                      height=OVERLAY_SIZE[1], x=overlay.x, y=overlay.y, resizable=False,
+                                      frameless=True, easy_drag=False, on_top=True, hidden=True, focus=False,
+                                      background_color=BACKGROUND)
+        overlay.attach(small)
+        window.events.closed += small.destroy  # the app ends only when every window is closed
+        app.overlay = overlay
     try:
         webview.start()  # blocks until the window is closed
     except Exception as e:  # e.g. no WebView2 runtime
@@ -99,6 +115,9 @@ def run_window(url: str) -> bool:
         return False
     if geometry := tracker.result():
         window_state.save(window_state_file(), geometry)
+    if overlay is not None:
+        app.overlay = None
+        overlay.save()
     return True
 
 
@@ -129,7 +148,7 @@ def main(argv: list[str] | None = None) -> None:
     try:
         if args.no_window:
             wait_for_ctrl_c()
-        elif args.browser or not run_window(url):
+        elif args.browser or not run_window(url, app):
             webbrowser.open(url)
             wait_for_ctrl_c()
     except KeyboardInterrupt:

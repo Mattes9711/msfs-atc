@@ -26,6 +26,7 @@ EDITABLE = {
     "whisper.mic": ("int", (0, 999)),
     "whisper.ptt_key": ("binding", None),
     "whisper.ptt_key2": ("binding", None),
+    "whisper.live_text": ("bool", None),
     "traffic.chatter": ("bool", None),
     "cabin.announcements": ("bool", None),
     "gsx.read": ("bool", None),

@@ -1449,6 +1449,24 @@ G. ✅ **Tests and a replay** (2026-11-18, `tests/test_replay_eddm.py`): the 202
 
 Order: A → B → C → D → E → F → G, each part with tests and its own commit. Milestone 9 E3 after it.
 
+### Milestone 11 — Own design: overlay and live speech (started 2026-11-18, user request)
+
+The user wants a design of our own and a small window over the sim. From the sketch they chose to build the
+overlay and the live words first; the rest of the redesign (flight strip, main window) waits for their OK.
+
+O1. ✅ **Live words while speaking** (`atc/audio/voice.py`): while push-to-talk is held, a worker transcribes the
+    audio so far every 0.7 s with beam 1 and shows it; the full pass after release (beam as set) is what ATC gets,
+    so recognition is as good as before. Live and full pass share one lock. `GET /api/live?v=N` (long poll, not in
+    the log) feeds the window: the PTT light turns amber and the words stand in the text box. Setting
+    `whisper.live_text` (on), in Settings, Audio. **To check with a real microphone:** how fast it is on the CPU
+    with small.en, and whether the final text now comes later.
+O2. ✅ **Overlay** (`atc/app/overlay.py`, `static/overlay.*`): a second pywebview window, frameless, always on top,
+    without taking the keyboard focus (PTT keys stay with MSFS), 340×232. COM with the station and the next
+    frequency, the last ATC call, cleared altitude, squawk, QNH, and what to say, which turns into "Heard" while
+    push-to-talk is held. Shown when a flight starts, hidden when it ends; × and the chip "Overlay" on the flight
+    view switch it, remembered with its position in `overlay.json`. Only over MSFS in windowed or borderless mode.
+    **To check in MSFS:** dragging it, and that it stays over the sim.
+
 ### Later versions (agreed, in rough order)
 
 26. *(Moved into Milestone 4: native SimConnect is S1–S2, the traffic parts T1–T4.)* Still later: the Facilities API

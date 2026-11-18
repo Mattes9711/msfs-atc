@@ -24,6 +24,7 @@ class WhisperConfig:
     ptt_key: str = "right ctrl"  # a name, "key:0xA3" or "joy:0:5" (atc/audio/ptt.py); the Settings page sets it
     ptt_key2: str | None = None  # a spare binding, e.g. a yoke button next to the keyboard key
     save_recordings: bool = False  # keep every transmission in recordings/ (to check misheard calls later)
+    live_text: bool = True  # show the words while push-to-talk is held (atc/audio/voice.py)
 
 
 @dataclass

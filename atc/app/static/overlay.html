@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MSFS ATC overlay</title>
+<link rel="stylesheet" href="/static/overlay.css">
+</head>
+<body>
+<main class="ov pywebview-drag-region" id="ov">
+  <header class="radio">
+    <span class="com num" id="com">---.---</span>
+    <span class="tuned" id="tuned"></span>
+    <span class="next num" id="next" hidden></span>
+    <button type="button" class="close" id="close" title="Hide the overlay (the Overlay chip in the app brings it back)" aria-label="Hide the overlay">×</button>
+  </header>
+  <section class="row">
+    <span class="key">ATC</span>
+    <p class="atc" id="atc">—</p>
+  </section>
+  <dl class="grid">
+    <div><dt class="key">Cleared</dt><dd class="num live" id="cleared">-</dd></div>
+    <div><dt class="key">Squawk</dt><dd class="num live" id="squawk">----</dd></div>
+    <div><dt class="key">QNH</dt><dd class="num" id="qnh">----</dd></div>
+  </dl>
+  <section class="row say" id="say-row">
+    <span class="key" id="say-key">Say</span>
+    <p class="say-text" id="say">—</p>
+  </section>
+</main>
+<script src="/static/overlay.js"></script>
+</body>
+</html>

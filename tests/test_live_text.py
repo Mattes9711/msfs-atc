@@ -1,0 +1,103 @@
+"""The words while push-to-talk is held (2026-11-18): a live pass every so often, the full pass after release."""
+import threading
+import time
+
+import numpy as np
+
+from atc.audio.voice import IDLE, SAMPLE_RATE, SPEAKING, TRANSCRIBING, WhisperInput, WhisperTranscriber
+from tests.test_voice import SPEECH
+
+
+class HeldRecorder:
+    """Records while `held` is set; so_far() gives the audio so far, as MicRecorder does."""
+
+    def __init__(self):
+        self.audio = None
+        self.release = threading.Event()
+
+    def so_far(self):
+        return self.audio
+
+    def record(self):
+        self.audio = SPEECH.copy()  # 1 s: above the minimum even when released at once
+        for _ in range(40):  # up to 2 s of "speaking"
+            self.audio = np.concatenate([self.audio, SPEECH[:SAMPLE_RATE // 20]])
+            if self.release.wait(0.05):
+                break
+        audio, self.audio = self.audio, None
+        return audio
+
+
+class Words:
+    def __init__(self):
+        self.calls = []
+
+    def transcribe(self, audio, context="", fast=False):
+        self.calls.append((audio.size, fast))
+        return "Hamburg Ground" if fast else "Hamburg Ground, DEABC, request taxi"
+
+
+def wait_for(check, seconds=3.0):
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        if check():
+            return True
+        time.sleep(0.02)
+    return False
+
+
+def test_words_while_speaking_then_the_full_pass():
+    recorder, words, shown = HeldRecorder(), Words(), []
+    listener = WhisperInput(recorder, words)
+    listener.live = lambda text, state: shown.append((text, state))
+    listener.live_every = 0.1
+    result = []
+    t = threading.Thread(target=lambda: result.append(listener.listen()))
+    t.start()
+    assert wait_for(lambda: ("Hamburg Ground", SPEAKING) in shown)
+    recorder.release.set()
+    t.join(5)
+    listener.close()
+    assert result == ["Hamburg Ground, DEABC, request taxi"]
+    assert shown[-2:] == [("Hamburg Ground", TRANSCRIBING), ("", IDLE)]  # the live words stay until the full text
+    assert words.calls[-1][1] is False  # the last one the full pass (beam as set)
+    assert any(fast for _, fast in words.calls)
+
+
+def test_without_live_no_worker_and_no_fast_pass():
+    recorder, words = HeldRecorder(), Words()
+    recorder.release.set()
+    listener = WhisperInput(recorder, words)
+    assert listener.listen() == "Hamburg Ground, DEABC, request taxi"
+    assert listener.worker is None and [fast for _, fast in words.calls] == [False]
+
+
+def test_a_failing_window_never_stops_push_to_talk():
+    recorder, words = HeldRecorder(), Words()
+    recorder.release.set()
+    listener = WhisperInput(recorder, words)
+    listener.live = lambda text, state: 1 / 0
+    assert listener.listen() == "Hamburg Ground, DEABC, request taxi"
+    listener.close()
+
+
+def test_the_fast_pass_beam_one():
+    seen = {}
+
+    class Model:
+        def transcribe(self, audio, **options):
+            seen.update(options)
+            return [], None
+
+    t = WhisperTranscriber("tiny.en", "cpu", 5, load=lambda *a, **k: Model())
+    t.transcribe(np.zeros(SAMPLE_RATE, dtype=np.float32), fast=True)
+    assert seen["beam_size"] == 1
+    t.transcribe(np.zeros(SAMPLE_RATE, dtype=np.float32))
+    assert seen["beam_size"] == 5
+
+
+def test_the_setting():
+    from atc.config import WhisperConfig
+    from atc.settings_file import EDITABLE
+
+    assert WhisperConfig().live_text is True and EDITABLE["whisper.live_text"] == ("bool", None)

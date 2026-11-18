@@ -1,0 +1,58 @@
+/* The overlay over the sim (atc/app/overlay.py): the app's colours and fonts (app.css), in a small fixed window.
+   Green = active (your frequency, what ATC cleared), cyan = the next frequency, amber = what to say, or what is
+   being heard while push-to-talk is held. Spacing on a 4px grid, one radius, after unslop by Damir Sokolovsky
+   (@heydamir), https://github.com/heydamir/unslop, CC BY 4.0. Fonts: B612 (SIL OFL 1.1, fonts/OFL.txt). */
+
+@font-face { font-family: "B612"; src: url("fonts/B612-Regular.ttf") format("truetype"); font-weight: 400; }
+@font-face { font-family: "B612"; src: url("fonts/B612-Bold.ttf") format("truetype"); font-weight: 700; }
+@font-face { font-family: "B612 Mono"; src: url("fonts/B612Mono-Regular.ttf") format("truetype"); font-weight: 400; }
+@font-face { font-family: "B612 Mono"; src: url("fonts/B612Mono-Bold.ttf") format("truetype"); font-weight: 700; }
+
+:root {
+  color-scheme: dark;
+  --bg: #0b0d10;
+  --line: #262c33;
+  --text: #e6eaee;
+  --label: #8c97a2;
+  --green: #78cc98;
+  --cyan: #6cc3d6;
+  --amber: #dcae5f;
+  --amber-bg: #251f14;
+  --font: "B612", "Segoe UI", sans-serif;
+  --mono: "B612 Mono", "Cascadia Mono", Consolas, monospace;
+  --radius: 4px;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; overflow: hidden; }
+body { background: var(--bg); color: var(--text); font: 400 13px/18px var(--font); user-select: none; cursor: move; }
+[hidden] { display: none !important; }
+p, dl, dd { margin: 0; }
+.num { font-family: var(--mono); }
+.live { color: var(--green); }
+.key { color: var(--label); font-size: 11px; line-height: 16px; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.ov { height: 100%; display: flex; flex-direction: column; gap: 8px; padding: 8px 12px 12px;
+      border: 1px solid var(--line); border-radius: var(--radius); }
+
+.radio { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.com { color: var(--green); font-size: 18px; line-height: 24px; font-weight: 700; }
+.tuned { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.next { color: var(--cyan); white-space: nowrap; }
+.close { align-self: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--radius);
+         background: none; color: var(--label); font: 400 16px/24px var(--font); cursor: pointer; }
+.close:hover { background: var(--line); color: var(--text); }
+
+.row { display: grid; grid-template-columns: 44px 1fr; gap: 8px; align-items: start; }
+.row .key { padding-top: 1px; }
+.atc { max-height: 36px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 0;
+        border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.grid dd { font-size: 15px; line-height: 20px; }
+
+.say { flex: 1; min-height: 0; padding: 4px 8px; margin: 0 -8px; border-radius: var(--radius); }
+.say-text { color: var(--amber); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.say.hearing { background: var(--amber-bg); }
+.say.hearing .say-text { color: var(--text); }
+.say.hearing .key { color: var(--amber); }
