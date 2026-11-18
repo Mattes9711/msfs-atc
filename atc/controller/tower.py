@@ -305,6 +305,7 @@ class TowerMixin:
         if handoff:
             items.append(rb.contact(approach.name, approach.freq.khz))
         self.phase, self.vectoring, self.approach_cleared = "arrival", None, False  # the runway may change again
+        self.transition_legs = None  # vectors after the go-around, not the transition again (Milestone 10 E)
         self.lowest_agl_on_final = float("inf")
         self.cleared_runways.discard(self._runway_key(dest, self.arrival_runway))
         self._set_pending(items, station.key, handoff_to=approach.key if handoff else None)

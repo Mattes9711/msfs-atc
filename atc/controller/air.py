@@ -323,7 +323,9 @@ class AirMixin:
         (e.g. /final in practice mode): the approach clearance at once."""
         if self._on_final(state):
             return self._approach_clearance(station, state)
-        self.phase, self.vectoring = "approach", station
+        if calls := self._start_transition(station, state):  # the transition flown, vectors at its end (Milestone 10 E)
+            return calls
+        self.phase, self.vectoring, self.vector_own = "approach", station, False
         end = self.destination.runway_end(self.arrival_runway)
         heading = self._first_vector(end, state)
         items = [rb.altitude(self._approach_altitude(), "descend")]
@@ -360,6 +362,12 @@ class AirMixin:
                 abs(across) <= vectors.INTERCEPT_ACROSS_NM or crossed)):
             self.vectoring, self.vector_leg = None, None
             return self._approach_clearance(station, state, intercept=True)
+        if self.vector_leg == "downwind" and self.vector_own:
+            # The transition's downwind: only the base turn, later with traffic ahead (Milestone 10 E)
+            if along >= self._base_along_nm(state) - 1:
+                self.vector_leg = "base"
+                return self._give_vector(station, state, vectors.base_heading_true(end, self.vector_side), now)
+            return []
         if self.vector_leg == "downwind":
             base = vectors.base_point(end, self.vector_side * vectors.DOWNWIND_NM)
             if (distance_nm(state.lat, state.lon, *base) <= vectors.BASE_WITHIN_NM

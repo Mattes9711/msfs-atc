@@ -60,9 +60,12 @@ def plan_arrival(destination: Airport, runway: str, plan: FlightPlan, procedures
     approach = procedures.approach(runway)
     transition = None
     if approach and star:
-        # Usually from the STAR's last fix (MIQ), else from the last of its fixes that has one
+        # From the last of the STAR's fixes that has one, and one that ends in vectors first (Milestone 10 E): Munich
+        # LAND2B ends at MIQ, whose transition has none, so LANDU's is flown from the STAR's first fix, with the
+        # vectors from DM429 on the downwind
         fixes = [leg.ident for leg in reversed(star.legs) if leg.ident]
-        transition = next((t for f in fixes if (t := approach.transition(f))), None)
+        found = [t for f in fixes if (t := approach.transition(f))]
+        transition = next((t for t in found if t.vectors_from), found[0] if found else None)
     if approach:
         kind = APPROACH_WORDS.get(approach.approach_type, approach.approach_type)
     return Arrival(runway, star, approach, transition, kind)

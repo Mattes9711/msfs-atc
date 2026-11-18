@@ -1386,13 +1386,23 @@ D. ✅ **Descent by the constraints** (2026-11-18, `atc/controller/air.py`): the
    started (less than 300 ft lost in 90 s, live clock only) gets one "confirm descending flight level one
    hundred". Moved to E: the altitudes and speeds step by step along the transition, as they need the aircraft
    to fly it.
-E. **Transition + vectors**: Approach's first call names the transition ("radar contact, descend altitude 5000
+E. ✅ **Transition + vectors** (2026-11-18, `atc/controller/transition.py`): Approach's first call names the transition ("radar contact, descend altitude 5000
    feet, QNH 993, transition LANDU, ILS approach runway 26R"). The pilot flies it in the FMC; ATC follows the
    position along the legs and gives the transition's altitudes ("descend altitude five thousand feet") and
    speeds ("reduce speed two two zero knots") in time before each fix (moved from D). At the vectors leg (after DM429) Approach turns base by heading, so the intercept is
    at 10–12 NM at the FAF altitude: "turn right heading 170", then "turn right heading 230, cleared ILS approach
    runway 26R". With traffic ahead the downwind gets longer (trombone). With traffic far behind the base turn
    may come earlier, but never a direct off the transition.
+   Done: the first call is "descend altitude six thousand feet, QNH …, cleared transition Landu, expect ILS
+   approach runway two six right" (the altitude: the highest "at or above" of the fixes ahead down to the FAF).
+   ATC follows the fixes passed (within 1.5 nm, or beyond the fix); a speed limit within 12 nm ahead brings
+   "reduce speed …". After the vectors fix ("FM" leg) the aircraft flies the downwind on the procedure's course
+   without a heading; the base turn comes 12 nm out, with an arrival ahead later (its spacing, up to 25 nm, the
+   trombone), then the intercept as before. A transition without vectors ends in "cleared ILS approach …" 8 nm
+   before its last fix. More than 6 nm off the transition (at check-in, or later) or a runway change: radar
+   vectors instead. The choice (open from B): of the transitions from the STAR's fixes, the one that ends in
+   vectors, searched from the last fix back (Munich: LAND2B ends at MIQ, whose transition has none, so LANDU's);
+   else the last fix's. Not done: the earlier base turn with traffic far behind.
 F. **Better vectors without data**: never 45° straight at the final from far beside it, but a downwind and a base,
    the intercept at 30° 8–12 NM out at the approach altitude. Vectors only after the STAR's last fix.
 G. **Tests and a replay**: the 2026-11-17 flight's geometry as a test (Munich-like procedures built in code), and

@@ -46,9 +46,11 @@ from atc.controller.traffic_calls import TrafficMixin
 from atc.controller.air_chatter import AirChatterMixin
 from atc.controller.info import InfoMixin, uncontrolled
 from atc.controller.vfr import VfrMixin
+from atc.controller.transition import TransitionMixin
 
 
-class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixin, InfoMixin, VfrMixin):
+class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixin, AirChatterMixin, InfoMixin,
+                 VfrMixin):
     """The deterministic ATC brain: one state machine for the whole flight. Pilot calls go to handle(); position
     changes go to tick(), which is where ATC calls the pilot by itself. Only `rng` (squawks) is random."""
 
@@ -109,6 +111,16 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
         self.vector_side = 1  # +1 left of the final facing the runway, -1 right
         self.vector_heading: int | None = None  # the last heading given
         self.vector_at: float | None = None  # when it was given (live clock)
+        self.vector_own = False  # the downwind is the transition's, flown on its course: only the base turn (E)
+        # The approach transition (Milestone 10 E): its fixes still followed (None: not on it), the one flown to, the
+        # point before it, the altitude and speed given on it, the Approach station; flown once (then vectors)
+        self.transition_legs: list | None = None
+        self.transition_at = 0
+        self.transition_from: tuple[float, float] | None = None
+        self.transition_alt: int | None = None
+        self.transition_speed: int | None = None
+        self.transition_station: Station | None = None
+        self.transition_flown = False
         self.apron_handed = False  # Apron has handed the departure over to Ground
         self.apron_in = False  # Ground has handed the arrival over to Apron
         self.route_in: TaxiRoute | None = None
@@ -419,6 +431,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TrafficMixin, AirChatterMixi
             if to_airport <= APPROACH_HANDOFF_NM and (
                     self.descent_given or state.alt_msl_ft < 10000 or en_route is None):
                 return self._handoff(role, "approach", "arrival", state)
+        if self.phase == "approach" and self.transition_legs:
+            return self._transition_progress(state, now)
         if self.phase == "approach" and self.vectoring:
             return self._vector_progress(state, now)
         if self.phase in ("approach", "final") and (spacing := self._speed_control(state)):
