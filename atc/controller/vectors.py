@@ -71,5 +71,14 @@ def straight_in(along: float, across: float) -> bool:
     return along >= STRAIGHT_IN_ALONG_NM and met >= ESTABLISHED_BY_NM
 
 
+def path_nm(end, lat: float, lon: float) -> float:
+    """The miles these vectors fly from here to the threshold: straight in on a 30-degree intercept, else to the
+    base point, along the base and the final."""
+    along, across = frame(end, lat, lon)
+    if straight_in(along, across):
+        return abs(across) / math.sin(math.radians(30)) + along - abs(across) / math.tan(math.radians(30))
+    return distance_nm(lat, lon, *base_point(end, across)) + DOWNWIND_NM + BASE_ALONG_NM
+
+
 def turn_direction(from_heading: float, to_heading: float) -> str:
     return "right" if (to_heading - from_heading + 540) % 360 - 180 > 0 else "left"

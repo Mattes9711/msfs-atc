@@ -211,9 +211,13 @@ class AirMixin:
         """The miles the aircraft will really fly to the field: the planned route, but at most VECTOR_ALLOWANCE_NM
         more than straight there, as Approach vectors off a long STAR (the user's flight to EDDH: NOLG3P loops about
         45 nm north-east and back; counted along it the descent came 48 nm from the field at FL320, Approach then
-        vectored straight in and the aircraft was still at FL220 12 nm out). Compared with _top_of_descent_nm."""
+        vectored straight in and the aircraft was still at FL220 12 nm out). Compared with _top_of_descent_nm.
+        Shorter still when the vectors to the landing runway are (atc/controller/vectors.py path_nm): the emulator's
+        flight from the south to EDDH 05 was turned in at about straight + 7 nm and came 1560 ft high at 10 nm."""
         straight = distance_nm(state.lat, state.lon, self.destination.lat, self.destination.lon)
-        return min(self._track_to_go_nm(state), straight + VECTOR_ALLOWANCE_NM)
+        path = min(self._track_to_go_nm(state), straight + VECTOR_ALLOWANCE_NM)
+        end = self.destination.runway_end(self.arrival_runway) if self.arrival_runway else None
+        return min(path, vectors.path_nm(end, state.lat, state.lon)) if end else path
 
     def descent_due_in_nm(self, state: AircraftState) -> float:
         """How far ahead the descent point is (<= 0: due now). For the airport the way left as Approach vectors it

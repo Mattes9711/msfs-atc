@@ -65,3 +65,15 @@ def test_the_co_pilot_offers_request_descent_when_the_point_is_near(eddh, eddm):
     assert s.say(offer["khz"], offer["text"]) == [DESCENT]
     s.atc.state = s.sim.read()
     assert suggestion(s.atc)["title"] == "Read back"
+
+
+def test_vectored_in_from_in_front_the_descent_counts_the_shorter_way(eddh):
+    """The emulator's flight from Munich to EDDH 05 (2026-11-19): 85 nm south of the field the descent came on
+    straight + 15 nm, Approach turned it in after about straight + 7 and it was 1560 ft high at 10 nm. The vectors'
+    own way, to the base point and in, is what the descent counts now."""
+    from atc.airport.geo import distance_nm
+    from atc.controller import vectors
+    end = eddh.runway_end("05")
+    lat, lon = destination_point(eddh.lat, eddh.lon, 190, 85)
+    straight = distance_nm(lat, lon, eddh.lat, eddh.lon)
+    assert straight + 3 < vectors.path_nm(end, lat, lon) < straight + 10
