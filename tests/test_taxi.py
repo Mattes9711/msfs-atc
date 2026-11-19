@@ -2,6 +2,7 @@ import math
 
 from atc.airport.model import Airport, Parking, Runway, RunwayEnd, TaxiPath
 from atc.airport.taxi import Edge, TaxiGraph, TaxiRoute, propagate_names
+from atc.controller.safety import RunwayZones
 from atc.phraseology.taxi import holding_point, taxi_clearance
 
 LAT0, LON0 = 50.0, 8.0
@@ -149,3 +150,44 @@ def test_eddh_33_holding_point_is_not_the_crossing_g(eddh):
     assert route is not None and not graph.leads_across(route.edges[-1].b, "33")
     # The route reaches B1 on unnamed pieces; the holding point still has its name
     assert taxi_clearance(route, "33").startswith("taxi to holding point Bravo one runway tree tree")
+
+
+def two_exits_meeting_inside_the_hold_lines():
+    """Runway 09/27 along y=0, hold lines 90 m out. Exits M5 and M4 meet at (600, 70), inside them (EDDB 06R, the
+    emulator, 2026-11-19: the way to the stand turned back to that junction, and the safety check stopped it).
+    From M5 beyond its hold line, back to the junction and out on M4 is the short way to the stand; R is longer."""
+    return airport([RWY_09_27], [
+        path((500, 0), (600, 70), "M5"),
+        path((600, 70), (620, 90), "M5", end="HSND"),
+        path((620, 90), (650, 150), "M5"),
+        path((600, 70), (580, 90), "M4", end="HSND"),
+        path((580, 90), (550, 150), "M4"),
+        path((550, 150), (0, 150), "B"),
+        path((0, 150), (0, 400), "", type="P", end="P"),
+        path((650, 150), (650, 700), "R"),
+        path((650, 700), (0, 700), "R"),
+        path((0, 700), (0, 400), "", type="P", end="P"),
+    ], gate=(0, 400))
+
+
+def test_taxi_in_keeps_out_of_the_runway_strip():
+    field = two_exits_meeting_inside_the_hold_lines()
+    graph = TaxiGraph(field)
+    junction = graph.nearest_node(*ll(600, 70))
+    assert RunwayZones(field, graph).runway_at(*graph.latlon[junction]) is not None  # the safety check's strip
+    vacated, stand = graph.nearest_node(*ll(650, 150)), graph.nearest_node(*ll(0, 400))
+    route = graph.route(vacated, stand)
+    assert route.taxiways == ["R"] and junction not in {e.b for e in route.edges}
+
+
+def test_a_crossing_still_costs_once():
+    """The way onto the strip pays for the crossing: the crossing inside it is not charged again."""
+    field = airport([RWY_09_27], [
+        path((600, 150), (600, 90), "K", end="HSND"),
+        path((600, 90), (600, 30), "K"),
+        path((600, 30), (600, -30), "K"),  # across the centreline
+        path((600, -30), (600, -90), "K", end="HSND"),
+    ])
+    graph = TaxiGraph(field)
+    route = graph.route(graph.nearest_node(*ll(600, 150)), graph.nearest_node(*ll(600, -90)))
+    assert route.crossings == ["09"] and route.cost == route.length_m + 1500

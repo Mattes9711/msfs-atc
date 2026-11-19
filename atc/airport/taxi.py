@@ -1,6 +1,8 @@
 """Taxiway graph built from Little Navmap taxi paths, and a router that prefers routes ATC can say simply."""
 import heapq
 import itertools
+import re
+import statistics
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -13,6 +15,9 @@ HOLD_SHORT_MAX_FROM_CENTERLINE_M = 200
 HOLDING_POINT_SLACK_M = 300  # consider all holding points this close to the best one near the threshold
 CROSSING_STEPS = 10  # how far a hold-short point's taxiway is followed to find the other side of a crossing
 STRIP_MARGIN_M = 10  # … within its hold lines, give or take this
+HOLD_LINE_MARGIN_M = 5  # an aircraft *at* the holding point is not on the runway
+DEFAULT_CLEARANCE_M = 30  # beyond the runway edge, when the scenery has no hold-short points
+FT_TO_M = 0.3048
 
 
 @dataclass(frozen=True)
@@ -94,10 +99,22 @@ class TaxiGraph:
                 self.hold_short.add(b)
             pa, pb = self.nodes[a], self.nodes[b]
             crosses = tuple(name for name, _, r1, r2 in self._runways if segments_cross(pa, pb, r1, r2))
-            edges.append(Edge(a, b, t.name, distance(pa, pb), t.to_parking, crosses))
+            edges.append(Edge(a, b, radio_name(t.name), distance(pa, pb), t.to_parking, crosses))
         for e in propagate_names(edges):
             self.adjacent[e.a].append(e)
             self.adjacent[e.b].append(Edge(e.b, e.a, e.name, e.length_m, e.to_parking, e.crosses))
+        # How far from each centreline its hold lines are, from the scenery's own hold-short points (they differ
+        # per runway: ~60 m for small runways, ~90 m or more for big ones), and the nodes inside them
+        self.strip_limit_m: dict[str, float] = {}
+        self.in_strip: dict[str, set[int]] = {}
+        for rwy, (name, _, r1, r2) in zip(airport.runways, self._runways):
+            holds = [d for n in self.hold_short
+                     if (d := point_segment_distance(self.nodes[n], r1, r2)) <= HOLD_SHORT_MAX_FROM_CENTERLINE_M]
+            limit = (statistics.median(holds) - HOLD_LINE_MARGIN_M if holds
+                     else rwy.width_ft * FT_TO_M / 2 + DEFAULT_CLEARANCE_M)
+            self.strip_limit_m[name] = limit
+            self.in_strip[name] = {n for n in self.adjacent if n not in self.hold_short
+                                   and point_segment_distance(self.nodes[n], r1, r2) < limit}
 
     def distance_m(self, node: int, lat: float, lon: float) -> float:
         return distance(self.nodes[node], self.proj.xy(lat, lon))
@@ -165,8 +182,23 @@ class TaxiGraph:
                 best = TaxiRoute(best.edges, best.cost, beyond.pop())
         return best
 
+    def _runway_penalty(self, e: Edge, start_inside: set[str]) -> float:
+        """Each way onto a runway's strip costs as much as a crossing: past its hold line (EDDB, the emulator,
+        2026-11-19: from M5, just vacated 06R, the shortest way to the stand turned back to the M5/M4 junction
+        inside the hold lines, crossed no centreline, so no hold short, and the safety check stopped the aircraft),
+        or across it on one segment. Inside the strip a crossing is paid already, unless the route starts there."""
+        penalty = 0.0
+        for name, inside in self.in_strip.items():
+            if e.a not in inside:
+                if e.b in inside or name in e.crosses:
+                    penalty += RUNWAY_CROSSING_PENALTY_M
+            elif name in e.crosses and name in start_inside:
+                penalty += RUNWAY_CROSSING_PENALTY_M
+        return penalty
+
     def route(self, start: int, goal: int) -> TaxiRoute | None:
         # State includes the taxiway we arrived on, because changing names costs extra
+        start_inside = {name for name, inside in self.in_strip.items() if start in inside}
         counter = itertools.count()
         queue = [(0.0, next(counter), start, None, ())]
         settled: set[tuple[int, str | None]] = set()
@@ -178,12 +210,31 @@ class TaxiGraph:
                 continue
             settled.add((n, arrived_on))
             for e in self.adjacent[n]:
-                step = e.length_m + RUNWAY_CROSSING_PENALTY_M * len(e.crosses)
+                step = e.length_m + self._runway_penalty(e, start_inside)
                 if arrived_on is not None and e.name != arrived_on:
                     step += NAME_CHANGE_PENALTY_M
                 if (e.b, e.name) not in settled:
                     heapq.heappush(queue, (cost + step, next(counter), e.b, e.name, path + (e,)))
         return None
+
+
+DESIGNATOR = re.compile(r"[A-Z](?:\d{1,2}[A-Z]?)?")  # "N", "N5", "B12W": what ATC says and the pilot reads back
+_SUFFIXED = (re.compile(r"([A-Z])-(\d{1,2})"),  # "T-2" is T2
+             re.compile(r"([A-Z]\d{1,2})(?:[A-Z]{2,}|[-. ].*)"),  # "E3BLUE", "D2SSS", "Z3.1": a piece of E3
+             re.compile(r"([A-Z])[-. ].*"))  # "N-SOUTH": a piece of N
+
+
+def radio_name(name: str) -> str:
+    """A scenery taxiway name as ATC says it. Some sceneries split a taxiway into pieces ("N-South" at EDDF): ATC
+    said "November Sierra Oscar Uniform Tango Hotel" and refused the co-pilot's "N-South" five times (the emulator,
+    2026-11-19). Names that are no designator at all ("LINK 4", "SWINGOVR", "PARKING") count as unnamed."""
+    name = name.strip().upper()
+    if DESIGNATOR.fullmatch(name):
+        return name
+    for pattern in _SUFFIXED:
+        if m := pattern.fullmatch(name):
+            return "".join(m.groups())
+    return ""
 
 
 def propagate_names(edges: list[Edge]) -> list[Edge]:

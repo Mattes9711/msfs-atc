@@ -1,30 +1,21 @@
 """Where an aircraft on the ground must not be without a clearance: past the runway-holding position."""
-import statistics
-
 from atc.airport.geo import distance, point_segment_distance
 from atc.airport.model import Airport, Runway
-from atc.airport.taxi import HOLD_SHORT_MAX_FROM_CENTERLINE_M, TaxiGraph
+from atc.airport.taxi import TaxiGraph
 
-FT_TO_M = 0.3048
-HOLD_LINE_MARGIN_M = 5  # an aircraft *at* the holding point is fine
-DEFAULT_CLEARANCE_M = 30  # beyond the runway edge, when the scenery has no hold-short points
 AT_HOLD_SHORT_M = 15
 
 
 class RunwayZones:
-    """For each runway, how far from the centreline its hold-short lines are, taken from the scenery's own
-    hold-short points (they differ per runway: ~60 m for small runways, ~90 m or more for big ones)."""
+    """For each runway, how far from the centreline its hold-short lines are (TaxiGraph.strip_limit_m: the taxi
+    router keeps out of the same strip)."""
 
     def __init__(self, airport: Airport, graph: TaxiGraph):
         self.graph = graph
         self.zones = []
         for rwy in airport.runways:
             a, b = (graph.proj.xy(e.lat, e.lon) for e in rwy.ends)
-            holds = [d for n in graph.hold_short
-                     if (d := point_segment_distance(graph.nodes[n], a, b)) <= HOLD_SHORT_MAX_FROM_CENTERLINE_M]
-            limit = (statistics.median(holds) - HOLD_LINE_MARGIN_M if holds
-                     else rwy.width_ft * FT_TO_M / 2 + DEFAULT_CLEARANCE_M)
-            self.zones.append((rwy, a, b, limit))
+            self.zones.append((rwy, a, b, graph.strip_limit_m[rwy.ends[0].name]))
 
     def runway_at(self, lat: float, lon: float) -> Runway | None:
         """The runway whose protected area this point is in, if any. Standing at a hold-short point never counts:
