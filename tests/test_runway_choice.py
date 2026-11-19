@@ -54,3 +54,15 @@ def test_gusts_count_for_the_tailwind_limit(eddh):
 
 def test_unknown_current_runway_is_ignored(eddh):
     assert choose_runway(eddh, wx("22007KT"), current="99").name == "23"
+
+
+def test_a_short_side_runway_is_never_the_runway_in_use(eddh):
+    """EDDW (the emulator, 2026-11-19): with wind 230 the 2296 ft runway 23 beat the 8639 ft 26 and the A320 rolled
+    off its end. A runway under half the longest one is left out, whatever the wind."""
+    from dataclasses import replace
+    from atc.airport.model import Runway, RunwayEnd
+    short = Runway(1500.0, 100.0, (RunwayEnd("12", 120.0, 53.6, 10.0, 0.0, None),
+                                   RunwayEnd("30", 300.0, 53.6, 10.01, 0.0, None)))
+    field = replace(eddh, runways=(*eddh.runways, short))
+    assert choose_runway(field, wx("30015KT")).name == "33"
+    assert choose_runway(field, wx("30015KT"), current="30").name == "33"

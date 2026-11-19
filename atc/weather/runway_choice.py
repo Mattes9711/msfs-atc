@@ -6,6 +6,9 @@ from atc.weather.metar import Metar
 
 TAILWIND_LIMIT_KT = 5
 CALM_BELOW_KT = 5
+# Runways shorter than this share of the longest are left out (the emulator at EDDW, 2026-11-19: with wind 230 the
+# 2296 ft runway 23 beat the 8639 ft 26 by headwind, and the A320 rolled off its end)
+MIN_SHARE_OF_LONGEST = 0.5
 
 
 @dataclass(frozen=True)
@@ -23,7 +26,8 @@ def wind_components(runway_heading_true: float, wind_dir_true: float, wind_kt: f
 def choose_runway(airport: Airport, metar: Metar | None, current: str | None = None) -> RunwayEnd:
     """Pick the runway end in use. Keeps `current` while its tailwind stays within limits (hysteresis),
     so a wind swinging around 90 degrees off the runway doesn't flip the runway every METAR."""
-    ends = [(rwy, end) for rwy in airport.runways for end in rwy.ends]
+    longest = max(rwy.length_ft for rwy in airport.runways)
+    ends = [(rwy, end) for rwy in airport.runways for end in rwy.ends if rwy.length_ft >= longest * MIN_SHARE_OF_LONGEST]
     by_name = {end.name: end for _, end in ends}
     current_end = by_name.get(current) if current else None
 
