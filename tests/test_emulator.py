@@ -7,6 +7,7 @@ runway (stuck at EDDH), and the readback "via T, B12W, S7, W2" was refused (taxi
 from atc.controller.readback import same
 from atc.airport.geo import bearing_deg, destination_point, distance_nm
 from atc.emulator import Emulator, Taxi
+from atc.emulator_check import check
 from atc.intent.parser import parse
 from tests.test_centers import SECTORS
 from tests.test_ground_flow import Session
@@ -18,16 +19,23 @@ def fly(departure, destination):
     return Emulator(s.atc, s.sim).run()
 
 
+def checklist(report):
+    """The checklist's hits (atc/emulator_check.py) on the flight's log, without the banner the CLI writes."""
+    return check("\n".join([report.text(), "", "Radio:", *report.log]))
+
+
 def test_hamburg_to_munich_gate_to_gate(eddh, eddm):
     report = fly(eddh, eddm)
     assert report.finished, report.text()
     assert not report.findings, report.text()
+    assert checklist(report) == []
 
 
 def test_munich_to_hamburg_gate_to_gate(eddm, eddh):
     report = fly(eddm, eddh)
     assert report.finished, report.text()
     assert not report.findings, report.text()
+    assert checklist(report) == []
 
 
 def test_a_taxiway_with_a_letter_after_the_number_reads_back_as_one():

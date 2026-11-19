@@ -8,7 +8,8 @@ it lands, vacates and taxis to the stand.
 
 The report at the end lists what looked wrong: too high on final, a phase that never ended, ATC saying "say again",
 the co-pilot giving the radio back, an exception. It also gives the timeline of the phases. The whole flight (radio,
-positions, findings) goes to a log file in the logs folder, under "emulator".
+positions, findings) goes to a log file in the logs folder, under "emulator". The checklist (atc/emulator_check.py)
+then reads it for what a real controller would not have said: its hits come after the report.
 """
 import argparse
 import sys
@@ -17,6 +18,7 @@ import traceback
 from dataclasses import dataclass, field
 
 from atc.airport.geo import bearing_deg, destination_point, distance_nm
+from atc import emulator_check
 from atc.controller import vectors
 from atc.events import Collector
 from atc.runtime import LiveSession
@@ -741,11 +743,15 @@ def main(argv: list[str] | None = None) -> int:
         took = time.time() - started
         path = folder / (time.strftime("%Y-%m-%d_%H%M%S", time.localtime(started))
                          + f"_{session.plan.callsign}_{session.airport.ident}-{report.flight.split('-')[-1]}_EMU.txt")
-        path.write_text("\n".join(["# EMU " + line for line in session.banner()] + [report.text(), "", "Radio:"]
-                                  + report.log) + "\n", encoding="utf-8")
+        text = "\n".join(["# EMU " + line for line in session.banner()] + [report.text(), "", "Radio:"]
+                         + report.log) + "\n"
+        path.write_text(text, encoding="utf-8")
         print(report.text())
         if args.log:
             print("\nRadio:\n" + "\n".join(report.log))
+        # the checklist (atc/emulator_check.py), K1 left out: those are the findings above; hints, not findings
+        hints = [f"  {key}  {what}" for key, what in emulator_check.check(text) if key != "K1"]
+        print("Checklist: " + ("nothing" if not hints else "\n" + "\n".join(hints)))
         print(f"(emulated in {took:.0f} s; log: {path})\n")
         failed += not report.ok
     return 1 if failed else 0
