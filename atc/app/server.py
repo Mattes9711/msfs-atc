@@ -147,6 +147,11 @@ def load_voice(config: Config, progress):
     return setup.load_transcriber(config, progress)
 
 
+def load_live_voice(config: Config, progress, main):
+    """The faster model for the words while speaking (whisper.live_model), also loaded once per app."""
+    return setup.load_live_transcriber(config, progress, main)
+
+
 def load_tts(config: Config, report, progress):
     """The ATC voice. The window shows the text already; `report` gets a message if speaking fails, `progress`
     the download messages on the first start."""
@@ -205,7 +210,7 @@ class App:
         self.config, self.inject = config, inject or {}
         self.settings_path = settings_path or paths.settings_file()  # where the Settings page saves
         # Loaded with the first flight and reused: the ATC voice (None if it failed) and speech recognition
-        self.tts, self.tts_loaded, self.transcriber = None, False, None
+        self.tts, self.tts_loaded, self.transcriber, self.live_transcriber = None, False, None, None
         self.voice_lock = threading.Lock()
         self.push_to_talk: DeferredInput | None = None
         self.ptt_state = "loading"  # loading, ready, off: the PTT light on the flight screen
@@ -339,7 +344,10 @@ class App:
                     self.tts.close()
                 self.tts, self.tts_loaded = None, False
             if (new.whisper.model, new.whisper.device) != (self.config.whisper.model, self.config.whisper.device):
-                self.transcriber = None
+                self.transcriber = self.live_transcriber = None
+            elif (new.whisper.live_model, new.whisper.live_text) != (self.config.whisper.live_model,
+                                                                     self.config.whisper.live_text):
+                self.live_transcriber = None
         self.config = new
         return self.settings()
 
@@ -402,6 +410,15 @@ class App:
             push_to_talk.ready(listener)
             progress(f"Push-to-talk ready: hold [{binding_name(self.config.whisper.ptt_key)}] while you speak")
             self.ptt_state = "ready"
+            if getattr(listener, "live_wanted", False):
+                # After "ready": push-to-talk already works while the faster live model loads (or downloads)
+                try:
+                    with self.voice_lock:
+                        if self.live_transcriber is None:
+                            self.live_transcriber = load_live_voice(self.config, progress, self.transcriber)
+                    listener.live_transcriber = self.live_transcriber
+                except Exception as e:  # push-to-talk is ready: the live words then come from the main model
+                    progress(f"Live text uses the main speech model ({e})")
         except Exception as e:  # no model, no microphone, ...: the flight goes on with typing
             self.ptt_state = "off"
             progress(f"Voice is off: {e}. Typing still works.")

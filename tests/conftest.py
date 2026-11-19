@@ -27,6 +27,7 @@ def no_real_voice(monkeypatch):
         raise VoiceUnavailable("no microphone or speakers in tests")
     monkeypatch.setattr("atc.main.build_voice", refuse)
     monkeypatch.setattr("atc.app.server.load_voice", refuse)
+    monkeypatch.setattr("atc.app.server.load_live_voice", lambda config, progress, main: main)
     monkeypatch.setattr("atc.app.server.load_tts", refuse)
 
 

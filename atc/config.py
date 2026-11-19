@@ -25,6 +25,10 @@ class WhisperConfig:
     ptt_key2: str | None = None  # a spare binding, e.g. a yoke button next to the keyboard key
     save_recordings: bool = False  # keep every transmission in recordings/ (to check misheard calls later)
     live_text: bool = True  # show the words while push-to-talk is held (atc/audio/voice.py)
+    # The model for those live words: base.en is about three times faster than small.en (0.5 instead of 1.5 s a
+    # pass on the user's PC, 2026-11-19). What goes to ATC is always heard by `model`. "" or the same as `model`:
+    # one model for both
+    live_model: str = "base.en"
 
 
 @dataclass

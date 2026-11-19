@@ -113,3 +113,42 @@ def test_the_live_words_only_with_the_setting(server, monkeypatch):
     while app.ptt_state != "ready" and time.monotonic() < deadline:
         time.sleep(0.02)
     assert made and made[0].live is None
+
+
+def test_the_live_model_loads_once_after_push_to_talk_is_ready(server, monkeypatch):
+    """base.en for the live words (2026-11-19): loaded after "ready", so a first download never holds up
+    push-to-talk, and kept for the next flight like the main model."""
+    app, base = server
+    from atc.audio import setup
+
+    class Listener:
+        live_wanted = True
+        live = live_transcriber = context = None
+
+        def __init__(self):
+            self.stopped = threading.Event()
+
+        def attach(self, sink):
+            pass
+
+        def listen(self):
+            self.stopped.wait()  # nobody speaks
+
+        def close(self):
+            self.stopped.set()
+
+    made, loads = [], []
+    main = object()
+    monkeypatch.setattr("atc.app.server.load_voice", lambda config, progress: main)
+    monkeypatch.setattr("atc.app.server.load_live_voice",
+                        lambda config, progress, m: loads.append(m is main and app.ptt_state) or "base.en")
+    monkeypatch.setattr(setup, "make_whisper_input", lambda config, t: made.append(Listener()) or made[-1])
+    monkeypatch.setattr("atc.app.server.load_tts", lambda *a: (_ for _ in ()).throw(RuntimeError("no voice")))
+    for flight in (1, 2):
+        assert post(base + "/api/start", PLAN)[0] == 200
+        deadline = time.monotonic() + 5
+        while not (len(made) == flight and made[-1].live_transcriber) and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert made[-1].live_transcriber == "base.en" and made[-1].live is not None, flight
+        assert post(base + "/api/stop", {})[0] == 200
+    assert loads == ["ready"]

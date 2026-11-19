@@ -10,8 +10,10 @@ Rules from the Milestone 0 spikes:
 
 Live text (2026-11-18, the user's wish): while push-to-talk is held, a worker thread transcribes the audio so far
 every LIVE_EVERY_S, fast (beam 1), and shows it. Only the full pass after the key is released goes to ATC, so the
-live text never makes recognition worse; on a slow PC the final text can come a little later (one live pass may
-still be running when the key is released).
+live text never makes recognition worse. The live passes can use a smaller, faster model (live_transcriber,
+whisper.live_model = base.en: 0.5 s a pass instead of 1.5 s with small.en on the user's PC, 2026-11-19); it has its
+own lock, so the full pass never waits for a live pass. With one model for both, a live pass still running at the
+release makes the final text come a little later.
 """
 import ctypes
 import re
@@ -77,7 +79,9 @@ class WhisperInput:
         self.live: Callable[[str, str], None] | None = None  # live text (text, state), if set and the recorder can
         self.live_every = LIVE_EVERY_S
         self.live_wanted = True  # the setting whisper.live_text
-        self.lock = threading.Lock()  # one transcription at a time: a live pass and the full pass share the model
+        self.lock = threading.Lock()  # one transcription at a time per model
+        self.live_transcriber: Transcriber | None = None  # the faster model for the live passes; None = transcriber
+        self.live_lock = threading.Lock()
         self.closed = threading.Event()
         self.worker: threading.Thread | None = None
         self.so_far = ""  # the last live words of this transmission, shown on while the full pass runs
@@ -100,9 +104,11 @@ class WhisperInput:
         except Exception:  # the flight's words only help whisper: without them it still hears
             traceback.print_exc()
             context = ""
+        if fast:
+            model = self.live_transcriber or self.transcriber
+            with self.live_lock if model is not self.transcriber else self.lock:
+                return model.transcribe(audio, context, fast=True).strip()
         with self.lock:
-            if fast:
-                return self.transcriber.transcribe(audio, context, fast=True).strip()
             return (self.transcriber.transcribe(audio, context) if context
                     else self.transcriber.transcribe(audio)).strip()
 
@@ -121,8 +127,8 @@ class WhisperInput:
 
     def _live_loop(self) -> None:
         """While push-to-talk is held: "speaking" at once (the window shows "Listening …" while the key is down),
-        then every live_every seconds the words so far. A live pass takes 1.5-2 s on the user's PC (small.en on
-        the CPU), so short calls are often over before the first words come (2026-11-19)."""
+        then every live_every seconds the words so far. A live pass takes 1.5-2 s on the user's PC with small.en
+        on the CPU, about 0.5 s with base.en (the live model, 2026-11-19)."""
         last, done, announced = None, 0, False
         while not self.closed.is_set():
             audio = self.recorder.so_far()

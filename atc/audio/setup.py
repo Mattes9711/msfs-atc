@@ -118,6 +118,21 @@ def load_transcriber(config: Config, progress: Progress) -> WhisperTranscriber:
         raise VoiceUnavailable(str(e)) from None
 
 
+def load_live_transcriber(config: Config, progress: Progress, main: WhisperTranscriber) -> WhisperTranscriber:
+    """The faster model for the words while push-to-talk is held (whisper.live_model). `main` when it is the same
+    model, live text is off, or it can't be had: then the live words come from the main model, only slower."""
+    name = config.whisper.live_model
+    if not config.whisper.live_text or not name or name == config.whisper.model:
+        return main
+    try:
+        path = ensure_model(name, progress)
+        progress(f"Loading the live text model ({name})")
+        return WhisperTranscriber(path, config.whisper.device, config.whisper.beam_size)
+    except (VoiceUnavailable, RuntimeError, ValueError, OSError) as e:
+        progress(f"Live text uses {config.whisper.model} ({name} could not be loaded: {e})")
+        return main
+
+
 def make_recorder(config: Config) -> MicRecorder:
     try:
         return MicRecorder(config.whisper.ptt_key, config.whisper.mic, spare=config.whisper.ptt_key2)
