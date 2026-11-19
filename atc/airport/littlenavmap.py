@@ -6,12 +6,13 @@ from it, and don't use Little Navmap's Navigraph database (little_navmap_navigra
 per user. See BUILD.md.
 """
 import math
+import re
 import sqlite3
 from pathlib import Path
 
 from atc.airport.geo import M_PER_DEG_LAT, distance_nm, point_in_polygon, segment_distance_nm
-from atc.airport.model import (CONTROLLER_TYPES, Airport, AirportSummary, ControlZone, Frequency, Ils, Parking, Runway,
-                               RunwayEnd, TaxiPath, VfrPoint)
+from atc.airport.model import (APRON, CONTROLLER_TYPES, Airport, AirportSummary, ControlZone, Frequency, Ils, Parking,
+                               Runway, RunwayEnd, TaxiPath, VfrPoint)
 from atc.airport.procedures import Procedures, load_procedures
 from atc.airspace.littlenavmap import decode_polygon
 
@@ -226,4 +227,13 @@ def _station_name(com_name: str | None, ident: str, airport_name: str) -> str:
     # ATIS entries are often named after the ICAO code ("EDDH"); a station needs a spoken name
     if not com_name or com_name.upper() == ident:
         return airport_name
+    # Some names run place, job and part of the field together ("BERLINGROUNDMAINA,D01-D03",
+    # "BERLINAPRONMAINB,C,D(EXCD01-D03)"): the place is what comes before the job. Apron stays, the role needs it.
+    job = ROLE_WORD.search(com_name)
+    if job and job.start() > 0:
+        apron = " Apron" if APRON.search(com_name) else ""
+        return (com_name[:job.start()].strip() + apron).title()
     return com_name.title()
+
+
+ROLE_WORD = re.compile(r"APRON|RAMP|GROUND|TOWER|DIRECTOR|APPROACH|ARRIVAL|DEPARTURE|DELIVERY|CLEARANCE", re.I)
