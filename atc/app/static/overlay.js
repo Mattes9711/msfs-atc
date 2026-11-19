@@ -49,7 +49,8 @@ function showLive(live) {
   hearing = live.state !== "idle";
   $("say-row").classList.toggle("hearing", hearing);
   text("say-key", hearing ? "Heard" : "Say");
-  text("say", hearing ? (live.text || "…") + (live.state === "speaking" ? " …" : "") : suggestion);
+  const waiting = live.state === "speaking" ? "Listening …" : "Recognising …";  // no words yet
+  text("say", hearing ? (live.text ? live.text + (live.state === "speaking" ? " …" : "") : waiting) : suggestion);
 }
 
 async function followLive() {

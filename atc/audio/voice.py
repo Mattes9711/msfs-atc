@@ -120,17 +120,23 @@ class WhisperInput:
         self.worker.start()
 
     def _live_loop(self) -> None:
-        """While push-to-talk is held: every live_every seconds the words so far."""
-        last, done = None, 0
+        """While push-to-talk is held: "speaking" at once (the window shows "Listening …" while the key is down),
+        then every live_every seconds the words so far. A live pass takes 1.5-2 s on the user's PC (small.en on
+        the CPU), so short calls are often over before the first words come (2026-11-19)."""
+        last, done, announced = None, 0, False
         while not self.closed.is_set():
             audio = self.recorder.so_far()
             now = time.monotonic()  # not self.clock: that one times the full pass
             if audio is None:
-                last, done = None, 0
-                time.sleep(0.05)
+                last, done, announced = None, 0, False
+                time.sleep(0.02)
                 continue
+            if not announced:
+                announced = True
+                if self.recorder.so_far() is not None:  # not released in the meantime
+                    self._show_live("", SPEAKING)
             if audio.size < LIVE_MIN_S * SAMPLE_RATE or audio.size == done or (last and now - last < self.live_every):
-                time.sleep(0.05)
+                time.sleep(0.02)
                 continue
             last, done = now, audio.size
             try:

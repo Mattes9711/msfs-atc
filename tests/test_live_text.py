@@ -101,3 +101,23 @@ def test_the_setting():
     from atc.settings_file import EDITABLE
 
     assert WhisperConfig().live_text is True and EDITABLE["whisper.live_text"] == ("bool", None)
+
+
+def test_listening_shows_as_soon_as_the_key_is_down():
+    """The user (2026-11-19): nothing showed while speaking, only "recognising" after release. A live pass takes
+    1.5-2 s on the user's PC, so the window now says "speaking" (Listening …) the moment push-to-talk is held."""
+
+    class Slow(Words):
+        def transcribe(self, audio, context="", fast=False):
+            if fast:
+                time.sleep(5)  # the first words come long after the key is released
+            return super().transcribe(audio, context, fast)
+
+    recorder, shown = HeldRecorder(), []
+    listener = WhisperInput(recorder, Slow())
+    listener.live = lambda text, state: shown.append((text, state))
+    threading.Thread(target=listener.listen, daemon=True).start()
+    assert wait_for(lambda: ("", SPEAKING) in shown, seconds=0.5)
+    assert recorder.so_far() is not None  # still held
+    recorder.release.set()
+    listener.close()
