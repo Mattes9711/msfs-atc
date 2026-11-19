@@ -2,6 +2,7 @@
 so the console and the app window run the same code."""
 import queue
 import threading
+import traceback
 import time
 from typing import Callable
 
@@ -21,6 +22,8 @@ from atc.units import format_khz, parse_mhz
 TICK_S = 1.0  # the live loop checks the aircraft (handoffs, safety, sectors) this often
 STILL_KT = 1  # slower than this the aircraft stands still (GROUND_VELOCITY jitters around 0.01 kt)
 WEATHER_REFRESH_S = 30 * 60
+TRACK_EVERY_S = 60  # the flight log notes the aircraft's position this often (and after each call)
+INPUT_RETRY_S = 1.0  # an input that failed (a bug, see read_input) listens again after this
 
 HELP = ("Commands: /com <MHz> tune COM1 | /taxi show the taxi route | /goto holding|crossing|runway on the ground | "
         "/fly <nm> airborne, nm along the route | /final <nm> on final | /circuit <leg> in the circuit of a "
@@ -127,6 +130,26 @@ def announce(cabin: Cabin | None, controller: Controller, state, sink: Sink, gsx
             sink.emit(event)
 
 
+def track_line(controller: Controller, state) -> str:
+    """The flight log's position line: enough to replay a flight afterwards (where was the aircraft when the
+    descent came?). Never fails: a log line must not stop the live loop."""
+    parts = [f"{abs(state.lat):.4f}{'N' if state.lat >= 0 else 'S'} {abs(state.lon):08.4f}{'E' if state.lon >= 0 else 'W'}",
+             "on the ground" if state.on_ground else f"{state.alt_msl_ft:.0f} ft",
+             f"GS {state.ground_speed_kt:.0f} kt", f"HDG {state.heading_mag:03.0f}", controller.phase]
+    try:
+        if controller.cleared_level:
+            parts.append(f"cleared {controller.cleared_level}")
+        if (controller.destination and controller.phase in ("climb", "enroute") and not controller.descent_given):
+            parts.append(f"descent point in {controller.descent_due_in_nm(state):.0f} nm")
+        if controller.destination:
+            d = controller.destination
+            parts.append(f"{distance_nm(state.lat, state.lon, d.lat, d.lon):.0f} nm to {d.ident}")
+    except Exception:  # half a line is better than none
+        pass
+    parts.append(f"COM1 {format_khz(state.com1_khz)}" if state.com1_khz else "COM1 off")
+    return ", ".join(parts)
+
+
 RADIO_KINDS = ("atc", "chatter", "copilot", "pilot")  # the ATIS is not: it may play on and on
 
 
@@ -181,6 +204,8 @@ class LiveSession:
         self.state = None  # last state read, so one tick reads the sim once (a read takes ~0.3 s)
         self.still_since: float | None = None  # the co-pilot's eye: since when the aircraft stands still
         self.pushed = False  # it has moved since the pushback was approved
+        self.next_track: float | None = None  # when the flight log gets the next position line
+        self.tracked_radio: float | None = None  # the radio time of the last call logged with a position
 
     def _traffic(self) -> None:
         """Every TRAFFIC_EVERY_S, with the live clock, the other aircraft go to the controller (T1). A sim without
@@ -235,7 +260,18 @@ class LiveSession:
         announce(self.cabin, self.controller, state, self.sink, gsx_state, with_gsx=self.gsx is not None,
                  now=self.clock() if self.clock else None, last_radio=self.radio.last if self.radio else None)
         self.state = state
+        self._track(state, now)
         return True
+
+    def _track(self, state, now: float | None) -> None:
+        """The aircraft's position into the flight log: every TRACK_EVERY_S and after each call on the radio."""
+        if now is None:
+            return
+        radio = self.radio.last if self.radio else None
+        if self.next_track is not None and now < self.next_track and radio == self.tracked_radio:
+            return
+        self.next_track, self.tracked_radio = now + TRACK_EVERY_S, radio
+        self.sink.emit(Event("track", track_line(self.controller, state)))
 
 
 def run_live(sim: SimSource, speech_in: SpeechInput | list[SpeechInput], sink: Sink, controller: Controller,
@@ -248,7 +284,15 @@ def run_live(sim: SimSource, speech_in: SpeechInput | list[SpeechInput], sink: S
     lines: queue.Queue[str | None] = queue.Queue()
 
     def read_input(source: SpeechInput) -> None:
-        while (text := source.listen()) is not None:
+        while True:
+            try:
+                text = source.listen()
+            except Exception:  # a bug behind one transmission must not take the input away for the rest of the flight
+                traceback.print_exc()  # app.log
+                time.sleep(INPUT_RETRY_S)
+                continue
+            if text is None:
+                break
             lines.put(text)
         lines.put(None)
 

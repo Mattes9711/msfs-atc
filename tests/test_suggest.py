@@ -105,3 +105,16 @@ def test_the_phrase_book_has_the_flights_values_and_the_current_phase_first(eddh
     assert request["pilot"] == "Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich, information alfa"
     tower = next(g for g in book if g["group"] == "Tower")
     assert tower["phrases"][0]["pilot"].startswith("Hamburg Tower, Lufthansa 4AB, holding point runway 23")
+
+
+
+def test_every_kind_of_readback_item_has_the_pilots_words():
+    """2026-11-18: "hold position" had none, the suggestion raised a KeyError, and as the whisper prompt is built
+    from the suggestion, push-to-talk stopped for the rest of the flight."""
+    from atc.intent.schema import ITEMS
+
+    samples = {str: "23", int: 120, bool: True, list: ["A"]}
+    for key in rb.READ_BACK_NAMES:
+        kind = ITEMS[key] if isinstance(ITEMS[key], type) else ITEMS[key][0]
+        assert readback_part(rb.Item(key, samples[kind], "climb via November")), key
+    assert readback_part(rb.hold_position()) == "hold position"

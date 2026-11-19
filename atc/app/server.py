@@ -162,7 +162,8 @@ class AppSink:
         self.log, self.speech, self.flight_log = log, speech, flight_log
 
     def emit(self, event: Event) -> None:
-        self.log.emit(event)
+        if event.kind != "track":  # the aircraft's position is for the flight log, not the window
+            self.log.emit(event)
         if self.flight_log is not None:
             self.flight_log.emit(event)
         if self.speech is not None and event.kind == "tuning" and (cut := getattr(self.speech, "cut_radio", None)):

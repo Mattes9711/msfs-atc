@@ -81,3 +81,17 @@ def test_holding_position_is_an_acknowledgement(eddh, eddm):
     s.atc.update_traffic([taxiing_at(s, 60, 180)])
     s.say(GROUND, "Lufthansa 4AB, request push and start")
     assert s.say(GROUND, "holding position, Lufthansa 4AB") == []  # no "say again"
+
+
+def test_the_co_pilot_offers_the_hold_position_readback(eddh, eddm):
+    """2026-11-18: this suggestion raised a KeyError, and as the whisper prompt is built from it, push-to-talk
+    stopped for the rest of the flight."""
+    from atc.controller.suggest import suggestion
+
+    s = cleared(eddh, eddm, strict=True)
+    s.atc.update_traffic([taxiing_at(s, 60, 180)])
+    s.say(GROUND, "Lufthansa 4AB, request push and start")
+    offer = suggestion(s.atc)
+    assert (offer["title"], offer["text"]) == ("Read back", "hold position, Lufthansa 4AB")
+    assert "hold position" in s.atc.speech_context()
+    assert confirmed(s.say(offer["khz"], offer["text"]))

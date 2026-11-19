@@ -23,6 +23,7 @@ KINDS = {
     "notice": "anything else the controller or the live loop points out",
     "tuning": "COM1 changed; station = what is on that frequency",
     "position": "the fake sim moved",
+    "track": "where the aircraft is, for the flight log only (not shown): every minute and after each call",
     "info": "output of a /command (taxi preview, usage, help)",
     "system": "the app itself: session started or ended, errors",
 }
@@ -61,7 +62,7 @@ class ConsoleSink:
                 speak(event.text, event.station, kind=event.kind)
         elif event.kind in SPOKEN:
             self.speech.say(event.text, event.station, kind=event.kind)
-        elif event.kind != "pilot":
+        elif event.kind not in ("pilot", "track"):
             self.write(f"       ({event.text})")
 
 

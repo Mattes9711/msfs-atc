@@ -6,6 +6,7 @@ report. One line per event, with the UTC time:
     14:52:07Z  PILOT  Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich, information alpha
     14:52:09Z  ATC    Hamburg Ground: Lufthansa four Alfa Bravo, cleared to Munich via ...
     14:52:09Z         (readback correct)
+    14:53:10Z  POS    53.6301N 009.9882E, 24512 ft, GS 420 kt, HDG 330, enroute, cleared FL100, ...
 """
 import re
 import time
@@ -14,7 +15,8 @@ from typing import TextIO
 
 from atc.events import Event
 
-WHO = {"atc": "ATC", "atis": "ATIS", "pilot": "PILOT", "chatter": "RADIO", "cabin": "CABIN", "copilot": "F/O"}
+WHO = {"atc": "ATC", "atis": "ATIS", "pilot": "PILOT", "chatter": "RADIO", "cabin": "CABIN", "copilot": "F/O",
+       "track": "POS"}
 
 
 def log_path(folder: Path, callsign: str, started: float) -> Path:

@@ -61,3 +61,41 @@ def test_the_app_writes_a_flight_log_per_flight():
     text = log.read_text(encoding="utf-8")
     assert "ATC    Hamburg Tower: Lufthansa four Alfa Bravo, Hamburg Tower, read you fife" in text
     assert text.rstrip().endswith("(session ended)")
+
+
+def test_the_log_notes_where_the_aircraft_is_every_minute_and_after_each_call(eddh):
+    """2026-11-18: the log of a flight whose descent came too late had no positions, so where it came could only
+    be guessed from the sector handoffs."""
+    from atc.events import Collector
+    from atc.runtime import TRACK_EVERY_S, LiveSession
+    from tests.test_ground_flow import GROUND, Session
+
+    s, sink, t = Session(eddh), Collector(), [0.0]
+    live = LiveSession(s.sim, sink, s.atc, clock=lambda: t[0])
+    s.sim.update(com1_khz=GROUND)
+
+    def track():
+        lines = [e.text for e in sink.events if e.kind == "track"]
+        sink.events.clear()
+        return lines
+
+    live.step()
+    [line] = track()
+    assert line.startswith("53.") and "on the ground" in line and "COM1 121.705" in line
+    t[0] = 10
+    live.step()
+    assert track() == []  # nothing happened
+    live.step("Hamburg Ground, Lufthansa 4AB, radio check")
+    assert len(track()) == 1  # with the call
+    t[0] = 10 + TRACK_EVERY_S
+    live.step()
+    assert len(track()) == 1  # a minute on
+    assert format_line(Event("track", line, time=T)) == f"14:52:07Z  POS    {line}"
+
+
+def test_the_window_does_not_show_the_position_lines(tmp_path):
+    from atc.app.server import AppSink, EventLog
+
+    log, flight_log = EventLog(), FlightLog(tmp_path / "f.txt")
+    AppSink(log, flight_log=flight_log).emit(Event("track", "53.6301N 009.9882E", time=T))
+    assert log.events == [] and "POS    53.6301N" in (tmp_path / "f.txt").read_text(encoding="utf-8")

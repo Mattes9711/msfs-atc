@@ -16,6 +16,7 @@ still be running when the key is released).
 import ctypes
 import re
 import threading
+import traceback
 import time
 import wave
 from pathlib import Path
@@ -94,7 +95,11 @@ class WhisperInput:
         getattr(self.recorder, "close", lambda: None)()
 
     def _transcribe(self, audio: np.ndarray, fast: bool = False) -> str:
-        context = self.context() if self.context else ""
+        try:
+            context = self.context() if self.context else ""
+        except Exception:  # the flight's words only help whisper: without them it still hears
+            traceback.print_exc()
+            context = ""
         with self.lock:
             if fast:
                 return self.transcriber.transcribe(audio, context, fast=True).strip()
@@ -162,6 +167,10 @@ class WhisperInput:
             self._show_live(self.so_far, TRANSCRIBING)
             try:
                 text = self._transcribe(audio)
+            except Exception as e:  # one failed transmission must not end push-to-talk for the flight
+                traceback.print_exc()
+                self._show("notice", f"could not transcribe that transmission ({e}): say again")
+                continue
             finally:
                 self.so_far = ""
                 self._show_live("", IDLE)

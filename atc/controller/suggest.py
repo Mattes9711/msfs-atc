@@ -82,8 +82,10 @@ def readback_part(item: rb.Item) -> str:
         return f"contact {m[1] if m else 'the next controller'} {value / 1000:.3f}"
     if key == "qnh":
         return f"QNH {value}"
+    # The rest are said as ATC said them; an item without an entry here falls back to ATC's words, never fails:
+    # a KeyError here (hold_position, 2026-11-18) stopped push-to-talk, as the whisper prompt is built from this
     return {"cleared_takeoff": "cleared for takeoff", "cleared_land": "cleared to land",
-            "line_up": "line up and wait"}[key]
+            "line_up": "line up and wait", "hold_position": "hold position"}.get(key, item.phrase)
 
 
 def _digits(words: str) -> str:

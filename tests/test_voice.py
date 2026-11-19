@@ -72,6 +72,30 @@ def test_words_only_from_the_prompt_are_dropped():
     assert shown[1].startswith("       (ignored: only words from the whisper prompt")
 
 
+
+def test_a_broken_whisper_prompt_still_hears_the_transmission():
+    """2026-11-18: building the prompt raised (a KeyError in the suggestion), which ended push-to-talk."""
+    w, shown, heard = whisper_input([SPEECH], ["Lufthansa 4AB, radio check"])
+    w.context = lambda: {}["boom"]
+    assert w.listen() == "Lufthansa 4AB, radio check" and heard.calls == 1
+
+
+class FailsOnce(Heard):
+    def transcribe(self, audio):
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("out of memory")
+        return self.texts.pop(0)
+
+
+def test_a_failed_transcription_says_say_again_and_listens_on():
+    w = WhisperInput(Recordings(SPEECH, SPEECH), FailsOnce("Lufthansa 4AB, radio check"),
+                     clock=iter([0, 2.1] * 10).__next__)
+    shown = []
+    w.attach(ConsoleSink(None, shown.append))
+    assert w.listen() == "Lufthansa 4AB, radio check"
+    assert "could not transcribe that transmission (out of memory): say again" in shown[0]
+
 def test_a_nearly_silent_recording_hints_at_the_microphone():
     w, shown, _ = whisper_input([SPEECH * 0.01], ["Lufthansa 4AB, radio check"])
     w.listen()
@@ -208,6 +232,20 @@ class NeverSpeaks:
         threading.Event().wait()
 
 
+
+class RaisesOnce:
+    """An input whose first listen fails (a bug behind the transmission), then hears the next one."""
+    def __init__(self, text):
+        self.calls, self.text = 0, text
+
+    def listen(self):
+        self.calls += 1
+        if self.calls == 1:
+            raise KeyError("hold_position")
+        if self.calls == 2:
+            return self.text
+        threading.Event().wait()
+
 class Spoken:
     def __init__(self):
         self.lines = []
@@ -259,3 +297,20 @@ def test_the_engine_is_released_in_the_speech_thread(voice):
         pass
     gc.collect()
     assert ThreadBoundEngine.released_in == [True]
+
+
+
+def test_push_to_talk_survives_a_failed_transmission(eddh, monkeypatch, capsys):
+    """2026-11-18: one exception in the push-to-talk thread ended it, and the pilot could no longer transmit."""
+    import atc.runtime
+    monkeypatch.setattr(atc.runtime, "INPUT_RETRY_S", 0)
+    s, out = Session(eddh), Spoken()
+    s.sim.update(com1_khz=TOWER)
+    stop = threading.Event()
+    sink = ConsoleSink(out, lambda text: None)
+    original = sink.emit
+    sink.emit = lambda event: (original(event), out.lines and stop.set())
+    threading.Timer(5, stop.set).start()  # without the fix: fail, don't hang
+    run_live(s.sim, [RaisesOnce("Hamburg Tower, Lufthansa 4AB, radio check")], sink, s.atc, tick_s=0.01, stop=stop)
+    assert out.lines == ["Lufthansa four Alfa Bravo, Hamburg Tower, read you fife"]
+    assert "KeyError" in capsys.readouterr().err  # in app.log
