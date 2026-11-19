@@ -19,7 +19,10 @@ DESCENT_LEAD_NM = 5  # the descent comes this far before the top of descent: tim
 VECTOR_ALLOWANCE_NM = 15
 DESCENT_REQUEST_NM = 20  # the co-pilot offers "request descent" this far before the descent point
 APPROACH_HANDOFF_NM = 40
-TOWER_HANDOFF_NM = 12  # from the landing threshold
+TOWER_HANDOFF_NM = 12  # from the landing threshold, once established on the final
+# ... and at the latest here, established or not (the emulator at EDDB, 2026-11-19: handed over on the intercept
+# heading, and the pilot checked in "established" there)
+TOWER_HANDOFF_LATEST_NM, ESTABLISHED_ACROSS_NM, ESTABLISHED_DEG = 8, 0.3, 15
 FINAL_FIX_NM = 10
 # Radar vectors: downwind, base and intercept, see atc/controller/vectors.py (Milestone 8, H)
 INTERCEPT_ANGLE = 30
@@ -42,6 +45,7 @@ SHORTCUT_MIN_NM = 10  # a direct-to must save at least this much
 CENTER_HANDOFF_FT, CENTER_HANDOFF_NM = 10000, 30  # Departure -> Center: passing FL100 or this far out
 VFR_SQUAWK = "7000"
 GO_AROUND_BELOW_AGL_FT, GO_AROUND_CLIMB_FT = 300, 200  # low on final, then climbing this much
+GO_AROUND_VECTORS_AGL_FT = 1500  # after a go-around without Approach: the Tower's vectors from this height
 RESERVED_SQUAWKS = {"1000", "1200", "2000", "7000"}  # 75xx/76xx/77xx can't occur: first digit is 1-6
 INTERSECTION_MARGIN_M = 60  # a taxiway end this far beside the runway edge still leads onto it
 READBACK_REMINDER_S = 20

@@ -77,6 +77,21 @@ def test_a_drift_gets_a_corrected_heading_but_not_too_often(eddh, eddm):
     assert s.tick(now=140) != []  # after 30 s: corrected again
 
 
+def test_no_correction_just_before_the_base_turn(eddh, eddm):
+    """The emulator (2026-11-19): a correction 2-3.5 nm before the base point, where the bearing to it swings, and
+    the base turn 2-28 s later. Now only the base turn."""
+    s = arriving(eddh, eddm)
+    end = eddm.runway_end(s.atc.arrival_runway)
+    outbound = (end.heading_true + 180) % 360
+    at(s, eddm, 0, 8, outbound)
+    check_in(s, eddm)
+    at(s, eddm, 9, 7.5, outbound)  # 2.5 nm outside the downwind, under 4 nm from the base point: 40 degrees off
+    assert s.tick(now=100) == []
+    at(s, eddm, vectors.BASE_ALONG_NM - vectors.BASE_TURN_LEAD_NM + 0.3, 6.5, outbound)
+    [base] = s.tick(now=110)
+    assert base == f"{CS}, turn left heading {spoken_heading(magnetic(eddm, end.heading_true + 90))}"
+
+
 def test_far_out_in_front_straight_towards_the_final(eddh, eddm):
     s = arriving(eddh, eddm)
     end = eddm.runway_end(s.atc.arrival_runway)

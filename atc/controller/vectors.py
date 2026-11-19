@@ -31,6 +31,8 @@ STRAIGHT_IN_ALONG_NM = 14  # farther out in front than this: no downwind, straig
 ESTABLISHED_BY_NM = 8  # a straight-in intercept must meet the centreline at least this far out
 CORRECT_DEG = 20  # the way to the base point this far off the assigned heading: a corrected heading
 CORRECT_EVERY_S = 30  # not more often than this
+CORRECT_NEAR_NM = 5  # this close to the base point no correction: the bearing swings there, and the base turn
+# comes within about a minute anyway (emulator, 2026-11-19: a correction 2-3.5 nm out, the base turn 2-28 s later)
 
 
 def frame(end, lat: float, lon: float) -> tuple[float, float]:

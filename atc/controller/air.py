@@ -36,6 +36,10 @@ class AirMixin:
         self.phase = next_phase
         if receiver is None:
             return [Response(missing, spoken=False)]
+        if sender is not None and sender.key == receiver.key:
+            # No Approach (EDDW, EDDN): the Tower vectored the aircraft itself and must not hand it to itself. The
+            # emulator's flights waited for a check-in that never came and were sent around (2026-11-19).
+            return self._final_call(sender, state, auto=True) if next_phase == "final" else []
         item = rb.contact(receiver.name, receiver.freq.khz)
         self.call_next = receiver
         if sender is None:
@@ -286,7 +290,7 @@ class AirMixin:
             # In steps: Center to FL100 (and the arrival route); Approach gives the altitude and the QNH
             items = [rb.level(level_ft // 100, "descend")]
         else:
-            items = [rb.altitude(DESCENT_ALTITUDE_FT, "descend")]
+            items = [rb.altitude(DESCENT_ALTITUDE_FT, self._verb(DESCENT_ALTITUDE_FT, state))]
             if self.destination_metar and self.destination_metar.qnh_hpa:
                 items.append(rb.qnh(self.destination_metar.qnh_hpa))
         self._set_pending(items, station.key)
@@ -294,6 +298,12 @@ class AirMixin:
         text = ", ".join([rb.instruction_text(items), *([f"cleared {star}"] if star else []),
                           f"expect {self.arrival.approach_kind} approach runway {spoken.runway(self.arrival_runway)}"])
         return self._transmit(station, f"{self.cs}, {text}", state)
+
+    @staticmethod
+    def _verb(feet: int, state: AircraftState) -> str:
+        """"climb" to an altitude above the aircraft: a short flight (EDDM-EDDN at FL240) is still climbing when
+        the descent comes, and an aircraft checks in low after a go-around (the emulator, 2026-11-19)."""
+        return "climb" if state.alt_msl_ft < feet - 200 else "descend"
 
     def _watch_descent(self, item: rb.Item) -> None:
         """A level or altitude given: a descent is watched until the aircraft is there, a climb ends the watch."""
@@ -348,10 +358,10 @@ class AirMixin:
             return self._approach_clearance(station, state)
         if calls := self._start_transition(station, state):  # the transition flown, vectors at its end (Milestone 10 E)
             return calls
-        self.phase, self.vectoring, self.vector_own = "approach", station, False
+        self.phase, self.vectoring, self.vector_own, self.vectors_due = "approach", station, False, None
         end = self.destination.runway_end(self.arrival_runway)
         heading = self._first_vector(end, state)
-        items = [rb.altitude(self._approach_altitude(), "descend")]
+        items = [rb.altitude(self._approach_altitude(), self._verb(self._approach_altitude(), state))]
         if self.destination_metar and self.destination_metar.qnh_hpa:
             items.append(rb.qnh(self.destination_metar.qnh_hpa))
         items += [rb.speed(APPROACH_SPEED_KT), rb.heading(heading)]
@@ -359,6 +369,13 @@ class AirMixin:
         approach_type = "ILS" if end.ils else "RNAV"
         return [self._say(station, f"{self.cs}, {station.name}, " + rb.instruction_text(items) +
                           f", vectors {approach_type} approach runway {spoken.runway(end.name)}")]
+
+    def _own_vectors(self, state: AircraftState) -> list[Response]:
+        """The Tower that also works the approach, after a go-around: the vectors a check-in would have started,
+        called by the controller (only heard on its frequency)."""
+        station, self.vectors_due = self.vectors_due, None
+        return [heard for r in self._vectors(station, state)
+                for heard in (self._transmit(station, r.text, state) if r.spoken else [r])]
 
     def _first_vector(self, end, state: AircraftState) -> int:
         """The first leg: far out in front of the runway and near the final a 30-degree intercept heading, else to
@@ -399,7 +416,8 @@ class AirMixin:
             # aircraft there (Milestone 10 G: within 2 nm of the point it came at 10 nm and met the localizer 7.8 nm
             # out). Coming in from in front: at the base point, or abeam it.
             if self.vector_inbound:
-                level = along <= vectors.BASE_ALONG_NM or                     distance_nm(state.lat, state.lon, *base) <= vectors.BASE_WITHIN_NM
+                level = (along <= vectors.BASE_ALONG_NM or
+                         distance_nm(state.lat, state.lon, *base) <= vectors.BASE_WITHIN_NM)
             else:
                 level = along >= vectors.BASE_ALONG_NM - vectors.BASE_TURN_LEAD_NM
             if level:
@@ -408,7 +426,7 @@ class AirMixin:
             wanted = self._magnetic(bearing_deg(state.lat, state.lon, *base))
             off = abs((wanted - self.vector_heading + 540) % 360 - 180)
             waited = now is None or self.vector_at is None or now - self.vector_at >= vectors.CORRECT_EVERY_S
-            near = distance_nm(state.lat, state.lon, *base) <= vectors.BASE_WITHIN_NM  # the bearing swings there
+            near = distance_nm(state.lat, state.lon, *base) <= vectors.CORRECT_NEAR_NM
             if off >= vectors.CORRECT_DEG and waited and not near:
                 return self._give_vector(station, state, bearing_deg(state.lat, state.lon, *base), now)
         return []
@@ -461,7 +479,7 @@ class AirMixin:
                     f"until established, {cleared.phrase}, {items[2].phrase}")
             self._set_pending(items, station.key)
             return self._transmit(station, text, state)
-        return self._direct_approach_clearance(station, sequence)
+        return self._direct_approach_clearance(station, state, sequence)
 
     def _ahead_on_final(self, state: AircraftState) -> list[tuple[float, Traffic]]:
         """(distance to the threshold, aircraft) on final for our landing runway end and closer to it than we are:
@@ -557,11 +575,13 @@ class AirMixin:
         self.speed_step = 2
         return self._transmit(station, f"{self.cs}, reduce to final approach speed, traffic ahead", state)
 
-    def _direct_approach_clearance(self, station: Station, sequence: str = "") -> list[Response]:
+    def _direct_approach_clearance(self, station: Station, state: AircraftState,
+                                   sequence: str = "") -> list[Response]:
         self.phase, self.approach_cleared = "approach", True
         end = self.destination.runway_end(self.arrival_runway)
         approach_type = "ILS" if end.ils else "RNAV"
-        items = [rb.altitude(self._approach_altitude(), "descend")]
+        # "climb" after a go-around without Approach: the Tower clears it again from below
+        items = [rb.altitude(self._approach_altitude(), self._verb(self._approach_altitude(), state))]
         if self.destination_metar and self.destination_metar.qnh_hpa:
             items.append(rb.qnh(self.destination_metar.qnh_hpa))  # below the transition level: altitudes on QNH
         items.append(rb.Item("runway", end.name,

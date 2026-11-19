@@ -309,5 +309,7 @@ class TowerMixin:
         self.lowest_agl_on_final = float("inf")
         self.cleared_runways.discard(self._runway_key(dest, self.arrival_runway))
         self._set_pending(items, station.key, handoff_to=approach.key if handoff else None)
+        # No Approach to check in with (EDDW, EDDN): the Tower vectors again by itself once the aircraft has climbed
+        self.vectors_due = None if handoff else station
         text = f"{self.cs}, " + ", ".join(filter(None, [prefix, rb.instruction_text(items)]))
         return self._transmit(station, text, state)

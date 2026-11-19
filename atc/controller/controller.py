@@ -20,7 +20,7 @@ from atc.controller import readback as rb
 from atc.controller.atis import Atis, weather_text
 from atc.controller.runway_use import RunwayUse
 from atc.controller.safety import RunwayZones
-from atc.controller import wake
+from atc.controller import vectors, wake
 from atc.controller.traffic import TrafficPicture
 from atc.sim.traffic import Traffic
 from atc.flightplan.model import FlightPlan
@@ -35,7 +35,8 @@ from atc.weather.metar import Metar
 from atc.weather.runway_choice import choose_runway
 from atc.controller.common import (AIR_PHASES, AIRBORNE_AGL_FT, APPROACH_HANDOFF_NM, CALL_KINDS, NEAR_HOLDING_POINT_M, PHASES,
                                    PHASE_ROLE, READBACK_REMINDER_S, RESERVED_SQUAWKS, ROLES, SECTOR_NEAR_DEG,
-                                   CIRCUIT_NM, INFO_CALL_NM, TOWER_HANDOFF_NM, VFR_SQUAWK,
+                                   CIRCUIT_NM, ESTABLISHED_ACROSS_NM, ESTABLISHED_DEG, GO_AROUND_VECTORS_AGL_FT, INFO_CALL_NM,
+                                   TOWER_HANDOFF_LATEST_NM, TOWER_HANDOFF_NM, VFR_SQUAWK,
                                    VACATE_SPEED_KT, Response, Station, _wind, best_frequency, center_station, describe_intent,
                                    frequency_list, wrong_frequency_hint)  # frequency_list: for atc.session
 from atc.controller.ground import GroundMixin, stand_words
@@ -108,6 +109,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
         self.at_holding_point = False
         self.lined_up = False
         self.vectoring: Station | None = None  # the Approach controller vectoring us to the ILS
+        self.vectors_due: Station | None = None  # after a go-around without Approach: the Tower's own vectors
         self.vector_leg: str | None = None  # "downwind" or "base" while vectored (H)
         self.vector_side = 1  # +1 left of the final facing the runway, -1 right
         self.vector_heading: int | None = None  # the last heading given
@@ -448,6 +450,8 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
             if to_airport <= APPROACH_HANDOFF_NM and (
                     self.descent_given or state.alt_msl_ft < 10000 or en_route is None):
                 return self._handoff(role, "approach", "arrival", state)
+        if self.phase == "arrival" and self.vectors_due and state.alt_agl_ft >= GO_AROUND_VECTORS_AGL_FT:
+            return self._own_vectors(state)
         if self.phase == "approach" and self.transition_legs:
             return self._transition_progress(state, now)
         if self.phase == "approach" and self.vectoring:
@@ -456,11 +460,19 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
             return spacing
         if self.phase == "approach":
             end = self.destination.runway_end(self.arrival_runway)
-            if distance_nm(state.lat, state.lon, end.lat, end.lon) <= TOWER_HANDOFF_NM:
+            to_go = distance_nm(state.lat, state.lon, end.lat, end.lon)
+            if to_go <= TOWER_HANDOFF_LATEST_NM or (to_go <= TOWER_HANDOFF_NM and self._established(end, state)):
                 return self._handoff("approach", "arrival_tower", "final", state)
         if self.phase == "landing" and state.on_ground and state.ground_speed_kt < VACATE_SPEED_KT:
             return self._vacate(self.station("arrival_tower"), state)
         return []
+
+    def _established(self, end, state: AircraftState) -> bool:
+        """On the final: close to the centreline and flying the runway's course."""
+        _, across = vectors.frame(end, state.lat, state.lon)
+        heading = state.heading_mag + self.destination.mag_var
+        off = abs((heading - end.heading_true + 540) % 360 - 180)
+        return abs(across) <= ESTABLISHED_ACROSS_NM and off <= ESTABLISHED_DEG
 
     # --- pilot calls ------------------------------------------------------------------------------------------
 
