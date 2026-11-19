@@ -76,8 +76,8 @@ def request_due(atc, still_s: float, pushed: bool, gsx=None) -> dict | None:
         ready = bool(gsx and gsx.departure == gsx_states.COMPLETED) or (pushed and still_s >= STILL_S)
     elif title in ("At the crossing", "Ready for departure"):
         ready = still_s >= STILL_S
-    elif title == "Request taxi":  # after vacating the runway
-        ready = True
+    elif title == "Request taxi":  # once clear of the runway: the taxi route starts where the aircraft is
+        ready = atc.clear_of_runway(state)
     else:
         ready = False
     return s if ready else None

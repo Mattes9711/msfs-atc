@@ -92,7 +92,15 @@ def test_the_copilot_works_the_radio_gate_to_gate(eddh, eddm):
     assert any(t.startswith(f"{CS}, wind") and t.endswith("cleared to land") for t in f.said_by("atc"))
 
     f.s.sim.landed(eddm, end)
-    f.until(lambda: atc.phase == "taxi_in" and not atc.pending, "the taxi-in clearance read back", ground_speed_kt=0)
+    f.until(lambda: atc.phase == "vacating" and not atc.pending, "vacate, contact Ground read back")
+    f.step(5)
+    assert atc.phase == "vacating"  # still on the runway: he calls Ground once clear of it (the emulator's find)
+    graph, zones, here = atc._arrival_graph(), atc._arrival_zones, f.s.sim.read()
+    off = min((n for n in range(len(graph.latlon)) if zones.runway_at(*graph.latlon[n]) is None),
+              key=lambda n: graph.distance_m(n, here.lat, here.lon))
+    lat, lon = graph.latlon[off]
+    f.until(lambda: atc.phase == "taxi_in" and not atc.pending, "the taxi-in clearance read back",
+            lat=lat, lon=lon, ground_speed_kt=0)
     f.taxi_along(atc.route_in, atc._arrival_graph())
     stand = atc.stand_in
     f.until(lambda: atc.said_goodbye, "the goodbye at the stand", limit=60,

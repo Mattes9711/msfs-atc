@@ -160,6 +160,8 @@ def suggestion(atc) -> dict | None:
         return call("Check in", f"established ILS runway {atc.arrival_runway}")
     if phase == "vacating":
         return call("Request taxi", "request taxi to the gate")
+    if phase == "taxi_in" and (crossing := atc.next_crossing_here()):
+        return call("At the crossing", f"holding short runway {crossing}")
     return None
 
 

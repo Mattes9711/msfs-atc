@@ -296,7 +296,7 @@ def _taxiways(tokens: list[str]) -> list[str]:
                 name += tokens[i + 1]
                 i += 1
             names.append(name)
-        elif re.fullmatch(r"[a-z]\d{1,2}", tok):
+        elif re.fullmatch(r"[a-z]\d{1,2}[a-z]?", tok):  # "B12W" written as one: one taxiway
             names.append(tok.upper())
         elif tok != "and":
             break

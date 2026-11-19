@@ -318,10 +318,12 @@ class GroundMixin:
         """The runway in "holding short (runway) 05" / "ready to cross runway 05"; without one, the next runway
         to cross on the taxi route, or after the last crossing the departure runway ("on holding point")."""
         named = intent.items.get("hold_short") or intent.items.get("runway")
-        if named or self.phase != "taxi" or self.route_out is None:
+        if named or (taxiing := self._taxiing()) is None:
             return named
-        return next((r for r, _ in self.crossing_points(self.route_out)
-                     if (self.airport.ident, r) not in self.cleared_runways), self.runway)
+        airport, graph, route = taxiing
+        following = next((r for r, _ in self.crossing_points(route, graph)
+                          if (airport.ident, r) not in self.cleared_runways), None)
+        return following or (self.runway if self.phase == "taxi" else None)
 
     def _is_departure_runway(self, name: str | None) -> bool:
         if name is None or self.airport.runway_end(name) is None:
@@ -358,27 +360,38 @@ class GroundMixin:
         self._set_pending(items, station.key)
         return self._transmit(station, f"{self.cs}, " + rb.instruction_text(items), state)
 
-    def crossing_points(self, route: TaxiRoute) -> list[tuple[str, int]]:
+    def crossing_points(self, route: TaxiRoute, graph: TaxiGraph | None = None) -> list[tuple[str, int]]:
         """(runway, node to hold at) for each crossing in order. A crossing is often several segments and only
-        the one over the centreline is marked, so hold at the last hold-short node *before* it."""
+        the one over the centreline is marked, so hold at the last hold-short node *before* it. graph: the
+        route's taxi graph (the arrival airport's for the taxi in), default the departure airport's."""
+        graph = graph or self.taxi
         points, seen = [], set()
         for i, edge in enumerate(route.edges):
             for runway in edge.crosses:
                 if runway in seen:
                     continue
                 seen.add(runway)
-                before = [e.a for e in route.edges[:i + 1] if e.a in self.taxi.hold_short]
+                before = [e.a for e in route.edges[:i + 1] if e.a in graph.hold_short]
                 points.append((runway, before[-1] if before else edge.a))
         return points
 
     def next_crossing_here(self) -> str | None:
         """The runway to cross, if the aircraft is at its hold short and not cleared yet (for the suggestion)."""
-        if self.phase != "taxi" or self.route_out is None or self.state is None:
+        if (taxiing := self._taxiing()) is None or self.state is None:
             return None
-        for runway, node in self.crossing_points(self.route_out):
-            if (self.airport.ident, runway) in self.cleared_runways:
+        airport, graph, route = taxiing
+        for runway, node in self.crossing_points(route, graph):
+            if (airport.ident, runway) in self.cleared_runways:
                 continue
-            return runway if self.taxi.distance_m(node, self.state.lat, self.state.lon) <= AT_POINT_M else None
+            return runway if graph.distance_m(node, self.state.lat, self.state.lon) <= AT_POINT_M else None
+        return None
+
+    def _taxiing(self) -> tuple[Airport, TaxiGraph, TaxiRoute] | None:
+        """(airport, taxi graph, cleared route) while taxiing out to the runway or in to the stand."""
+        if self.phase == "taxi" and self.route_out is not None:
+            return self.airport, self.taxi, self.route_out
+        if self.phase == "taxi_in" and self.route_in is not None and self.destination is not None:
+            return self.destination, self._arrival_graph(), self.route_in
         return None
 
     def at_departure_holding_point(self) -> bool:
@@ -477,6 +490,12 @@ class GroundMixin:
         hint = Response(f"runway incursion: runway {rwy.ends[0].name}/{rwy.ends[1].name} without clearance",
                         spoken=False)
         return [hint, *self._transmit(station, f"{self.cs}, stop immediately, stop immediately", state)]
+
+    def clear_of_runway(self, state: AircraftState) -> bool:
+        """On the ground and off every runway: after landing, the call to Ground waits for this (the taxi route
+        starts where the aircraft is, so it would start on the runway)."""
+        _, zones = self._ground_zones()
+        return state.on_ground and (zones is None or zones.runway_at(state.lat, state.lon) is None)
 
     def _ground_zones(self) -> tuple[Airport, RunwayZones]:
         if self.destination and PHASES.index(self.phase) >= PHASES.index("airborne"):

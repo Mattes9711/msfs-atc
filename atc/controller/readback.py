@@ -67,8 +67,11 @@ def same(key: str, heard, value) -> bool:
     the direct-to fix counts."""
     if key == "direct" and isinstance(heard, str):
         return difflib.SequenceMatcher(None, heard.upper(), str(value).upper()).ratio() >= 0.7
-    if key == "taxiways" and isinstance(heard, list) and len(heard) == len(value) + 1:
-        return heard[:-1] == value  # "via E2, N4, N, A13": the holding point said once more at the end
+    if key == "taxiways" and isinstance(heard, list):
+        # Compared as one string: "bravo one two whiskey" is heard as B12, W, but the taxiway is B12W
+        if len(heard) > len(value) and "".join(heard[:-1]) == "".join(value):
+            return True  # "via E2, N4, N, A13": the holding point said once more at the end
+        return "".join(heard) == "".join(value)
     return heard == value
 
 
