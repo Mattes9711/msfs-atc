@@ -6,7 +6,8 @@ heading 075. Now the controller flies the aircraft through a pattern and watches
 
     downwind   to a point BASE_ALONG_NM out on the extended centreline, DOWNWIND_NM to the side the aircraft is on,
                with a corrected heading whenever its way to that point drifts off by CORRECT_DEG or more;
-    base       near that point: a heading at right angles towards the centreline;
+    base       near that point: a heading at right angles towards the centreline (none when the downwind is so
+               close to it that the base leg would be gone in the turn: the intercept at once);
     intercept  within INTERCEPT_ACROSS_NM of the centreline (or across it): 30 degrees onto the localizer and the
                approach clearance (atc/controller/air.py _approach_clearance).
 
@@ -27,6 +28,9 @@ DOWNWIND_NM = 5  # the downwind's distance beside the centreline
 BASE_WITHIN_NM = 2  # this close to the base point: turn base
 BASE_TURN_LEAD_NM = 1  # out on the downwind the base turn this much before BASE_ALONG_NM: the turn takes it there
 INTERCEPT_ACROSS_NM = 2.5  # this close beside the centreline on base: intercept and cleared
+BASE_LEG_MIN_NM = 2  # less than this left to INTERCEPT_ACROSS_NM when the base turn is due: no base leg, the
+# intercept heading and the approach clearance at once (emulator, 2026-11-19: a downwind 3.8-4.1 nm beside the
+# centreline, the turn took most of it, the intercept came 16-24 s after the base turn in the same direction)
 STRAIGHT_IN_ALONG_NM = 14  # farther out in front than this: no downwind, straight towards the final
 ESTABLISHED_BY_NM = 8  # a straight-in intercept must meet the centreline at least this far out
 CORRECT_DEG = 20  # the way to the base point this far off the assigned heading: a corrected heading
@@ -64,6 +68,10 @@ def base_heading_true(end, across_now: float) -> float:
     """At right angles towards the centreline: from the left side (facing the runway) that is a turn to the right
     of the final course."""
     return (end.heading_true + 90 * side_of(across_now)) % 360
+
+
+def base_too_short(across_now: float) -> bool:
+    return abs(across_now) < INTERCEPT_ACROSS_NM + BASE_LEG_MIN_NM
 
 
 def straight_in(along: float, across: float) -> bool:

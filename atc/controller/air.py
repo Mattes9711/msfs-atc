@@ -407,8 +407,7 @@ class AirMixin:
         if self.vector_leg == "downwind" and self.vector_own:
             # The transition's downwind: only the base turn, later with traffic ahead (Milestone 10 E)
             if along >= self._base_along_nm(state) - vectors.BASE_TURN_LEAD_NM:
-                self.vector_leg = "base"
-                return self._give_vector(station, state, vectors.base_heading_true(end, self.vector_side), now)
+                return self._base_turn(station, state, end, across, now)
             return []
         if self.vector_leg == "downwind":
             base = vectors.base_point(end, self.vector_side * vectors.DOWNWIND_NM)
@@ -421,8 +420,7 @@ class AirMixin:
             else:
                 level = along >= vectors.BASE_ALONG_NM - vectors.BASE_TURN_LEAD_NM
             if level:
-                self.vector_leg = "base"
-                return self._give_vector(station, state, vectors.base_heading_true(end, self.vector_side), now)
+                return self._base_turn(station, state, end, across, now)
             wanted = self._magnetic(bearing_deg(state.lat, state.lon, *base))
             off = abs((wanted - self.vector_heading + 540) % 360 - 180)
             waited = now is None or self.vector_at is None or now - self.vector_at >= vectors.CORRECT_EVERY_S
@@ -430,6 +428,16 @@ class AirMixin:
             if off >= vectors.CORRECT_DEG and waited and not near:
                 return self._give_vector(station, state, bearing_deg(state.lat, state.lon, *base), now)
         return []
+
+    def _base_turn(self, station: Station, state: AircraftState, end, across: float, now: float | None):
+        """The base turn, or, from a downwind close beside the centreline, the intercept heading and the approach
+        clearance at once: the turn towards the centreline, the way round the base leg would have gone."""
+        if vectors.base_too_short(across):
+            self.vectoring, self.vector_leg = None, None
+            towards = "left" if vectors.side_of(across) > 0 else "right"
+            return self._approach_clearance(station, state, intercept=True, turn=towards)
+        self.vector_leg = "base"
+        return self._give_vector(station, state, vectors.base_heading_true(end, self.vector_side), now)
 
     def _give_vector(self, station: Station, state: AircraftState, true_heading: float, now: float | None):
         """"turn left heading two six zero", read back like every heading."""
@@ -452,9 +460,11 @@ class AirMixin:
             return faf_ft
         return -(-(elevation + 3000) // 100) * 100
 
-    def _approach_clearance(self, station: Station, state: AircraftState, intercept: bool = False) -> list[Response]:
+    def _approach_clearance(self, station: Station, state: AircraftState, intercept: bool = False,
+                            turn: str | None = None) -> list[Response]:
         """Cleared for the approach: after vectors with a turn onto the localizer (30 degrees to the course, from the
-        side the aircraft is on) and the final speed; straight in when already on final."""
+        side the aircraft is on) and the final speed; straight in when already on final. `turn` fixes the direction
+        of the turn (from the downwind more than 150 degrees, the short way round would turn away from the final)."""
         self.phase, self.approach_cleared = "approach", True
         end, course, _, offset = self._final_geometry(state)
         approach_type = "ILS" if end.ils else "RNAV"
@@ -473,7 +483,7 @@ class AirMixin:
                         f"established, {cleared.phrase}, {items[1].phrase}")
                 self._set_pending(items, station.key)
                 return self._transmit(station, text, state)
-            turn = "right" if (target - state.heading_mag + 540) % 360 - 180 > 0 else "left"
+            turn = turn or vectors.turn_direction(state.heading_mag, target)
             items = [rb.heading(target, turn), cleared, rb.speed(FINAL_SPEED_KT)]
             text = (f"{self.cs}, {sequence}{items[0].phrase}, maintain {spoken.altitude(self._approach_altitude())} "
                     f"until established, {cleared.phrase}, {items[2].phrase}")

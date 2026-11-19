@@ -92,6 +92,34 @@ def test_no_correction_just_before_the_base_turn(eddh, eddm):
     assert base == f"{CS}, turn left heading {spoken_heading(magnetic(eddm, end.heading_true + 90))}"
 
 
+def test_a_downwind_close_to_the_centreline_gets_the_intercept_at_once(eddh, eddm):
+    """The emulator (2026-11-19, K9): a downwind 3.8-4.1 nm beside the centreline, the base turn and 16-24 s later
+    the intercept the same way round. Now the intercept heading and the clearance at once, turning towards the final
+    even where the short way round would turn away from it."""
+    s = arriving(eddh, eddm)
+    end = eddm.runway_end(s.atc.arrival_runway)
+    outbound = (end.heading_true + 180) % 360
+    at(s, eddm, 0, 8, outbound)
+    check_in(s, eddm)
+    # A left downwind blown outwards: the short way round to the intercept heading would be a right turn
+    at(s, eddm, vectors.BASE_ALONG_NM, 4, (outbound + 35) % 360)
+    [cleared] = s.tick(now=200)
+    intercept = magnetic(eddm, end.heading_true + 30)
+    assert cleared.startswith(f"{CS}, turn left heading {spoken_heading(intercept)}, maintain ")
+    assert "until established, cleared ILS approach runway" in cleared and s.atc.vectoring is None
+
+
+def test_a_downwind_well_beside_the_centreline_still_turns_base(eddh, eddm):
+    s = arriving(eddh, eddm)
+    end = eddm.runway_end(s.atc.arrival_runway)
+    outbound = (end.heading_true + 180) % 360
+    at(s, eddm, 0, 8, outbound)
+    check_in(s, eddm)
+    at(s, eddm, vectors.BASE_ALONG_NM, vectors.INTERCEPT_ACROSS_NM + vectors.BASE_LEG_MIN_NM + 0.2, outbound)
+    [base] = s.tick(now=200)
+    assert base == f"{CS}, turn left heading {spoken_heading(magnetic(eddm, end.heading_true + 90))}"
+
+
 def test_far_out_in_front_straight_towards_the_final(eddh, eddm):
     s = arriving(eddh, eddm)
     end = eddm.runway_end(s.atc.arrival_runway)

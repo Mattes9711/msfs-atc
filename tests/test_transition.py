@@ -96,13 +96,12 @@ def test_fly_the_transition_with_altitudes_speeds_and_vectors_at_its_end(eddh, e
     # DT003 passed: the vectors from there, on the downwind no heading
     assert downwind(s, eddm, 4, 50) == [] and s.atc.vectoring is not None and s.atc.vector_leg == "downwind"
     assert downwind(s, eddm, 9, 100) == []
-    base = magnetic(eddm, end.heading_true + 90)
-    assert downwind(s, eddm, 11.2, 150) == [f"{CS}, turn left heading {spoken.heading(base)}"]
-    assert confirmed(s.say(MUNICH_APPROACH, f"left heading {base:03d}, Lufthansa 4AB"))
-    at(s, eddm, 12, 2, (end.heading_true + 90) % 360, alt=5000)
-    [cleared] = s.tick(now=200)
-    assert "maintain fife thousand feet until established, cleared ILS approach runway zero eight right" \
-        in cleared
+    # The transition's downwind is 4 nm beside the centreline: no base leg (gone in the turn, K9), the intercept
+    # heading and the clearance at once
+    intercept = magnetic(eddm, end.heading_true + 30)
+    [cleared] = downwind(s, eddm, 11.2, 150)
+    assert cleared == (f"{CS}, turn left heading {spoken.heading(intercept)}, maintain fife thousand feet until "
+                       "established, cleared ILS approach runway zero eight right, speed one eight zero knots")
 
 
 def test_traffic_ahead_makes_the_downwind_longer(eddh, eddm):
@@ -115,7 +114,8 @@ def test_traffic_ahead_makes_the_downwind_longer(eddh, eddm):
     ahead = SimpleNamespace(model="A320", title="", object_id=7, callsign="EWG12", airline="Eurowings")
     s.atc._ahead_in_sequence = lambda state: [(14.0, ahead, "final")]  # 14 track miles to go
     assert downwind(s, eddm, 11.2, 100) == []  # 3 nm behind it: base at 14 nm, not 12
-    assert downwind(s, eddm, 13.2, 150)[0].startswith(f"{CS}, turn left heading ")
+    [cleared] = downwind(s, eddm, 13.2, 150)
+    assert ", turn left heading " in cleared and "cleared ILS approach runway" in cleared
 
 
 def test_far_off_the_transition_radar_vectors(eddh, eddm):
