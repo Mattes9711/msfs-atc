@@ -1,0 +1,705 @@
+{
+ "licence": "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Made from the VATGER datahub (https://github.com/VATGER-Nav/datahub, CC BY-SA 4.0: del.json, gnd.json, twr.json) by atc/airspace/vatsim.py: the role, the station's word and its part of the field. For the simulator only, not for real navigation.",
+ "airports": {
+  "EDAH": [
+   {
+    "khz": 132830,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDAH_TWR"
+   }
+  ],
+  "EDDB": [
+   {
+    "khz": 118805,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "S",
+    "logon": "EDDB_S_TWR"
+   },
+   {
+    "khz": 120030,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "N",
+    "logon": "EDDB_N_TWR"
+   },
+   {
+    "khz": 121605,
+    "role": "C",
+    "word": "Delivery",
+    "qualifier": "",
+    "logon": "EDDB_DEL"
+   },
+   {
+    "khz": 121705,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "S",
+    "logon": "EDDB_S_GND"
+   },
+   {
+    "khz": 121855,
+    "role": "APRON",
+    "word": "Apron",
+    "qualifier": "MAIN",
+    "logon": "EDDB_A_GND"
+   },
+   {
+    "khz": 129505,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "N",
+    "logon": "EDDB_N_GND"
+   },
+   {
+    "khz": 129605,
+    "role": "APRON",
+    "word": "Apron",
+    "qualifier": "N",
+    "logon": "EDDB_E_GND"
+   }
+  ],
+  "EDDC": [
+   {
+    "khz": 121980,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDDC_GND"
+   },
+   {
+    "khz": 122930,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDDC_TWR"
+   }
+  ],
+  "EDDE": [
+   {
+    "khz": 121155,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDDE_TWR"
+   },
+   {
+    "khz": 121755,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDDE_GND"
+   },
+   {
+    "khz": 121905,
+    "role": "APRON",
+    "word": "Apron",
+    "qualifier": "",
+    "logon": "EDDE_A_GND"
+   }
+  ],
+  "EDDF": [
+   {
+    "khz": 118780,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "C",
+    "logon": "EDDF_C_TWR"
+   },
+   {
+    "khz": 119905,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "S",
+    "logon": "EDDF_S_TWR"
+   },
+   {
+    "khz": 121655,
+    "role": "APRON",
+    "word": "Apron",
+    "qualifier": "S",
+    "logon": "EDDF_S_GND"
+   },
+   {
+    "khz": 121755,
+    "role": "APRON",
+    "word": "Apron",
+    "qualifier": "W",
+    "logon": "EDDF_W_GND"
+   },
+   {
+    "khz": 121805,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDDF_GND"
+   },
+   {
+    "khz": 121855,
+    "role": "APRON",
+    "word": "Apron",
+    "qualifier": "C",
+    "logon": "EDDF_C_GND"
+   },
+   {
+    "khz": 121955,
+    "role": "APRON",
+    "word": "Apron",
+    "qualifier": "E",
+    "logon": "EDDF_E_GND"
+   },
+   {
+    "khz": 122035,
+    "role": "C",
+    "word": "Delivery",
+    "qualifier": "",
+    "logon": "EDDF_DEL"
+   },
+   {
+    "khz": 124855,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "W",
+    "logon": "EDDF_W_TWR"
+   },
+   {
+    "khz": 136500,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "N",
+    "logon": "EDDF_N_TWR"
+   }
+  ],
+  "EDDG": [
+   {
+    "khz": 121880,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDDG_GND"
+   },
+   {
+    "khz": 129805,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDDG_TWR"
+   }
+  ],
+  "EDDH": [
+   {
+    "khz": 121280,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "VFR",
+    "logon": "EDDH_VFR_TWR"
+   },
+   {
+    "khz": 121705,
+    "role": "APRON",
+    "word": "Apron",
+    "qualifier": "E",
+    "logon": "EDDH_E_GND"
+   },
+   {
+    "khz": 121805,
+    "role": "C",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDDH_DEL"
+   },
+   {
+    "khz": 121980,
+    "role": "APRON",
+    "word": "Apron",
+    "qualifier": "W",
+    "logon": "EDDH_W_GND"
+   },
+   {
+    "khz": 126855,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDDH_TWR"
+   }
+  ],
+  "EDDK": [
+   {
+    "khz": 121730,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDDK_GND"
+   },
+   {
+    "khz": 121855,
+    "role": "C",
+    "word": "Delivery",
+    "qualifier": "",
+    "logon": "EDDK_DEL"
+   },
+   {
+    "khz": 121955,
+    "role": "APRON",
+    "word": "Apron",
+    "qualifier": "",
+    "logon": "EDDK_P_GND"
+   },
+   {
+    "khz": 124980,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDDK_TWR"
+   }
+  ],
+  "EDDL": [
+   {
+    "khz": 118305,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDDL_TWR"
+   },
+   {
+    "khz": 121605,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "E",
+    "logon": "EDDL_E_GND"
+   },
+   {
+    "khz": 121680,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "W",
+    "logon": "EDDL_W_GND"
+   },
+   {
+    "khz": 121780,
+    "role": "C",
+    "word": "Delivery",
+    "qualifier": "",
+    "logon": "EDDL_DEL"
+   }
+  ],
+  "EDDM": [
+   {
+    "khz": 118705,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "N",
+    "logon": "EDDM_N_TWR"
+   },
+   {
+    "khz": 120505,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "S",
+    "logon": "EDDM_S_TWR"
+   },
+   {
+    "khz": 121710,
+    "role": "APRON",
+    "word": "Apron",
+    "qualifier": "2",
+    "logon": "EDDM_2_GND"
+   },
+   {
+    "khz": 121730,
+    "role": "C",
+    "word": "Delivery",
+    "qualifier": "",
+    "logon": "EDDM_DEL"
+   },
+   {
+    "khz": 121780,
+    "role": "APRON",
+    "word": "Apron",
+    "qualifier": "1",
+    "logon": "EDDM_1_GND"
+   },
+   {
+    "khz": 121830,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "S",
+    "logon": "EDDM_S_GND"
+   },
+   {
+    "khz": 121930,
+    "role": "APRON",
+    "word": "Apron",
+    "qualifier": "3",
+    "logon": "EDDM_3_GND"
+   },
+   {
+    "khz": 121980,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "N",
+    "logon": "EDDM_N_GND"
+   }
+  ],
+  "EDDN": [
+   {
+    "khz": 118305,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDDN_TWR"
+   },
+   {
+    "khz": 121760,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDDN_GND"
+   }
+  ],
+  "EDDP": [
+   {
+    "khz": 121105,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "S",
+    "logon": "EDDP_S_TWR"
+   },
+   {
+    "khz": 121680,
+    "role": "C",
+    "word": "Delivery",
+    "qualifier": "",
+    "logon": "EDDP_DEL"
+   },
+   {
+    "khz": 121805,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDDP_GND"
+   },
+   {
+    "khz": 125955,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "N",
+    "logon": "EDDP_N_TWR"
+   }
+  ],
+  "EDDR": [
+   {
+    "khz": 118355,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDDR_TWR"
+   },
+   {
+    "khz": 118555,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDDR_GND"
+   }
+  ],
+  "EDDS": [
+   {
+    "khz": 118605,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDDS_GND"
+   },
+   {
+    "khz": 118805,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDDS_TWR"
+   },
+   {
+    "khz": 119055,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "VFR",
+    "logon": "EDDS_VFR_TWR"
+   },
+   {
+    "khz": 121915,
+    "role": "C",
+    "word": "Delivery",
+    "qualifier": "",
+    "logon": "EDDS_DEL"
+   }
+  ],
+  "EDDV": [
+   {
+    "khz": 120180,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDDV_TWR"
+   },
+   {
+    "khz": 120405,
+    "role": "C",
+    "word": "Delivery",
+    "qualifier": "",
+    "logon": "EDDV_DEL"
+   },
+   {
+    "khz": 121955,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDDV_GND"
+   }
+  ],
+  "EDDW": [
+   {
+    "khz": 120330,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDDW_TWR"
+   },
+   {
+    "khz": 121755,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDDW_GND"
+   }
+  ],
+  "EDFE": [
+   {
+    "khz": 121730,
+    "role": "APRON",
+    "word": "Apron",
+    "qualifier": "",
+    "logon": "EDFE_GND"
+   }
+  ],
+  "EDFH": [
+   {
+    "khz": 119655,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDFH_TWR"
+   },
+   {
+    "khz": 121980,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDFH_GND"
+   }
+  ],
+  "EDFM": [
+   {
+    "khz": 129780,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDFM_TWR"
+   }
+  ],
+  "EDHI": [
+   {
+    "khz": 123255,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDHI_TWR"
+   }
+  ],
+  "EDHL": [
+   {
+    "khz": 121780,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDHL_GND"
+   },
+   {
+    "khz": 128705,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDHL_TWR"
+   }
+  ],
+  "EDJA": [
+   {
+    "khz": 121680,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDJA_GND"
+   },
+   {
+    "khz": 126855,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDJA_TWR"
+   }
+  ],
+  "EDLN": [
+   {
+    "khz": 120455,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDLN_TWR"
+   },
+   {
+    "khz": 121930,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDLN_GND"
+   }
+  ],
+  "EDLP": [
+   {
+    "khz": 121930,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDLP_GND"
+   },
+   {
+    "khz": 133380,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDLP_TWR"
+   }
+  ],
+  "EDLV": [
+   {
+    "khz": 129405,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDLV_TWR"
+   }
+  ],
+  "EDLW": [
+   {
+    "khz": 121830,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDLW_GND"
+   },
+   {
+    "khz": 134180,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDLW_TWR"
+   }
+  ],
+  "EDMA": [
+   {
+    "khz": 124980,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDMA_TWR"
+   }
+  ],
+  "EDMO": [
+   {
+    "khz": 119555,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDMO_TWR"
+   }
+  ],
+  "EDNY": [
+   {
+    "khz": 120080,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDNY_TWR"
+   }
+  ],
+  "EDQM": [
+   {
+    "khz": 124355,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDQM_TWR"
+   }
+  ],
+  "EDSB": [
+   {
+    "khz": 121830,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDSB_GND"
+   },
+   {
+    "khz": 134105,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDSB_TWR"
+   }
+  ],
+  "EDTL": [
+   {
+    "khz": 125180,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDTL_TWR"
+   }
+  ],
+  "EDVE": [
+   {
+    "khz": 120055,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDVE_TWR"
+   }
+  ],
+  "EDVK": [
+   {
+    "khz": 118105,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDVK_TWR"
+   },
+   {
+    "khz": 121905,
+    "role": "G",
+    "word": "Ground",
+    "qualifier": "",
+    "logon": "EDVK_GND"
+   }
+  ],
+  "EDXW": [
+   {
+    "khz": 119750,
+    "role": "T",
+    "word": "Tower",
+    "qualifier": "",
+    "logon": "EDXW_TWR"
+   }
+  ]
+ }
+}

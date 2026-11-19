@@ -2,7 +2,7 @@
 import json
 
 from atc.airspace.centers import CenterSector, CenterSectors, load_centers
-from atc.airspace.vatsim import LICENCE, build, vatspy_firs
+from atc.airspace.vatsim import LICENCE, STATIONS_LICENCE, build, stations, vatspy_firs
 from atc.config import ROOT, Config
 from atc.session import VATSIM_SOURCE, center_sectors, describe_centers
 
@@ -91,3 +91,39 @@ def test_no_placeholder_is_ever_shown():
     placeholder = CenterSector("Nobody Radar", "TST", None, 0, 66000, ((0, 0), (0, 1), (1, 1)))
     assert "PLACEHOLDER" not in describe_centers(CenterSectors([placeholder]))
     assert describe_centers(CenterSectors()) == "Center sectors: none, so Departure keeps you until Approach"
+
+
+# --- the stations of the German airports (data/stations_vatsim.json) -------------------------------------------
+
+STATION_POSITIONS = {
+    "del": [{"logon": "EDDH_DEL", "frequency": "121.805", "description": "Hamburg Ground"}],
+    "gnd": [{"logon": "EDDH_E_GND", "frequency": "121.705", "description": "Hamburg Apron (East)"},
+            {"logon": "EDDM_1_GND", "frequency": "121.780", "description": "München Apron (Apron 1)"},
+            {"logon": "EDDM_N_GND", "frequency": "121.980", "description": "München Ground (North)"},
+            {"logon": "EDDM_I_GND", "frequency": "121.990", "description": "München DeIcing Coordinator"},
+            {"logon": "EDDB_ICE_GND", "frequency": "121.665", "description": "Berlin De-Icing"},
+            {"logon": "EDDC_A_GND", "frequency": "121.755", "description": ""}],
+    "twr": [{"logon": "EDDH_TWR", "frequency": "126.855", "description": "Hamburg Tower"},
+            {"logon": "EDDH_VFR_TWR", "frequency": "121.280", "description": "Hamburg VFR Tower"},
+            {"logon": "EDDS_VFR_TWR", "frequency": "119.055", "description": "Stuttgart Tower (VFR)"}],
+}
+
+
+def test_each_position_gets_its_role_word_and_part_of_the_field():
+    found = {ident: [(e["khz"], e["role"], e["word"], e["qualifier"]) for e in entries]
+             for ident, entries in stations(STATION_POSITIONS).items()}
+    assert found == {  # by frequency; de-icing and the one without a description are left out
+        "EDDH": [(121280, "T", "Tower", "VFR"), (121705, "APRON", "Apron", "E"),
+                 (121805, "C", "Ground", ""),  # Delivery, though it is called "Hamburg Ground"
+                 (126855, "T", "Tower", "")],
+        "EDDM": [(121780, "APRON", "Apron", "1"), (121980, "G", "Ground", "N")],
+        "EDDS": [(119055, "T", "Tower", "VFR")],
+    }
+
+
+def test_the_shipped_stations_file_has_its_licence_and_hamburg():
+    data = json.loads((ROOT / "data" / "stations_vatsim.json").read_text(encoding="utf-8"))
+    assert data["licence"] == STATIONS_LICENCE and "CC BY-SA 4.0" in data["licence"]
+    hamburg = {e["khz"]: e["role"] for e in data["airports"]["EDDH"]}
+    assert hamburg[121805] == "C" and hamburg[121705] == hamburg[121980] == "APRON" and hamburg[126855] == "T"
+    assert Config().vatsim_stations_file == ROOT / "data" / "stations_vatsim.json"

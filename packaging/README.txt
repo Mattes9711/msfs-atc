@@ -50,6 +50,7 @@ Speech recognition: Whisper by OpenAI, faster-whisper by SYSTRAN (MIT).
 Fonts: B612 and B612 Mono by Airbus and Intactile (SIL Open Font License 1.1).
 Center sectors without Little Navmap (Germany only, data/centers_vatsim.json, CC BY-SA 4.0): made from the VATSpy
 Data Project (github.com/vatsimnetwork/vatspy-data-project) and the VATGER datahub (github.com/VATGER-Nav/datahub),
-both CC BY-SA 4.0. For the simulator only.
+both CC BY-SA 4.0. The roles of German airport frequencies (data/stations_vatsim.json, CC BY-SA 4.0: Delivery,
+Apron, VFR Tower) come from the VATGER datahub too. For the simulator only.
 Design values after unslop by Damir Sokolovsky (CC BY 4.0).
 MSFS ATC is not made by or connected with Microsoft, Asobo, FSDreamTeam (GSX) or LiveTraffic.

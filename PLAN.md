@@ -1518,6 +1518,15 @@ O4. ✅ **The map as a chart, with a free camera** (`controller/mapdata.py`, `ap
 31. **LLM fallback** (parked in step 24): revisit if a small model fits next to MSFS, or with a cloud API. Reuse the spike's checks.
 32. **`.PLN` import.**
 33. **GitHub Actions CI.**
+34. ✅ **Real frequency roles at German airports** (2026-11-19, user request "Frequenzrollen VATGER"). The sim types
+    most German airport frequencies just Ground or Tower: EDDH has three Grounds and two Towers. The VATGER datahub's
+    del/gnd/twr positions (CC BY-SA 4.0) are joined by airport and frequency into the shipped
+    `data/stations_vatsim.json` (`python -m atc.airspace.vatsim --only stations`; 90 stations at 35 airports, de-icing
+    left out) and given to the sim's frequencies by `atc/airport/vatsim_stations.py`; a frequency is never added.
+    EDDH now: Delivery 121.805 ("Hamburg Ground", as on the real field), Apron East 121.705 and West 121.980, the
+    IFR Tower 126.855 and the VFR Tower 121.280 (a station of its own, for VFR flights). Without a Ground the Apron
+    taxis and hands over straight to the Tower. Labels in the panel and on the map: DEL, APRON E, APRON W, TWR VFR,
+    TWR. Outside Germany nothing changes. **Later (optional):** pick Apron East or West by the stand.
 
 ## Milestone 0 findings (2026-11-14)
 

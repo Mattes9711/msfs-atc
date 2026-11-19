@@ -1,5 +1,6 @@
 """What the flight screen shows besides the radio log (Milestone 5, R1): the airport with its frequencies, the
 station to call next, the flight in one line. Only reads the controller, like suggest.py and mapdata.py."""
+from atc.controller.common import best_frequency, labelled
 from atc.flightplan.route import SID
 
 # How the frequency list names each job, in the order a flight uses them
@@ -17,12 +18,11 @@ def airport_panel(atc) -> dict:
     metar = atc.destination_metar if airport is atc.destination else atc.metar
     frequencies, seen = [], set()
     for role in SHORT:
-        found = sorted((f for f in airport.frequencies if f.role == role or (role == "ATIS" and f.type == "ATIS")),
-                       key=lambda f: f.khz)
+        found = [f for f in airport.frequencies if f.role == role or (role == "ATIS" and f.type == "ATIS")]
         if found and role not in seen:
             seen.add(role)
-            frequencies.append({"label": SHORT[role], "khz": found[0].khz,
-                                "station": found[0].station or "ATIS"})
+            f = best_frequency(found, atc.vfr)  # the one ATC uses: the VFR Tower only for VFR flights
+            frequencies.append({"label": labelled(SHORT[role], f), "khz": f.khz, "station": f.station or "ATIS"})
     wind = None
     if metar is not None and metar.wind_kt is not None:
         wind = "calm" if metar.wind_kt == 0 else \

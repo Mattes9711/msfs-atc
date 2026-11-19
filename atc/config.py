@@ -77,6 +77,8 @@ class Config:
     # Shipped: German Center sectors from VATSIM data (CC BY-SA 4.0, atc/airspace/vatsim.py), used without Little
     # Navmap's
     vatsim_centers_file: Path = ROOT / "data" / "centers_vatsim.json"
+    # Shipped too: which German airport frequency is Delivery, Apron or Tower (VATGER datahub, CC BY-SA 4.0)
+    vatsim_stations_file: Path = ROOT / "data" / "stations_vatsim.json"
     # LICENCE: the user's own Little Navmap database, built from the scenery they installed (payware add-ons
     # included). It is only read on the user's machine; never ship it or data exported from it.
     # Empty = found by itself: the database of the MSFS that runs, 2020 or 2024 (atc/airport/lnm_files.py)

@@ -36,7 +36,7 @@ from atc.weather.runway_choice import choose_runway
 from atc.controller.common import (AIR_PHASES, AIRBORNE_AGL_FT, APPROACH_HANDOFF_NM, CALL_KINDS, NEAR_HOLDING_POINT_M, PHASES,
                                    PHASE_ROLE, READBACK_REMINDER_S, RESERVED_SQUAWKS, ROLES, SECTOR_NEAR_DEG,
                                    CIRCUIT_NM, INFO_CALL_NM, TOWER_HANDOFF_NM, VFR_SQUAWK,
-                                   VACATE_SPEED_KT, Response, Station, _wind, center_station, describe_intent,
+                                   VACATE_SPEED_KT, Response, Station, _wind, best_frequency, center_station, describe_intent,
                                    frequency_list, wrong_frequency_hint)  # frequency_list: for atc.session
 from atc.controller.ground import GroundMixin, stand_words
 from atc.controller.tower import TowerMixin
@@ -255,7 +255,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
         for t in types:
             candidates = [f for f in airport.frequencies if f.role == t]
             if candidates:
-                return Station(airport.ident, min(candidates, key=lambda f: f.khz))
+                return Station(airport.ident, best_frequency(candidates, self.vfr))
         return None
 
     def status(self) -> dict:

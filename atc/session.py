@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from atc.airport.json_data import JsonAirportData
-from atc.airport import lnm_files
+from atc.airport import lnm_files, vatsim_stations
 from atc.airport.littlenavmap import LittleNavmapAirportData
 from atc.airport.model import Airport, AirportData, RunwayEnd
 from atc.airspace.centers import CenterSectors, CentersError, load_centers, with_imported
@@ -277,13 +277,16 @@ def borrows(metar: Metar | None) -> bool:
 
 
 def airport_sources(config: Config) -> list[AirportData]:
-    """Little Navmap first (matches the installed scenery), JSON as the offline/portable fallback."""
+    """Little Navmap first (matches the installed scenery), JSON as the offline/portable fallback. At German airports
+    the frequencies get their real roles from the VATGER datahub (Delivery, Apron, VFR Tower)."""
     sources: list[AirportData] = []
     if (db := lnm_files.find(config.littlenavmap_db)) is not None:
         source = LittleNavmapAirportData(db)
         source.name = lnm_files.describe(db)  # which scenery: "Little Navmap (MSFS 2024)"
         sources.append(source)
     sources.append(JsonAirportData(config.airports_dir))
+    if stations := vatsim_stations.load(config.vatsim_stations_file):
+        sources = [vatsim_stations.WithStations(s, stations) for s in sources]
     return sources
 
 

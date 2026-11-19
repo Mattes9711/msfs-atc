@@ -34,7 +34,7 @@ from atc.airport.geo import bearing_deg, distance_nm, point_in_polygon, segment_
 from atc.airport.model import Airport, VfrPoint
 from atc.controller import readback as rb
 from atc.controller.circuit import circuit_leg, circuit_side, leg_words
-from atc.controller.common import AIRBORNE_AGL_FT, INFO_CALL_NM, Response, Station
+from atc.controller.common import AIRBORNE_AGL_FT, INFO_CALL_NM, Response, Station, best_frequency
 from atc.phraseology import spoken
 from atc.sim.base import AircraftState
 
@@ -320,7 +320,7 @@ class VfrMixin:
 
     def _zone_tower(self, airport: Airport) -> Station | None:
         towers = [f for f in airport.frequencies if f.type == "T"]
-        return Station(airport.ident, min(towers, key=lambda f: f.khz)) if towers else None
+        return Station(airport.ident, best_frequency(towers, vfr=True)) if towers else None
 
     def crossing_ahead(self) -> Airport | None:
         """The field whose zone to call now: the one being crossed, else the nearest one on the way within

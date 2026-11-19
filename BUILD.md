@@ -34,7 +34,7 @@ downloaded on the first start with progress and loads; push-to-talk gets ready; 
 - **Read-only files** are found through `atc/paths.py` → `resources()`. That is the project folder while
   developing, and `sys._MEIPASS` (the `_internal` folder next to the .exe) in a build. They are:
   - the page, `atc/app/static/` (index.html, app.css, app.js, icon.svg, `fonts/` with B612);
-  - `data/centers.json` and `data/centers_vatsim.json`.
+  - `data/centers.json`, `data/centers_vatsim.json` and `data/stations_vatsim.json`.
 - **Everything the app writes** goes to the user's folders, never next to the .exe (an install under
   `C:\Program Files` may not write there):
   - `%APPDATA%\MSFS ATC\settings.toml`: user settings (airport defaults, push-to-talk key, SimBrief username,
@@ -55,7 +55,7 @@ downloaded on the first start with progress and loads; push-to-talk gets ready; 
 3. **Icon:** convert `atc/app/static/icon.svg` to `packaging/icon.ico` (16, 32, 48, 256 px).
 4. **Build with a `.spec` file** (better than a long command line, and it can be kept in git):
    - `--windowed` (no console) and `--name "MSFS ATC"`, `--icon packaging/icon.ico`;
-   - data: `atc/app/static` → `atc/app/static`, `data/centers.json` and `data/centers_vatsim.json` → `data`.
+   - data: `atc/app/static` → `atc/app/static`, `data/centers.json`, `data/centers_vatsim.json` and `data/stations_vatsim.json` → `data`.
      **Not** `data/airports` (see licences);
    - `--collect-data faster_whisper` (the voice-activity model `assets/silero_vad_v6.onnx`; without it every
      transcription fails);
@@ -81,7 +81,7 @@ downloaded on the first start with progress and loads; push-to-talk gets ready; 
 | **WebView2 runtime** | Windows 11 has it, older Windows 10 may not. Without it the window can't open (the app then falls back to the browser). | The installer checks the registry key `HKLM\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}` (value `pv`) and, if it is missing, runs Microsoft's *Evergreen Bootstrapper* (`MicrosoftEdgeWebview2Setup.exe /silent /install`), which Microsoft allows to be redistributed. |
 | **SimConnect.dll** | Missing: "SimConnect.dll was not found" with what to do. Wrong bitness: MSFS is 64-bit, so the build must be 64-bit Python. | Copy it from the MSFS SDK next to the .exe, and test on a machine with MSFS. Licence: see below. |
 | **comtypes (ATC voice)** | comtypes normally writes generated code to `comtypes\gen`, which is read-only inside a build. | `atc/audio/tts.py` uses SAPI with `dynamic=True` (IDispatch), so no code is generated. Still test the voice in the build. |
-| **Bundled static files** | Missing `atc/app/static`: a blank window or 404s. Missing `data/centers_vatsim.json`: no Center sectors without Little Navmap. | The data entries above; `tests/test_paths.py` checks the files exist next to the code. |
+| **Bundled static files** | Missing `atc/app/static`: a blank window or 404s. Missing `data/centers_vatsim.json`: no Center sectors without Little Navmap. Missing `data/stations_vatsim.json`: German airports with the sim's roles only (no Delivery at EDDH). | The data entries above; `tests/test_paths.py` checks the files exist next to the code. |
 | **Whisper model download** | No internet on the first start: no voice. Firewalls block huggingface.co. | Typing still works and the message says so. Optional for the installer: let the user pick a model folder or download it during setup. |
 | **First-start time** | ~0.5 GB download plus ~3 s model load. | Already shown as progress in the radio log. |
 | **Antivirus** | PyInstaller builds are often flagged as false positives. | Sign the .exe and the installer with a code-signing certificate; submit false positives to the vendors. |
@@ -113,6 +113,7 @@ downloaded on the first start with progress and loads; push-to-talk gets ready; 
 |---|---|
 | `data/centers.json` | Our own file, empty: users can add corrections with real frequencies; those win over the other sectors. |
 | `data/centers_vatsim.json` | German Center sectors (Bremen, Langen, Munich Radar), used without a Little Navmap database. Built by `python -m atc.airspace.vatsim` from the [VATSpy Data Project](https://github.com/vatsimnetwork/vatspy-data-project) (outlines) and the [VATGER datahub](https://github.com/VATGER-Nav/datahub) (frequencies), both **CC BY-SA 4.0**: one-way compatible with the GPL-3.0, needs attribution (README, README.txt, the file's `licence`) and the file stays CC BY-SA 4.0. **Not** vatglasses-data or vacs-data: CC BY-NC-SA (non-commercial), not compatible. |
+| `data/stations_vatsim.json` | The roles of German airport frequencies: which one is Delivery, Apron (and which part of the field) or the VFR Tower, where the sim's data types them all Ground or Tower. Built by `python -m atc.airspace.vatsim --only stations` from the [VATGER datahub](https://github.com/VATGER-Nav/datahub) (`del.json`, `gnd.json`, `twr.json`), **CC BY-SA 4.0** like the Center file: attribution in README, README.txt and the file's `licence`. |
 | METAR from aviationweather.gov | US government (NWS), public data, no key (`atc/weather/source.py`). |
 | SimBrief | The user's own plan via their username (`atc/flightplan/simbrief.py`). Check SimBrief's API terms for a public app. |
 | Whisper model | Downloaded at runtime from huggingface.co (Systran's CTranslate2 conversion of OpenAI whisper, MIT). Not bundled. |

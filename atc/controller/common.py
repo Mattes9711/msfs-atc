@@ -2,7 +2,7 @@
 helpers."""
 from dataclasses import dataclass
 
-from atc.airport.model import STATION_SUFFIX, Airport, Frequency
+from atc.airport.model import Airport, Frequency
 from atc.airspace.centers import CenterSector
 from atc.intent.schema import Intent
 from atc.phraseology import spoken
@@ -70,13 +70,14 @@ OCCUPIED_GO_AROUND_NM = 1  # cleared to land, but the runway is still occupied t
 # role -> (which airport, frequency types that can do the job, best first). Missing stations fold up.
 ROLES = {
     "clearance": ("origin", ("C", "G", "T")),
-    "ground": ("origin", ("G", "T")),
+    # No Ground, but an Apron (EDDH with the VATGER roles): Apron taxis the aircraft all the way
+    "ground": ("origin", ("G", "APRON", "T")),
     "tower": ("origin", ("T",)),
     "departure": ("origin", ("D", "A")),  # without Center sectors, departure keeps the aircraft until arrival
     # "center" is not here: it depends on where the aircraft is (centers.json), see _center_progress
     "approach": ("destination", ("A", "T")),
     "arrival_tower": ("destination", ("T",)),
-    "arrival_ground": ("destination", ("G", "T")),
+    "arrival_ground": ("destination", ("G", "APRON", "T")),
     "apron": ("origin", ("APRON",)),  # only where the data has one (EDDM: yes, EDDH: no)
     "arrival_apron": ("destination", ("APRON",)),
     # A small field's Info station (Milestone 9 B): only used where the airport has no controller
@@ -126,8 +127,19 @@ class Station:
     @property
     def key(self) -> tuple[str, str]:
         """Same key = same controller, even on another of its frequencies. Apron and Ground are both typed Ground
-        in the data, so the key uses the role."""
-        return self.ident, self.freq.role
+        in the data, so the key uses the role. A VFR Tower (EDDH 121.280) is a controller of its own."""
+        return self.ident, self.freq.role + ("/VFR" if self.freq.qualifier == "VFR" else "")
+
+
+def best_frequency(frequencies, vfr: bool) -> Frequency:
+    """The one to call of a controller's frequencies: the lowest, but a VFR Tower only for VFR flights (and first
+    for them)."""
+    return min(frequencies, key=lambda f: ((f.qualifier == "VFR") != vfr, f.khz))
+
+
+def labelled(label: str, f: Frequency) -> str:
+    """A frequency list's short label with the part of the field: "APRON E", "TWR VFR" (VATGER roles)."""
+    return f"{label} {f.qualifier}" if f.qualifier else label
 
 
 def center_station(sector: CenterSector) -> Station:
@@ -164,9 +176,10 @@ def wrong_frequency_hint(airport: Airport, com1_khz: int, center: Station | None
 
 
 def frequency_list(airport: Airport) -> str:
-    order = list(STATION_SUFFIX) + ["ATIS"]
+    order = ["C", "G", "APRON", "T", "A", "D", "FSS", "ATIS"]
     groups: dict[str, list[str]] = {}
-    for f in sorted(airport.frequencies, key=lambda f: (order.index(f.type) if f.type in order else 99, f.khz)):
+    for f in sorted(airport.frequencies, key=lambda f: (order.index(f.role) if f.role in order else 99, f.khz)):
         if f.station or f.type == "ATIS":
-            groups.setdefault(f.station or "ATIS", []).append(format_khz(f.khz))
+            name = f"{f.station} (VFR)" if f.station and f.qualifier == "VFR" else f.station
+            groups.setdefault(name or "ATIS", []).append(format_khz(f.khz))
     return " | ".join(f"{name} {', '.join(khz)}" for name, khz in groups.items())

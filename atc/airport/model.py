@@ -15,15 +15,26 @@ class Frequency:
     type: str
     name: str
     khz: int
+    # From the VATGER datahub (German airports, atc/airport/vatsim_stations.py); None/"" = what the sim's data says.
+    # real_role: "C", "G", "APRON" or "T"; word: how the station is called ("Apron"); qualifier: its part of the
+    # field ("E", "W", "1") or "VFR", for the labels only
+    real_role: str | None = None
+    word: str | None = None
+    qualifier: str = ""
 
     @property
     def role(self) -> str:
         """The controller's job: the type, except "APRON" for an apron frequency typed Ground."""
+        if self.real_role:
+            return self.real_role
         return "APRON" if self.type == "G" and APRON.search(self.name) else self.type
 
     @property
     def station(self) -> str | None:
         """As spoken: "Hamburg Ground"; "Munichapron1" → "Munich Apron"."""
+        if self.word:
+            place = APRON.sub(" ", self.name).strip()
+            return f"{(place.title() if place != self.name.strip() else place) or self.name} {self.word}"
         if self.role == "APRON":
             return f"{APRON.sub(' ', self.name).strip().title() or self.name} Apron"
         suffix = STATION_SUFFIX.get(self.type)

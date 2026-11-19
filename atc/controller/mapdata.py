@@ -11,6 +11,7 @@ import math
 from atc.airport.model import Airport, AirportData, Frequency
 from atc.airport.taxi import TaxiGraph
 from atc.airspace.centers import CenterSectors
+from atc.controller.common import labelled
 
 SECTOR_MARGIN_DEG = 2  # sectors whose box comes this close to the route's box are drawn
 AREA_AIRPORTS = 250  # airports in one map view at most: the controlled ones and the long runways first
@@ -31,7 +32,8 @@ def band(frequencies: tuple[Frequency, ...]) -> list[dict]:
         if f.khz in seen:
             continue
         seen.add(f.khz)
-        out.append({"label": BAND_LABEL.get(f.role, f.type), "station": f.station or f.name, "khz": f.khz})
+        out.append({"label": labelled(BAND_LABEL.get(f.role, f.type), f), "station": f.station or f.name,
+                    "khz": f.khz})
     return out
 
 

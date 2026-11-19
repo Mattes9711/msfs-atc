@@ -24,6 +24,7 @@ def test_resources_next_to_the_code_or_in_the_build(monkeypatch, tmp_path):
     assert (paths.resources() / "atc" / "app" / "static" / "index.html").is_file()
     assert (paths.resources() / "data" / "centers.json").is_file()
     assert (paths.resources() / "data" / "centers_vatsim.json").is_file()
+    assert (paths.resources() / "data" / "stations_vatsim.json").is_file()
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path / "build"), raising=False)
     assert paths.resources() == tmp_path / "build"
