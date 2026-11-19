@@ -116,6 +116,9 @@ class Taxi:
         if here is not None and self.points:  # joins the route where it is nearest, up to the first hold
             first_hold = min(self.holds, default=len(self.points) - 1)
             self.at = min(range(first_hold + 1), key=lambda i: distance_nm(*here, *self.points[i]))
+        # Rolls to that point first, also when it is a hold: stopping where it joined left the aircraft 40 m short
+        # of the hold short, too far to report holding short, and nothing happened (EDDF 07C, 2026-11-19)
+        self.joining = self.points[self.at] if here is not None and self.points else None
 
     def done(self) -> bool:
         return self.at >= len(self.points) - 1
@@ -124,18 +127,21 @@ class Taxi:
         """(lat, lon, true heading, speed) after `seconds`; speed 0 when holding or at the end."""
         left_m = kt * 1852 / 3600 * seconds
         heading = None
-        while left_m > 0 and not self.done():
+        while left_m > 0 and (self.joining or not self.done()):
             hold = self.holds.get(self.at)
-            if hold is not None and hold not in cleared:
+            if hold is not None and hold not in cleared and not self.joining:
                 break
-            target = self.points[self.at + 1]
+            target = self.joining or self.points[self.at + 1]
             d = distance_nm(lat, lon, *target) * 1852
             if d > 0.1:
                 heading = bearing_deg(lat, lon, *target)
             if d <= left_m:
                 lat, lon = target
                 left_m -= d
-                self.at += 1
+                if self.joining:
+                    self.joining = None
+                else:
+                    self.at += 1
             else:
                 lat, lon = destination_point(lat, lon, heading, left_m / 1852)
                 left_m = 0

@@ -5,10 +5,12 @@ on the runway (the route started on it: back onto the runway), no "holding short
 runway (stuck at EDDH), and the readback "via T, B12W, S7, W2" was refused (taxiway B12W heard as B12, W).
 """
 from atc.controller.readback import same
-from atc.emulator import Emulator
+from atc.airport.geo import bearing_deg, destination_point, distance_nm
+from atc.emulator import Emulator, Taxi
 from atc.intent.parser import parse
 from tests.test_centers import SECTORS
 from tests.test_ground_flow import Session
+from tests.test_safety import at_the_crossing
 
 
 def fly(departure, destination):
@@ -37,3 +39,17 @@ def test_a_taxiway_with_a_letter_after_the_number_reads_back_as_one():
 def test_a_written_taxiway_with_a_letter_after_the_number_is_one_taxiway():
     intent = parse("taxi to stand G201 via T, B12W, S7, W2, Lufthansa 4AB")
     assert intent.items["taxiways"] == ["T", "B12W", "S7", "W2"]
+
+
+def test_joining_the_taxi_route_short_of_a_hold_rolls_up_to_it():
+    # EDDF 07C: joined 40 m before the hold short, the emulator stopped where it was, too far to report holding short
+    s = at_the_crossing()
+    graph, route = s.atc.taxi, s.atc.route_out
+    [(_, hold)] = s.atc.crossing_points(route)
+    before = next(e.a for e in route.edges if e.b == hold)
+    lat, lon = destination_point(*graph.latlon[hold], bearing_deg(*graph.latlon[hold], *graph.latlon[before]),
+                                 40 / 1852)
+    taxi = Taxi(route, graph, s.atc.airport.ident, here=(lat, lon))
+    for _ in range(10):
+        lat, lon, _, _ = taxi.move(lat, lon, 1, 15, set())
+    assert distance_nm(lat, lon, *graph.latlon[hold]) * 1852 < 1
