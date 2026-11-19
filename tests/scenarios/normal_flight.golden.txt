@@ -95,4 +95,3 @@ PILOT> taxi to stand Golf 201 via Bravo 6, Sierra, Sierra 7, Whiskey 2, Lufthans
        (understood: readback, callsign DLH4AB (yours), taxiways=['B6', 'S', 'S7', 'W2'])
        (readback correct)
 ATC:   Lufthansa four Alfa Bravo, readback correct
-       (flight complete)

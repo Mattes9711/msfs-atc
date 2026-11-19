@@ -206,6 +206,6 @@ def test_parked_at_the_stand_apron_says_goodbye(eddh, eddm):
     s.say(APRON, "Munich Apron, Lufthansa 4AB, with you")
     assert s.tick() == []  # still rolling onto the stand
     s.sim.update(ground_speed_kt=0)
-    assert s.tick() == [f"{CS}, {farewell('EDDM', 'Munich Apron')}"]
+    assert s.tick() == [f"{CS}, {farewell('EDDM', 'Munich Apron')}", "(flight complete)"]  # only now, at the stand
     assert s.tick() == []  # once
 

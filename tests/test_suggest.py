@@ -76,7 +76,7 @@ def test_a_whole_flight_with_only_the_suggestions(eddh, eddm):
     assert confirmed(say_suggestion(s, "Read back")[1])
     sug, out = say_suggestion(s, "Request taxi")
     assert out[0].startswith("Lufthansa four Alfa Bravo, taxi to stand")
-    assert say_suggestion(s, "Read back")[1] == ["(readback correct)", "Lufthansa four Alfa Bravo, readback correct", "(flight complete)"]
+    assert say_suggestion(s, "Read back")[1] == ["(readback correct)", "Lufthansa four Alfa Bravo, readback correct"]
     assert suggestion(s.atc) is None
 
 

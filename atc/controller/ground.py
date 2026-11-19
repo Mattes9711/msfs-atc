@@ -274,7 +274,7 @@ class GroundMixin:
             items = rb.taxi_to_stand(route_names(self.route_in), route_hold_short(self.route_in))
             text = f"taxi to {stand_words(stand)}" + (
                 ", " + rb.instruction_text(items) if items else "")
-            after = self._after_taxi_in
+            after = None
         self._set_pending(items, station.key, after)
         return self._transmit(station, f"{self.cs}, {where}, new route, {text}", state)
 
@@ -412,11 +412,8 @@ class GroundMixin:
         items = rb.taxi_to_stand(route_names(route), route_hold_short(route))
         where = stand_words(stand)
         text = f"{self.cs}, taxi to {where}" + (", " + rb.instruction_text(items) if items else "")
-        self._set_pending(items, station.key, self._after_taxi_in)
+        self._set_pending(items, station.key)
         return [self._say(station, text)]
-
-    def _after_taxi_in(self, station: Station, state: AircraftState) -> list[Response]:
-        return [Response("flight complete", spoken=False)]
 
     def _stand(self) -> Parking | None:
         """A gate of our airline if the scenery assigns one, else any gate, else any parking spot. A VFR flight gets
@@ -450,11 +447,14 @@ class GroundMixin:
         if (self.said_goodbye or self.call_next is not None
                 or state.ground_speed_kt > STOPPED_KT or not self._at_stand(self.destination, state)):
             return []
+        # "flight complete" only here, at the stand: after the taxi-in readback it came minutes early (the
+        # emulator, 2026-11-19), with a runway still to cross
+        self.said_goodbye = True
+        done = Response("flight complete", spoken=False)
         station = self.station(self._ground_role())
         if station is None:
-            return []
-        self.said_goodbye = True
-        return self._transmit(station, f"{self.cs}, {farewell(station.ident, station.name)}", state)
+            return [done]
+        return self._transmit(station, f"{self.cs}, {farewell(station.ident, station.name)}", state) + [done]
 
     def _runway_incursion(self, state: AircraftState) -> list[Response]:
         """On the ground past a holding position without a clearance for that runway: stop."""
