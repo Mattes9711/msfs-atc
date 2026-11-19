@@ -39,6 +39,8 @@ PHASE_LIMIT_S = {"clearance": 300, "cleared": 600, "pushback": 600, "takeoff": 3
                  "approach": 2700, "final": 900, "landing": 900, "vacating": 600}
 # (distance from the threshold, allowed above the 3 degree path, allowed below it)
 GLIDE_CHECKS = ((10, 500, 300), (5, 250, 200))
+VACATE_BEYOND_M = 40  # off the runway the pilot stops this far past the hold line, not at the next node (EDDB:
+# 116 m on along M5, away from the route Ground had just given, and Ground called "you appear to be on Mike fife")
 MIN_ESTABLISHED_NM = 6  # intercepting the localizer closer in than this is too tight
 COMPLAINTS = ("say again", "negative", "stop immediately", "go around", "confirm descending", "unable")
 
@@ -461,9 +463,30 @@ class Pilot:
         if not found:  # none ahead: the nearest one at all
             found = [(distance_nm(s.lat, s.lon, *graph.latlon[n]), n, *vectors.frame(end, *graph.latlon[n]))
                      for n in graph.hold_short]
-        _, node, along, across = min(found)
-        beyond = [e.b for e in graph.adjacent.get(node, []) if abs(vectors.frame(end, *graph.latlon[e.b])[1]) > abs(across)]
-        points = [vectors.point(end, along, 0.0), graph.latlon[node]] + ([graph.latlon[beyond[0]]] if beyond else [])
+        # The way off must touch no other runway and end off every runway: where two runways cross (EDDW 23 and
+        # 26) the other one's hold short lies near the centreline too, and leaving by it rolled onto it (2026-11-19)
+        _, zones = atc._ground_zones()
+
+        def other_runway(lat, lon):
+            rwy = zones.runway_at(lat, lon)
+            return rwy is not None and atc.arrival_runway not in (rwy.ends[0].name, rwy.ends[1].name)
+
+        def way_off(node, along, across):
+            after = [e.b for e in graph.adjacent.get(node, [])
+                     if abs(vectors.frame(end, *graph.latlon[e.b])[1]) > abs(across)
+                     and zones.runway_at(*graph.latlon[e.b]) is None]
+            beyond = []
+            if after:
+                d = distance_nm(*graph.latlon[node], *graph.latlon[after[0]]) * 1852
+                beyond = [destination_point(*graph.latlon[node], bearing_deg(*graph.latlon[node], *graph.latlon[after[0]]),
+                                            min(d, VACATE_BEYOND_M) / 1852)]
+            points = [vectors.point(end, along, 0.0), graph.latlon[node]] + beyond
+            clean = not any(other_runway(a[0] + (b[0] - a[0]) * k / 10, a[1] + (b[1] - a[1]) * k / 10)
+                            for a, b in zip(points, points[1:]) for k in range(11))
+            return points, bool(after) and clean
+        found.sort()
+        ways = [way_off(n, along, across) for _, n, along, across in found]
+        points = next((points for points, ok in ways if ok), ways[0][0])
         self.exit_points, self.exit_total = points, len(points)
         self.stage = "vacating"
 
@@ -630,7 +653,9 @@ class Emulator:
                                           f"(3 degrees: {path:.0f}), {on}, phase {atc.phase}")
                 if above > path + high:
                     self.find(f"{above - path:.0f} ft above the glide path {nm} nm out ({above:.0f} ft)")
-                elif above < path - low:
+                elif above < min(path, atc._approach_altitude() - atc.destination.elevation_ft) - low:
+                    # level at the approach altitude below the glide path is the intercept from below (EDDB 24L:
+                    # 3000 ft, the glide path at 10 nm is 3340), only lower than that is too low
                     self.find(f"{path - above:.0f} ft below the glide path {nm} nm out ({above:.0f} ft)")
                 if not self.pilot.loc and nm <= MIN_ESTABLISHED_NM:
                     self.find(f"not on the localizer {nm} nm out (phase {atc.phase})")
@@ -646,6 +671,17 @@ class NoWeather:
         return []
 
 
+class FixedWind(NoWeather):
+    """The same made-up METAR everywhere, to fly other runway directions than today's: --wind 230/15."""
+
+    def __init__(self, wind: str):
+        direction, _, speed = wind.partition("/")
+        self.group = f"{int(direction):03d}{int(speed or 10):02d}KT"
+
+    def metar(self, icao):
+        return f"{icao} {time.strftime('%d%H%MZ', time.gmtime())} {self.group} 9999 FEW030 12/06 Q1013"
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python -m atc.emulator",
                                 description="Fly whole flights with a simulated aircraft and the co-pilot on the "
@@ -656,6 +692,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--cruise", default=None, help="e.g. FL340 (default FL340 without SimBrief)")
     p.add_argument("--weather", choices=("live", "none"), default="live",
                    help="live: the real METAR (runway in use); none: no weather")
+    p.add_argument("--wind", default=None, metavar="DDD/SS",
+                   help="the same wind at every airport instead (e.g. 230/15): other runways in use")
     p.add_argument("--config", default=None, help="settings file")
     p.add_argument("--log", action="store_true", help="print the whole radio log, not only the report")
     return p
@@ -673,7 +711,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.flights and args.simbrief is None:
         build_parser().error("give FROM-TO pairs (EDDM-EDDH) or --simbrief")
     config = load_config(Path(args.config) if args.config else None)
-    weather = NoWeather() if args.weather == "none" else None
+    weather = FixedWind(args.wind) if args.wind else NoWeather() if args.weather == "none" else None
     requests = []
     if args.simbrief is not None:
         requests.append(PlanRequest(simbrief=args.simbrief, callsign=args.callsign,
