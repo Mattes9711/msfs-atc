@@ -69,6 +69,12 @@ def test_k5_the_next_call_to_another_station():
                     "  0:52:10  copilot  Bremen Radar, Lufthansa 4AB, 5000 feet")) == ["K5"]
 
 
+def test_k6_a_second_entry_of_the_station_counts():
+    header = HEADER.replace("| Hamburg Tower 118.105", "| Hamburg Tower (VFR) 121.280 | Hamburg Tower 118.105")
+    assert keys(log(f"  0:01:00  atc  {CS}, contact Hamburg Tower one two one decimal two eight zero",
+                    "  0:01:03  copilot  contact Hamburg Tower 121.280, Lufthansa 4AB", header=header)) == []
+
+
 def test_k6_a_frequency_not_in_the_list():
     assert keys(log(f"  0:52:00  atc  {CS}, contact Hamburg Tower one two zero decimal tree zero zero",
                     "  0:52:03  copilot  contact Hamburg Tower 120.300, Lufthansa 4AB")) == ["K6"]

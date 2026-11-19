@@ -151,9 +151,11 @@ def check(text: str) -> list[tuple[str, str]]:
             calls = [y for _, kk, y in log.radio[i + 1:] if kk == "copilot" and not y.startswith("contact ")]
             if calls and not calls[0].startswith(name):
                 hit("K5", f"'contact {name} {freq}', then '{calls[0][:70]}'")
-            listed = re.search(rf"(?:^|\| |: ){re.escape(name)} ([\d., ]+)", log.header, re.M)
-            if listed and freq not in [f.strip() for f in listed[1].split(",")]:
-                hit("K6", f"{name} on {freq}, listed {listed[1].strip()}")
+            # "Hamburg Tower (VFR) 121.280 | Hamburg Tower 126.855": all entries of the name count
+            listed = [f.strip() for entry in re.findall(rf"(?:^|\| |: ){re.escape(name)}(?: \([^)]*\))? ([\d., ]+)",
+                                                        log.header, re.M) for f in entry.split(",") if f.strip()]
+            if listed and freq not in listed:
+                hit("K6", f"{name} on {freq}, listed {', '.join(listed)}")
         # K7
         if re.search(r"\d", x):
             hit("K7", x[:140])
