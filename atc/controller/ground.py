@@ -11,7 +11,7 @@ from atc.controller.give_way import Conflict, conflict, path_ahead, route_points
 from atc.controller.safety import RunwayZones, designator
 from atc.controller import taxi_watch
 from atc.sim.traffic import M_PER_NM, Traffic
-from atc.flightplan.route import spoken_sid
+from atc.flightplan.route import spoken_sid, written_sid
 from atc.intent.schema import Intent
 from atc.phraseology import spoken
 from atc.phraseology.farewell import farewell
@@ -33,6 +33,14 @@ def stand_words(stand: Parking | None) -> str:
     return f"parking {spoken.spell(number)}" if any(c.isdigit() for c in number) else "the apron"
 
 
+def stand_written(stand: Parking | None) -> str:
+    """The stand as the pilot writes it in the readback: "stand G201", "parking 12", "the apron"."""
+    words = stand_words(stand)
+    if stand is None or words == "the apron":
+        return words
+    return f"stand {stand.name.replace(' ', '')}" if not stand.is_ga else f"parking {stand.name.split()[-1]}"
+
+
 class GroundMixin:
     def _clearance(self, intent: Intent, station: Station) -> list[Response]:
         self.squawk = self.squawk or self._new_squawk()
@@ -51,7 +59,7 @@ class GroundMixin:
 
         if self.phase == "clearance":
             self.phase = "cleared"
-        self._set_pending(items, station.key, self._after_clearance)
+        self._set_pending(items, station.key, self._after_clearance, lead=self._cleared_to_written())
         return [self._say(station, f"{self.cs}, " + ", ".join(phrases))]
 
     def _vfr_no_clearance(self, station: Station) -> list[Response]:
@@ -64,6 +72,12 @@ class GroundMixin:
         dest = self.destination.name if self.destination else (
             spoken.spell(self.plan.destination) if self.plan.destination else None)
         via = spoken_sid(self.plan.route) or "flight planned route"
+        return f"cleared to {dest} via {via}" if dest else f"cleared via {via}"
+
+    def _cleared_to_written(self) -> str:
+        """The clearance limit and route as the pilot reads them back: "cleared to Munich via AMLUH 2G departure"."""
+        dest = self.destination.name if self.destination else self.plan.destination
+        via = written_sid(self.plan.route) or "flight planned route"
         return f"cleared to {dest} via {via}" if dest else f"cleared via {via}"
 
     def _after_clearance(self, station: Station, state: AircraftState) -> list[Response]:
@@ -412,7 +426,7 @@ class GroundMixin:
         items = rb.taxi_to_stand(route_names(route), route_hold_short(route))
         where = stand_words(stand)
         text = f"{self.cs}, taxi to {where}" + (", " + rb.instruction_text(items) if items else "")
-        self._set_pending(items, station.key)
+        self._set_pending(items, station.key, lead=f"taxi to {stand_written(stand)}")
         return [self._say(station, text)]
 
     def _stand(self) -> Parking | None:

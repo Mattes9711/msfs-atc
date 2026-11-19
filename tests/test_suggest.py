@@ -24,7 +24,7 @@ def test_a_whole_flight_with_only_the_suggestions(eddh, eddm):
     assert sug["text"] == "Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich, information alfa"
     assert out[0].startswith("Lufthansa four Alfa Bravo, cleared to Munich")
     sug, out = say_suggestion(s, "Read back")
-    assert sug["text"] == f"runway 23, climb 5000 feet, squawk {s.atc.squawk}, Lufthansa 4AB"
+    assert sug["text"] == f"cleared to Munich via AMLUH 2G departure, runway 23, climb 5000 feet, squawk {s.atc.squawk}, Lufthansa 4AB"
     assert out == ["(readback correct)", "Lufthansa four Alfa Bravo, readback correct"]
 
     assert say_suggestion(s, "Request pushback")[1] == ["Lufthansa four Alfa Bravo, push and start approved, facing west"]
@@ -76,7 +76,9 @@ def test_a_whole_flight_with_only_the_suggestions(eddh, eddm):
     assert confirmed(say_suggestion(s, "Read back")[1])
     sug, out = say_suggestion(s, "Request taxi")
     assert out[0].startswith("Lufthansa four Alfa Bravo, taxi to stand")
-    assert say_suggestion(s, "Read back")[1] == ["(readback correct)", "Lufthansa four Alfa Bravo, readback correct"]
+    sug, out = say_suggestion(s, "Read back")
+    assert sug["text"].startswith(f"taxi to stand {s.atc.stand_in.name.replace(' ', '')}, via ")  # the stand, as ICAO has it
+    assert out == ["(readback correct)", "Lufthansa four Alfa Bravo, readback correct"]
     assert suggestion(s.atc) is None
 
 
@@ -118,3 +120,18 @@ def test_every_kind_of_readback_item_has_the_pilots_words():
         kind = ITEMS[key] if isinstance(ITEMS[key], type) else ITEMS[key][0]
         assert readback_part(rb.Item(key, samples[kind], "climb via November")), key
     assert readback_part(rb.hold_position()) == "hold position"
+
+
+def test_the_clearance_limit_and_the_stand_are_said_but_not_required(eddh, eddm):
+    # ICAO has the clearance limit and the stand read back; the suggestion says them, a readback without them is OK
+    s = Session(eddh, destination=eddm)
+    s.say(GROUND, "Lufthansa 4AB, request clearance information alpha")
+    assert suggestion(s.atc)["text"].startswith("cleared to Munich via AMLUH 2G departure, runway 23, ")
+    assert confirmed(s.say(GROUND, f"runway 23, climb 5000 feet, squawk {s.atc.squawk}, Lufthansa 4AB"))
+
+
+def test_after_a_wrong_readback_only_the_rest_is_suggested(eddh, eddm):
+    s = Session(eddh, destination=eddm)
+    s.say(GROUND, "Lufthansa 4AB, request clearance information alpha")
+    s.say(GROUND, "cleared to Munich, runway 23, climb 5000 feet, Lufthansa 4AB")  # no squawk
+    assert suggestion(s.atc)["text"] == f"squawk {s.atc.squawk}, Lufthansa 4AB"

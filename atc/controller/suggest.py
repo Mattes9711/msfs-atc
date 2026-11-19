@@ -100,7 +100,9 @@ def suggestion(atc) -> dict | None:
     to say it to: a readback goes to the controller who gave the instruction, even a "contact …"."""
     if atc.pending and (waiting := atc.readback_station()):
         cs = _callsign_for(atc, waiting)
-        return {"title": "Read back", "text": ", ".join(readback_part(i) for i in atc.pending) + f", {cs}",
+        parts = [atc.readback_lead] if atc.readback_lead else []
+        parts += [readback_part(i) for i in atc.pending]
+        return {"title": "Read back", "text": ", ".join(parts) + f", {cs}",
                 "station": waiting.name, "khz": waiting.freq.khz}
     if field := atc.crossing_ahead():
         return _crossing_suggestion(atc, field)  # a control zone on the way (Milestone 9 E3)

@@ -100,6 +100,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
         self.center: Station | None = None  # Center controller in charge while en route; None = no radar service
         self.previous_center: Station | None = None  # the one before: it waits for the readback of its "contact"
         self.pending: tuple[rb.Item, ...] = ()  # issued, not yet correctly read back
+        self.readback_lead: str | None = None  # said before the pending items in the readback, not checked
         self.pending_key: tuple[str, str] | None = None  # station that issued them
         self.handoff_to: tuple[str, str] | None = None  # station the pending instruction sends the pilot to
         self.after_readback: Callable[[Station, AircraftState], list[Response]] | None = None
@@ -651,7 +652,10 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
 
     # --- readbacks --------------------------------------------------------------------------------------------
 
-    def _set_pending(self, items, key=None, after=None, handoff_to=None) -> None:
+    def _set_pending(self, items, key=None, after=None, handoff_to=None, lead: str | None = None) -> None:
+        """lead: what the pilot says before the items, not checked ("cleared to Munich via ...", "taxi to stand
+        G201"): ICAO has the clearance limit and the stand read back, but a readback without them is no error here."""
+        self.readback_lead = lead
         if items:
             self.last_items = tuple(items)  # for "confirm …", also after the readback
         self.pending, self.pending_key, self.after_readback = tuple(items), key, after
@@ -676,6 +680,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
         if not result.ok:
             # What was read back correctly counts: after "negative, I say again" only the rest is needed
             self.pending = tuple(i for i in self.pending if i in result.wrong or i in result.missing)
+            self.readback_lead = None  # said already: only the rest now
             return [self._say(station, f"{self.cs}, {result.correction}")]
         after, handoff = self.after_readback, all(i.key == "frequency_khz" for i in self.pending)
         self._set_pending(())

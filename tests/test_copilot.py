@@ -35,7 +35,7 @@ def test_the_copilot_reads_back_and_the_pilot_still_requests(eddh, eddm):
                     "Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich, information alpha")
     kinds = [k for k, _ in log]
     assert kinds[-3:] == ["atc", "copilot", "atc"]  # clearance, his readback, "readback correct"
-    assert log[-2][1].startswith("runway 23, climb 5000 feet, squawk ") and log[-2][1].endswith("Lufthansa 4AB")
+    assert log[-2][1].startswith("cleared to Munich via AMLUH 2G departure, runway 23, climb 5000 feet, squawk ") and log[-2][1].endswith("Lufthansa 4AB")
     assert not s.atc.pending
 
 
@@ -117,7 +117,7 @@ def test_he_tunes_and_asks_for_the_clearance_at_once(eddh, eddm):
     assert f.s.sim.read().com1_khz == GROUND  # tuned Ground (Hamburg has no Delivery) by himself
     said = f.said()
     assert said[0] == "Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich, information alfa"
-    assert said[1].startswith("runway 23, climb 5000 feet, squawk ")  # and read it back
+    assert said[1].startswith("cleared to Munich via AMLUH 2G departure, runway 23, climb 5000 feet, squawk ")  # and read it back
     assert f.s.atc.phase == "cleared" and len(said) == 2  # the pushback waits for the beacon
 
 

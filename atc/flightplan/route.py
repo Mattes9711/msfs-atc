@@ -27,6 +27,15 @@ def spoken_star(route: str, star: str | None = None) -> str | None:
     return f"{fix.title()} {DIGITS[m[2]]} {ALPHABET[m[3]]} arrival"
 
 
+def written_sid(route: str) -> str | None:
+    """'AMLU2G AMLUH M852 ...' -> 'AMLUH 2G departure', as the pilot writes it; None without a SID."""
+    tokens = route.upper().split()
+    if not tokens or not (m := SID.fullmatch(tokens[0])):
+        return None
+    fix = tokens[1] if len(tokens) > 1 and tokens[1].startswith(m[1]) else m[1]
+    return f"{fix} {m[2]}{m[3]} departure"
+
+
 def spoken_sid(route: str) -> str | None:
     """'AMLU2G AMLUH M852 ...' -> 'Amluh two Golf departure'; None if the route doesn't start with a SID."""
     tokens = route.upper().split()
