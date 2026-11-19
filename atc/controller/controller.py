@@ -180,6 +180,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
         self.direct_fix: str | None = None  # the last fix ATC cleared the aircraft direct to (A1)
         self.approach_cleared = False  # cleared for the approach: the landing runway stays (B1)
         self.landed_on: tuple[str, str] | None = None  # the runway the aircraft touched down on (B5)
+        self.vacated_landing_runway = False  # off the runway it landed on
         self.traffic_info_at: float | None = None  # when the last traffic information was given (B4)
         self.shortcuts = 0  # Center's direct-tos given so far (A2)
         self.copilot_tries: tuple[str, int] = ("", 0)  # his last call and how often he made it

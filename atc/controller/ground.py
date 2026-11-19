@@ -474,10 +474,13 @@ class GroundMixin:
                 self.cleared_runways.add(key)
                 return [Response(f"landed on runway {rwy.ends[0].name}/{rwy.ends[1].name}, not the runway cleared "
                                  f"({self.arrival_runway})", spoken=False)]
-        if self._arrived() and self.destination:
+        if self._arrived() and self.destination and not self.vacated_landing_runway:
             landed_on = self.landed_on or self._runway_key(self.destination, self.arrival_runway)
             if key != landed_on:
-                self.cleared_runways.discard(landed_on)  # vacated: going back onto it needs a clearance
+                # Vacated: going back onto it needs a clearance. Once only: crossing back over it to the stand,
+                # the clearance was dropped every second at the hold short and asked for again (EDDF 07C)
+                self.cleared_runways.discard(landed_on)
+                self.vacated_landing_runway = True
         if key is None or key in self.cleared_runways or key == self.incursion:
             self.incursion = key if key not in self.cleared_runways else None
             return []

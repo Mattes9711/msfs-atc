@@ -4,7 +4,8 @@ A field without Approach (EDDW, EDDN): the Tower vectored the aircraft and then 
 waited for a check-in that never came and was sent around; after the go-around nobody vectored it again. A short
 flight was told to "descend" to an altitude above it. Approach handed over to Tower 12 nm out while the aircraft was
 still turning onto the final, and the vectors corrected the heading seconds before the base turn (the zigzag test is
-in tests/test_vectors.py).
+in tests/test_vectors.py). Landed on 07C at EDDF and vacated to the far side, the clearance to cross back over it
+was dropped every second, so the crossing was asked for and cleared twice.
 """
 from dataclasses import replace
 
@@ -107,3 +108,21 @@ def test_tower_at_8_nm_at_the_latest(eddh, eddm):
     at(s, eddm, 7.5, 1, end.heading_true + 30)
     assert tower(s.tick(now=300)) != []
 
+
+
+def test_a_clearance_to_cross_the_landing_runway_holds(eddh, eddm):
+    s = cleared_for_takeoff(eddh, eddm)
+    atc, end = s.atc, eddm.runway_end(s.atc.arrival_runway)
+    atc.phase = "landing"
+    s.sim.landed(eddm, end)
+    s.tick()
+    landed_on = atc.landed_on
+    atc.phase = "taxi_in"
+    gate = eddm.default_parking()
+    s.sim.update(lat=gate.lat, lon=gate.lon, ground_speed_kt=10)  # vacated, to the far side
+    s.tick()
+    assert landed_on not in atc.cleared_runways  # back onto it needs a clearance
+    atc.cleared_runways.add(landed_on)  # "cross runway ..." at the hold short
+    s.tick()
+    s.tick()
+    assert landed_on in atc.cleared_runways
