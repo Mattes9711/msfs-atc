@@ -443,8 +443,7 @@ class Controller(GroundMixin, TowerMixin, AirMixin, TransitionMixin, TrafficMixi
             en_route = self.station(role)  # None after "radar service terminated"
             if self.call_next is not None:
                 return []  # handed over, not called yet: the new controller can't instruct yet (A3)
-            if (not self.descent_given and en_route
-                    and self._track_to_go_nm(state) <= self._top_of_descent_nm(state)):
+            if not self.descent_given and en_route and self.descent_due_in_nm(state) <= 0:
                 return self._descent(en_route, state)
             if to_airport <= APPROACH_HANDOFF_NM and (
                     self.descent_given or state.alt_msl_ft < 10000 or en_route is None):

@@ -18,6 +18,7 @@ from atc.units import format_khz
 from atc.controller.common import (APPROACH_SPEED_KT, CENTER_HANDOFF_FT, CENTER_HANDOFF_NM, CLOSE_PARALLEL_M,
                                    CLOSING_KT, DEPARTURE_CEILING_FL, DESCENT_CHECK_S, DESCENDING_FT,
                                    LEVEL_REACHED_FT, DESCENT_ALTITUDE_FT, DESCENT_FL, DESCENT_LEAD_NM,
+                                   VECTOR_ALLOWANCE_NM,
                                    DESCENT_MARGIN_NM, DIRECT_MAX_NM, FINAL_CONE_DEG, FINAL_CONE_NM, FINAL_FIX_NM,
                                    FINAL_SPEED_KT, GAP_SHRINK_NM, INTERCEPT_ANGLE, MAX_FL,
                                    ON_COURSE_DEG, PATTERN_AGL_FT, PATTERN_NM, SHORTCUTS, SHORTCUT_MIN_NM,
@@ -206,8 +207,27 @@ class AirMixin:
         return track_to_go_nm(self.plan.waypoints, (self.destination.lat, self.destination.lon),
                               state.lat, state.lon, self.direct_fix)
 
+    def _path_to_go_nm(self, state: AircraftState) -> float:
+        """The miles the aircraft will really fly to the field: the planned route, but at most VECTOR_ALLOWANCE_NM
+        more than straight there, as Approach vectors off a long STAR (the user's flight to EDDH: NOLG3P loops about
+        45 nm north-east and back; counted along it the descent came 48 nm from the field at FL320, Approach then
+        vectored straight in and the aircraft was still at FL220 12 nm out). Compared with _top_of_descent_nm."""
+        straight = distance_nm(state.lat, state.lon, self.destination.lat, self.destination.lon)
+        return min(self._track_to_go_nm(state), straight + VECTOR_ALLOWANCE_NM)
+
+    def descent_due_in_nm(self, state: AircraftState) -> float:
+        """How far ahead the descent point is (<= 0: due now). For the airport the way left as Approach vectors it
+        (_path_to_go_nm); for the STAR's constraints the planned track, as the fixes before them are flown."""
+        return min(self._path_to_go_nm(state) - self._airport_descent_nm(state),
+                   self._track_to_go_nm(state) - self._constraint_descent_nm(state))
+
     def _top_of_descent_nm(self, state: AircraftState) -> float:
-        """Track miles to go at which the descent is given: DESCENT_LEAD_NM before the top of descent.
+        """Track miles to go at which the descent is given at the latest, for the airport or the STAR's constraints
+        (what a direct-to must leave, _shortcut)."""
+        return max(self._airport_descent_nm(state), self._constraint_descent_nm(state))
+
+    def _airport_descent_nm(self, state: AircraftState) -> float:
+        """Miles to go at which the descent is given for the airport: DESCENT_LEAD_NM before the top of descent.
         With SimBrief's TOD (what the FMC plans): its track miles to go, moved 3 nm earlier per 1000 ft the aircraft
         cruises above the level SimBrief plans there (after a step descent lower than the cruise level). Without it
         the 3-in-1 rule: 3 nm per 1000 ft to lose, plus a margin to be down before the approach."""
@@ -216,10 +236,9 @@ class AirMixin:
             top = max(state.alt_msl_ft, planned or 0)  # already lower: the point must not move back
             tod = track_to_go_nm(self.plan.waypoints, (self.destination.lat, self.destination.lon), *self.plan.tod)
             above = (top - (planned or top)) / 1000 * 3
-            return max(max(0.0, tod + above) + DESCENT_LEAD_NM, self._constraint_descent_nm(state))
+            return max(0.0, tod + above) + DESCENT_LEAD_NM
         top = max(state.alt_msl_ft, self.plan.cruise_ft or 0)
-        return max(max(0.0, top - DESCENT_ALTITUDE_FT) / 1000 * 3 + DESCENT_MARGIN_NM,
-                   self._constraint_descent_nm(state))
+        return max(0.0, top - DESCENT_ALTITUDE_FT) / 1000 * 3 + DESCENT_MARGIN_NM
 
     def _expected_arrival(self):
         """The arrival as it would be planned now for the landing runway (fixed with the descent, Milestone 10 B);

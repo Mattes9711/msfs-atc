@@ -17,7 +17,7 @@ from atc.controller.vfr import COMPASS as DIRECTIONS, point_written, zone_point
 from atc.phraseology import spoken
 from atc.phraseology.airlines import TELEPHONY
 from atc.phraseology.catalog import EXAMPLE, GROUPS, PHRASES
-from atc.controller.common import PHASES
+from atc.controller.common import DESCENT_REQUEST_NM, PHASES
 
 SPOKEN_DIGIT = r"(?:zero|one|two|tree|three|four|fife|five|six|seven|eight|niner|nine)"
 # Which controller "{station}" is in each group of the phrase book
@@ -128,6 +128,9 @@ def suggestion(atc) -> dict | None:
         if phase == "vacating":
             return call("Request taxi", "request taxi to the gate")
         return call("Check in", "with you")
+    if (phase in ("climb", "enroute") and not atc.descent_given and state and atc.destination
+            and atc.descent_due_in_nm(state) <= DESCENT_REQUEST_NM):
+        return call("Request descent", "request descent")  # the FMC's top of descent may come first
     if phase == "clearance":
         letter = spoken.ALPHABET[atc.atis.letter].lower()
         to = atc.destination.name if atc.destination else atc.plan.destination

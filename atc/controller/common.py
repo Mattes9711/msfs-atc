@@ -14,6 +14,10 @@ DESCENT_FL = 100  # Center's descent: to FL100 (with the STAR); Approach then gi
 DESCENT_ALTITUDE_FT = 5000
 DESCENT_MARGIN_NM = 15  # be down at DESCENT_ALTITUDE_FT this far from the airport
 DESCENT_LEAD_NM = 5  # the descent comes this far before the top of descent: time to read back and start down
+# Approach vectors: the way left is at most this much longer than straight to the field (downwind, base, intercept).
+# A long STAR loop (EDDH NOLG3P, about 45 nm) is cut short, so its track miles would give the descent far too late
+VECTOR_ALLOWANCE_NM = 15
+DESCENT_REQUEST_NM = 20  # the co-pilot offers "request descent" this far before the descent point
 APPROACH_HANDOFF_NM = 40
 TOWER_HANDOFF_NM = 12  # from the landing threshold
 FINAL_FIX_NM = 10
