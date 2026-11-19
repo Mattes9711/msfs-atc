@@ -11,7 +11,9 @@ from atc.emulator_check import check
 from atc.intent.parser import parse
 from tests.test_centers import SECTORS
 from tests.test_ground_flow import Session
+from tests.test_info import Flight
 from tests.test_safety import at_the_crossing
+from tests.test_vfr_controlled import DEST, NO_POINTS, ORIGIN
 
 
 def fly(departure, destination):
@@ -47,6 +49,33 @@ def test_a_taxiway_with_a_letter_after_the_number_reads_back_as_one():
 def test_a_written_taxiway_with_a_letter_after_the_number_is_one_taxiway():
     intent = parse("taxi to stand G201 via T, B12W, S7, W2, Lufthansa 4AB")
     assert intent.items["taxiways"] == ["T", "B12W", "S7", "W2"]
+
+
+def fly_vfr(origin, dest):
+    f = Flight(origin, dest)
+    emulator = Emulator(f.atc, f.sim)
+    return emulator.run(), [e.text for e in emulator.sink.events if e.kind in ("copilot", "atc", "pilot")]
+
+
+def test_vfr_gate_to_gate_out_via_the_point_in_via_the_point_round_the_circuit():
+    report, radio = fly_vfr(ORIGIN, DEST)
+    assert report.finished, report.text()
+    assert not report.findings, report.text()
+    said = "\n".join(radio)
+    for call in ("leave the control zone via November", "Tango Tower, Delta Bravo Charlie, November",
+                 "leaving the control zone, frequency change approved", "for landing",
+                 "enter the control zone via Sierra", "overhead Sierra", "join right downwind runway",
+                 "right downwind runway", "cleared to land", "taxi to parking"):
+        assert call in said, said
+    assert any(c.startswith("reported November") for c in report.checks), report.text()
+
+
+def test_vfr_into_a_zone_without_reporting_points_straight_into_the_circuit():
+    report, radio = fly_vfr(ORIGIN, NO_POINTS)
+    assert report.finished, report.text()
+    assert not report.findings, report.text()
+    said = "\n".join(radio)
+    assert "join right downwind runway" in said and "cleared to land" in said, said
 
 
 def test_joining_the_taxi_route_short_of_a_hold_rolls_up_to_it():

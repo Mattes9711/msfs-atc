@@ -1,4 +1,4 @@
-"""Flight emulator, a developer tool: python -m atc.emulator EDDM-EDDH EDDH-EDDM, or --simbrief.
+"""Flight emulator, a developer tool: python -m atc.emulator EDDM-EDDH EDDH-EDDM, or --simbrief, or --rules VFR.
 
 A simulated aircraft flies a whole IFR flight, gate to gate, on the local airport data. The co-pilot works the radio
 in the live loop (atc/runtime.py, as in MSFS with "/copilot on"), and the aircraft only does what ATC says. It pushes
@@ -6,12 +6,17 @@ back, taxis the cleared route, stops at each crossing and at the holding point, 
 the direct-tos, the cleared levels, the STAR and the transition, the vectors, the localizer and the glide path. Then
 it lands, vacates and taxis to the stand.
 
+VFR (--rules VFR, a small aircraft): it taxis out of its GA stand as Apron or Ground says, leaves the control zone
+via the reporting point Tower gave, at or below the zone's altitude, and reports the point. A VFR pilot makes his
+calls when he is there, so the emulator says "copilot, next call" at the point (COM1 tuned to the station first).
+
 The report at the end lists what looked wrong: too high on final, a phase that never ended, ATC saying "say again",
 the co-pilot giving the radio back, an exception. It also gives the timeline of the phases. The whole flight (radio,
 positions, findings) goes to a log file in the logs folder, under "emulator". The checklist (atc/emulator_check.py)
 then reads it for what a real controller would not have said: its hits come after the report.
 """
 import argparse
+import math
 import sys
 import time
 import traceback
@@ -20,6 +25,9 @@ from dataclasses import dataclass, field
 from atc.airport.geo import bearing_deg, destination_point, distance_nm
 from atc import emulator_check
 from atc.controller import vectors
+from atc.controller.circuit import circuit_leg, circuit_side
+from atc.controller.suggest import suggestion
+from atc.controller.vfr import ctr_limit_ft, zone_distance_nm
 from atc.events import Collector
 from atc.runtime import LiveSession
 
@@ -44,7 +52,24 @@ GLIDE_CHECKS = ((10, 500, 300), (5, 250, 200))
 VACATE_BEYOND_M = 40  # off the runway the pilot stops this far past the hold line, not at the next node (EDDB:
 # 116 m on along M5, away from the route Ground had just given, and Ground called "you appear to be on Mike fife")
 MIN_ESTABLISHED_NM = 6  # intercepting the localizer closer in than this is too tight
-COMPLAINTS = ("say again", "negative", "stop immediately", "go around", "confirm descending", "unable")
+COMPLAINTS = ("say again", "negative", "stop immediately", "go around", "confirm descending", "unable",
+              "check altitude")
+# VFR: a small aircraft (a C172)
+VFR_ROTATE_KT, VFR_CLIMB_KT, VFR_CRUISE_KT = 55, 75, 100
+VFR_CLIMB_FPM, VFR_DESCENT_FPM = 700, 500
+VFR_ACCEL_KT_S = 1.0
+VFR_CRUISE_FT = 2500
+REPORT_NM = 1.0  # a reporting point this close: overhead, the pilot reports it
+RECALL_S = 60  # the same call again only after this long (ATC didn't take it)
+DESCEND_NM = 5  # this close to the destination's zone: down to its altitude
+CIRCUIT_HEIGHT_FT = 1000  # the circuit's height above the field (not above the zone's altitude)
+CIRCUIT_BESIDE_NM = 1.0  # the downwind this far beside the runway
+BASE_AT_NM = 1.8  # base this far out from the threshold
+WAYPOINT_NM = 0.5  # a point of the circuit this close: on to the next
+FINAL_AHEAD_NM = 0.7  # on final: aim this far ahead on the centreline
+CIRCUIT_KT, BASE_KT, FINAL_KT = 85, 70, 65
+FT_PER_NM = 6076.1
+NEXT_CALL = "/copilot next"
 
 
 @dataclass
@@ -170,6 +195,15 @@ class Pilot:
         self.loc = False  # established on the localizer
         self.loc_at_nm: float | None = None
         self.abort: str | None = None
+        self.vfr = atc.vfr
+        self.say: str | None = None  # what the pilot says this step (the emulator passes it to the live loop)
+        self.called: dict[str, float] = {}  # call text -> when
+        self.reported: list[str] = []  # VFR: what the pilot reported and where, for the report
+        self.point_done: set[str] = set()  # VFR: the reporting points flown over (stage:field:code)
+        self.circuit: list[tuple[float, float]] | None = None  # VFR: the circuit still to fly (along, beside)
+        self.on_final = False  # VFR: turned final, down the glide
+        self.final_called = False  # VFR: on final and Tower knows it (phase final or landing)
+        self.overhead: tuple[str, float] | None = None  # VFR: a point flown over, not reported yet (words, when)
         self._build_route()
 
     # --- what ATC said
@@ -325,9 +359,9 @@ class Pilot:
     def _takeoff_roll(self, now: float) -> float:
         s = self.sim.read()
         hdg = (s.heading_mag + self.atc.airport.mag_var) % 360
-        gs = s.ground_speed_kt + TAKEOFF_ACCEL_KT_S * GROUND_STEP_S
+        gs = s.ground_speed_kt + (TAKEOFF_ACCEL_KT_S / 2 if self.vfr else TAKEOFF_ACCEL_KT_S) * GROUND_STEP_S
         lat, lon = destination_point(s.lat, s.lon, hdg, gs * GROUND_STEP_S / 3600)
-        if gs >= ROTATE_KT:
+        if gs >= (VFR_ROTATE_KT if self.vfr else ROTATE_KT):
             elev = self.atc.airport.elevation_ft
             self.sim.update(lat=lat, lon=lon, ground_speed_kt=gs, on_ground=False, alt_msl_ft=elev + 50,
                             alt_agl_ft=50)
@@ -402,6 +436,8 @@ class Pilot:
         return target
 
     def _air(self, now: float) -> float:
+        if self.vfr:
+            return self._vfr_air(now)
         dt = AIR_STEP_S
         atc, s = self.atc, self.sim.read()
         lat, lon, alt = s.lat, s.lon, s.alt_msl_ft
@@ -423,6 +459,161 @@ class Pilot:
             alt = min(target, alt + fpm * dt / 60)
         elif target < alt:
             fpm = 3000 if self.loc else min(3000, max(1000, gs * 1000 / 3 / 60))
+            alt = max(target, alt - fpm * dt / 60)
+        lat, lon = destination_point(lat, lon, hdg, gs * dt / 3600)
+        self.sim.update(lat=lat, lon=lon, alt_msl_ft=alt, alt_agl_ft=max(0.0, alt - self._elevation(lat, lon)),
+                        on_ground=False, ground_speed_kt=gs, heading_mag=(hdg - self._mag_var(lat, lon)) % 360)
+        return dt
+
+    # --- VFR in the air
+    def _call(self, now: float, *titles: str) -> bool:
+        """The co-pilot's next call, when it is one of `titles`: a VFR pilot calls when he is there ("copilot, next
+        call"), not the co-pilot by himself. COM1 is tuned to the station first, the call a step later (once the
+        controller has seen the new frequency: else the old station hears it)."""
+        atc = self.atc
+        if atc.pending or self.say:
+            return False
+        s = suggestion(atc)
+        if s is None or s["title"] not in titles or now - self.called.get(s["text"], -RECALL_S) < RECALL_S:
+            return False
+        if self.sim.read().com1_khz != s["khz"] or (atc.state and atc.state.com1_khz != s["khz"]):
+            self.sim.set_com1(s["khz"])
+            return False
+        self.called[s["text"]] = now
+        self.say = NEXT_CALL
+        return True
+
+    def _point_aim(self, now: float, lat: float, lon: float) -> tuple[float, float] | None:
+        """The reporting point ATC said to fly to (lat, lon), None once flown over; reported when overhead."""
+        atc, p = self.atc, self.atc.ctr_point
+        if p is None or p.point is None:
+            return None
+        field = atc.crossing.ident if atc.ctr_stage == "crossing" and atc.crossing else ""
+        key = f"{atc.ctr_stage}:{field}:{p.code}"
+        if key in self.point_done:
+            return None
+        nm = distance_nm(lat, lon, p.point.lat, p.point.lon)
+        if nm <= REPORT_NM:  # overhead: reported (_report_point) as soon as the radio is free
+            self.point_done.add(key)
+            self.overhead = (p.words, now)
+            return None
+        return p.point.lat, p.point.lon
+
+    def _report_point(self, now: float) -> None:
+        """The point flown over, reported; given up after a while (ATC moved on: out of the zone, in the circuit)."""
+        if self.overhead is None:
+            return
+        words, since = self.overhead
+        if self._call(now, "Reporting point"):
+            self.reported.append(f"reported {words}, {now - since:.0f} s after overhead")
+            self.overhead = None
+        elif now - since > RECALL_S:
+            self.reported.append(f"didn't report {words}: no such call due")
+            self.overhead = None
+
+    def _vfr_way(self, now: float, lat: float, lon: float, alt: float) -> tuple[float | None, float, float]:
+        """(track to fly, None: towards the destination; altitude; speed) for the stage of the flight."""
+        atc, origin, dest = self.atc, self.atc.airport, self.atc.destination
+        stage = atc.ctr_stage
+        cruise = float(atc.plan.cruise_ft or VFR_CRUISE_FT)
+        if stage in ("out", "crossing"):  # through a zone via its points, at or below its altitude
+            field = origin if stage == "out" else atc.crossing
+            aim = self._point_aim(now, lat, lon)
+            if aim is None and atc.ctr_point is not None and atc.ctr_point.point is None \
+                    and zone_distance_nm(field, lat, lon) > 0:
+                self._call(now, "Leaving the control zone")
+            return (bearing_deg(lat, lon, *aim) if aim else None), float(ctr_limit_ft(field)), VFR_CRUISE_KT
+        if dest is not None and (stage in ("joining", "final_due", "final") or self.circuit is not None):
+            return self._circuit(now, lat, lon, alt)
+        if stage == "in":  # into the destination's zone via the point
+            aim = self._point_aim(now, lat, lon)
+            return (bearing_deg(lat, lon, *aim) if aim else None), float(ctr_limit_ft(dest)), VFR_CRUISE_KT
+        self._call(now, "Inbound", "Request crossing")
+        if zone_distance_nm(origin, lat, lon) <= 0:  # still in the zone: not above its altitude
+            return None, min(cruise, float(ctr_limit_ft(origin))), VFR_CRUISE_KT
+        if dest is not None and zone_distance_nm(dest, lat, lon) <= DESCEND_NM:
+            return None, min(cruise, float(ctr_limit_ft(dest))), VFR_CRUISE_KT
+        return None, cruise, VFR_CRUISE_KT
+
+    def _circuit_plan(self, lat: float, lon: float) -> list[tuple[float, float]]:
+        """The way into the circuit and round it, as (along, beside) in nm in the runway's frame: along out on the
+        approach side of the threshold, beside towards the circuit side. From the dead side or over the field
+        across the upwind end (a crosswind join), from the circuit side at 45 degrees onto the middle of the
+        downwind; then the end of the downwind and the turn onto final."""
+        atc = self.atc
+        dest, runway = atc.destination, atc.arrival_runway
+        end = dest.runway_end(runway)
+        rwy = next(r.length_ft for r in dest.runways if end in r.ends) / FT_PER_NM
+        side = 1 if circuit_side(dest, runway) == "L" else -1
+        along, across = vectors.frame(end, lat, lon)
+        if across * side < 0.4:
+            up = -(rwy + 0.5)
+            way = [(up, 0.0), (up + 0.2, CIRCUIT_BESIDE_NM)]
+        else:
+            mid = -rwy / 2
+            way = [(mid - 0.6, CIRCUIT_BESIDE_NM + 0.6), (mid, CIRCUIT_BESIDE_NM)]
+        return way + [(BASE_AT_NM, CIRCUIT_BESIDE_NM), (BASE_AT_NM, 0.0)]
+
+    def _circuit(self, now: float, lat: float, lon: float, alt: float) -> tuple[float, float, float]:
+        """Round the circuit to the runway: the joining legs, downwind (reported), base, final (reported) on a
+        3 degree glide. A go-around (phase back to approach while on final): round again."""
+        atc = self.atc
+        dest, runway = atc.destination, atc.arrival_runway
+        end = dest.runway_end(runway)
+        side = 1 if circuit_side(dest, runway) == "L" else -1
+        circuit_ft = min(float(ctr_limit_ft(dest)), dest.elevation_ft + CIRCUIT_HEIGHT_FT)
+        if self.on_final and atc.phase in ("final", "landing"):
+            self.final_called = True
+        if self.circuit is None or (self.final_called and atc.phase == "approach"):  # a go-around: round again
+            if self.final_called:
+                self.reported.append("went around, round the circuit again")
+            self.circuit, self.on_final, self.final_called = self._circuit_plan(lat, lon), False, False
+        along, across = vectors.frame(end, lat, lon)
+        beside = across * side
+        heading = (self.sim.read().heading_mag + dest.mag_var) % 360
+        leg = circuit_leg(dest, runway, lat, lon, heading, alt)
+        if not self.on_final:
+            while self.circuit and math.dist((along, beside), self.circuit[0]) <= WAYPOINT_NM:
+                self.circuit.pop(0)
+            if not self.circuit:
+                self.on_final = True
+        if self.on_final:
+            if leg == "final":
+                self._call(now, "On final")
+            aim = vectors.point(end, along - FINAL_AHEAD_NM, 0.0)
+            glide = dest.elevation_ft + max(0.0, along) * GLIDE_FT_PER_NM
+            return bearing_deg(lat, lon, *aim), min(alt, glide), FINAL_KT
+        if leg == "downwind" and len(self.circuit) <= 2:
+            self._call(now, "Downwind")
+        a, b = self.circuit[0]
+        aim = vectors.point(end, a, b * side)
+        if len(self.circuit) == 1:  # base: down towards the glide
+            return bearing_deg(lat, lon, *aim), dest.elevation_ft + BASE_AT_NM * GLIDE_FT_PER_NM, BASE_KT
+        return bearing_deg(lat, lon, *aim), circuit_ft, CIRCUIT_KT
+
+    def _vfr_air(self, now: float) -> float:
+        dt = AIR_STEP_S
+        atc, s = self.atc, self.sim.read()
+        lat, lon, alt = s.lat, s.lon, s.alt_msl_ft
+        hdg = (s.heading_mag + self._mag_var(lat, lon)) % 360
+        dest = atc.destination
+        track, target, speed = self._vfr_way(now, lat, lon, alt)
+        self._report_point(now)
+        if self.on_final:  # over the threshold: lands (or stops without a landing clearance)
+            end = dest.runway_end(atc.arrival_runway)
+            if vectors.frame(end, lat, lon)[0] <= 0:
+                return self._touchdown(now, alt)
+        if track is None:
+            track = bearing_deg(lat, lon, dest.lat, dest.lon) if dest else hdg
+        if atc.phase in ("takeoff", "climb", "airborne") and alt - self._elevation(lat, lon) < 1000:
+            speed = VFR_CLIMB_KT
+        hdg = turn_towards(hdg, track, TURN_DEG_S * dt)
+        gs = s.ground_speed_kt
+        gs = gs + max(-VFR_ACCEL_KT_S * dt, min(VFR_ACCEL_KT_S * dt, speed - gs))
+        if target > alt:
+            alt = min(target, alt + VFR_CLIMB_FPM * dt / 60)
+        elif target < alt:
+            fpm = gs * GLIDE_FT_PER_NM / 60 * 1.5 if self.on_final else VFR_DESCENT_FPM
             alt = max(target, alt - fpm * dt / 60)
         lat, lon = destination_point(lat, lon, hdg, gs * dt / 3600)
         self.sim.update(lat=lat, lon=lon, alt_msl_ft=alt, alt_agl_ft=max(0.0, alt - self._elevation(lat, lon)),
@@ -574,8 +765,9 @@ class Emulator:
                 self.find(self.pilot.abort)
                 break
             self.t[0] += dt
+            said, self.pilot.say = self.pilot.say, None
             try:
-                self.live.step()
+                self.live.step(said or "")
             except Exception:
                 self.find("exception in the live loop:\n" + traceback.format_exc().rstrip())
                 break
@@ -590,7 +782,10 @@ class Emulator:
         self._phase_line(final=True)
         self.report.seconds = self.t[0]
         landed = self.pilot.stage in ("rollout", "vacating", "wait_taxi_in", "taxi_in", "at_stand")
-        if self.pilot.loc_at_nm is not None:
+        self.report.checks += self.pilot.reported
+        if self.pilot.vfr:
+            pass  # no localizer: a visual approach out of the circuit
+        elif self.pilot.loc_at_nm is not None:
             self.report.checks.append(f"established on the localizer {self.pilot.loc_at_nm:.1f} nm out")
             if self.pilot.loc_at_nm < MIN_ESTABLISHED_NM:
                 self.find(f"established on the localizer only {self.pilot.loc_at_nm:.1f} nm out")
@@ -647,7 +842,7 @@ class Emulator:
         if not atc.copilot_on:
             self.find("the co-pilot gave the radio back")
             return True
-        if self.pilot.stage == "air" and atc.destination and atc.arrival_runway:
+        if self.pilot.stage == "air" and atc.destination and atc.arrival_runway and not self.pilot.vfr:
             end = atc.destination.runway_end(atc.arrival_runway)
             along, across = vectors.frame(end, s.lat, s.lon)
             for nm, high, low in GLIDE_CHECKS:
@@ -696,8 +891,10 @@ def build_parser() -> argparse.ArgumentParser:
                                             "radio; report what looked wrong.")
     p.add_argument("flights", nargs="*", metavar="FROM-TO", help="e.g. EDDM-EDDH EDDH-EDDM")
     p.add_argument("--simbrief", nargs="?", const="", metavar="USER", help="fly the latest SimBrief plan")
-    p.add_argument("--callsign", default=None, help="default DLH4AB (SimBrief's with --simbrief)")
-    p.add_argument("--cruise", default=None, help="e.g. FL340 (default FL340 without SimBrief)")
+    p.add_argument("--callsign", default=None, help="default DLH4AB, DEABC for VFR (SimBrief's with --simbrief)")
+    p.add_argument("--cruise", default=None, help="e.g. FL340 (default FL340 without SimBrief, 2500 for VFR)")
+    p.add_argument("--rules", choices=("IFR", "VFR"), type=str.upper, default="IFR",
+                   help="VFR: a small aircraft from a GA stand, through the control zones")
     p.add_argument("--weather", choices=("live", "none"), default="live",
                    help="live: the real METAR (runway in use); none: no weather")
     p.add_argument("--wind", default=None, metavar="DDD/SS",
@@ -724,10 +921,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.simbrief is not None:
         requests.append(PlanRequest(simbrief=args.simbrief, callsign=args.callsign,
                                     cruise_ft=parse_level(args.cruise) if args.cruise else None))
+    vfr = args.rules == "VFR"
     for pair in args.flights:
         origin, _, dest = pair.upper().partition("-")
-        requests.append(PlanRequest(callsign=args.callsign or "DLH4AB", departure=origin, destination=dest or None,
-                                    cruise_ft=parse_level(args.cruise or "FL340")))
+        requests.append(PlanRequest(callsign=args.callsign or ("DEABC" if vfr else "DLH4AB"), departure=origin,
+                                    destination=dest or None, rules=args.rules, aircraft="C172" if vfr else None,
+                                    cruise_ft=parse_level(args.cruise or (str(VFR_CRUISE_FT) if vfr else "FL340"))))
     folder = paths.logs_dir() / "emulator"
     folder.mkdir(parents=True, exist_ok=True)
     failed = 0
