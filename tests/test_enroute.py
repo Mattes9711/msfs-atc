@@ -98,9 +98,24 @@ def test_no_instruction_before_the_check_in(eddh, eddm):
     assert s.tick() == []  # nothing from North Radar until the pilot has called it
 
 
+# A plan without a SID: the departure is flown on radar, so Approach sends it direct to the route's first point
+NO_SID = replace(SIMBRIEF, sid=None, route=SIMBRIEF.route.removeprefix("AMLU2G "),
+                 waypoints=[replace(w, leg="route") if w.ident == "AMLUH" else w
+                            for w in SIMBRIEF.waypoints if w.leg != "sid" or w.ident == "AMLUH"])
+
+
 def test_a_missing_direct_to_in_the_readback_is_asked_for(eddh, eddm):
-    s = with_departure(eddh, eddm)
+    s = with_departure(eddh, eddm, plan=NO_SID)
     assert s.say(HAMBURG_APPROACH, "climb flight level 240, Lufthansa 4AB") == [f"{CS}, read back direct-to"]
+
+
+def test_with_a_sid_radar_contact_brings_no_direct(eddh, eddm):
+    """The SID is flown as published (the user's flight 2026-11-21: "direct Amluh" right after takeoff cut it)."""
+    s = cleared_for_takeoff(eddh, eddm, centers=SECTORS)
+    s.atc.plan = SIMBRIEF
+    fly(s, 2)
+    [call] = s.say(HAMBURG_APPROACH, "Hamburg Approach, Lufthansa 4AB, passing 2000 climbing 5000")
+    assert "radar contact" in call and "direct" not in call
 
 
 @pytest.mark.parametrize("call, answer", [

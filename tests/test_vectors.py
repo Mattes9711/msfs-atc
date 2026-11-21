@@ -148,7 +148,7 @@ def test_after_a_go_around_vectored_again_not_left_on_one_heading(eddh, eddm):
     at(s, eddm, -3, 0.5, end.heading_true)
     check_in(s, eddm)
     assert s.atc.vector_leg == "downwind"
-    for along in range(-2, vectors.BASE_ALONG_NM + 1):  # the pilot flies the headings: along the downwind
+    for along in range(-2, int(vectors.BASE_ALONG_NM) + 2):  # the pilot flies the headings: along the downwind
         at(s, eddm, along, vectors.DOWNWIND_NM, (end.heading_true + 180) % 360)
         out = s.tick(now=1000 + along * 30)
         if out:

@@ -99,7 +99,7 @@ def test_fly_the_transition_with_altitudes_speeds_and_vectors_at_its_end(eddh, e
     # The transition's downwind is 4 nm beside the centreline: no base leg (gone in the turn, K9), the intercept
     # heading and the clearance at once
     intercept = magnetic(eddm, end.heading_true + 30)
-    [cleared] = downwind(s, eddm, vectors.BASE_ALONG_NM - vectors.BASE_TURN_LEAD_NM + 0.2, 150)
+    [cleared] = downwind(s, eddm, vectors.base_along_nm(s.atc._join_nm()) - vectors.BASE_TURN_LEAD_NM + 0.2, 150)
     assert cleared == (f"{CS}, turn left heading {spoken.heading(intercept)}, maintain fife thousand feet until "
                        "established, cleared ILS approach runway zero eight right, speed one eight zero knots")
 

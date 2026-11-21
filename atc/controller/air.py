@@ -21,7 +21,8 @@ from atc.controller.common import (APPROACH_SPEED_KT, CENTER_HANDOFF_FT, CENTER_
                                    LEVEL_REACHED_FT, DESCENT_ALTITUDE_FT, DESCENT_FL, DESCENT_LEAD_NM,
                                    VECTOR_ALLOWANCE_NM,
                                    DESCENT_MARGIN_NM, DIRECT_MAX_NM, FINAL_CONE_DEG, FINAL_CONE_NM, FINAL_FIX_NM,
-                                   FINAL_SPEED_KT, GAP_SHRINK_NM, INTERCEPT_ANGLE, MAX_FL,
+                                   FINAL_SPEED_KT, GAP_SHRINK_NM, INTERCEPT_ANGLE, JOIN_ACROSS_NM, JOIN_MAX_NM,
+                                   JOIN_MIN_NM, MAX_FL,
                                    ON_COURSE_DEG, ON_FINAL_HEADING_DEG, PATTERN_AGL_FT, PATTERN_NM, SHORTCUTS,
                                    SHORTCUT_MIN_NM,
                                    SHORTCUT_SKIPS, CENTER_TURNS_FT,
@@ -51,17 +52,22 @@ class AirMixin:
         return self._transmit(sender, f"{self.cs}, {item.phrase}", state)
 
     def _radar_contact(self, station: Station) -> list[Response]:
-        """Departure: climb (with Center sectors only up to FL240: Center gives the cruise level), direct to the
-        first waypoint after the SID."""
+        """Departure: climb (with Center sectors only up to FL240: Center gives the cruise level). The SID is flown
+        as published (the user, 2026-11-21: "exactly on the SID/STAR"; "direct AMLUH" at 800 ft cut the AMLU2G
+        departure short); without a SID direct to the route's first waypoint."""
         self.phase = "climb"
         items = []
         if self.plan.cruise_ft and self.plan.cruise_ft > 5000:
             fl = self.plan.cruise_ft // 100
             items.append(rb.level(min(fl, DEPARTURE_CEILING_FL) if self.centers else fl))
-        if fix := first_fix(self.plan.route):
+        if not self._sid_flown() and (fix := first_fix(self.plan.route)):
             items.append(rb.direct(fix))
         self._set_pending(items, station.key)
         return [self._say(station, ", ".join([f"{self.cs}, {station.name}, radar contact", *(i.phrase for i in items)]))]
+
+    def _sid_flown(self) -> bool:
+        """The plan departs on a SID: its name in the plan, or SID points in its waypoints."""
+        return bool(self.plan.sid) or any(w.leg == "sid" for w in self.plan.waypoints)
 
     def _cleared_ft(self) -> int | None:
         """The last level or altitude given, in feet."""
@@ -242,7 +248,7 @@ class AirMixin:
             return along
         straight = distance_nm(state.lat, state.lon, self.destination.lat, self.destination.lon)
         path = min(self._track_to_go_nm(state), straight + VECTOR_ALLOWANCE_NM)
-        return min(path, vectors.path_nm(end, state.lat, state.lon)) if end else path
+        return min(path, vectors.path_nm(end, state.lat, state.lon, self._join_nm())) if end else path
 
     def _transition_to_go_nm(self, state: AircraftState, end) -> float | None:
         """Along the arrival's transition when one with positions leads to the landing runway and the aircraft is on
@@ -259,7 +265,7 @@ class AirMixin:
         on_route = any(w.ident == first.ident for w in self.plan.waypoints)
         to_first = (self._track_to_go_nm(state) - track_to_go_nm(self.plan.waypoints, dest, first.lat, first.lon)
                     if on_route else None)
-        return path_to_go_nm(legs, end, state.lat, state.lon, to_first)
+        return path_to_go_nm(legs, end, state.lat, state.lon, to_first, self._join_nm())
 
     def descent_due_in_nm(self, state: AircraftState) -> float:
         """How far ahead the descent point is (<= 0: due now). For the airport the way left as Approach vectors it
@@ -285,6 +291,21 @@ class AirMixin:
             return max(0.0, tod + above) + DESCENT_LEAD_NM
         top = max(state.alt_msl_ft, self.plan.cruise_ft or 0)
         return max(0.0, top - DESCENT_ALTITUDE_FT) / 1000 * 3 + DESCENT_MARGIN_NM
+
+    def _join_nm(self) -> float:
+        """How far out the vectors bring the aircraft onto the final: the published approach's intermediate fix,
+        where the approach begins as the FMS flies it (EDDM ILS 08R: DM441 16.9 nm, at or above 5000 ft; EDDH ILS
+        23: HHW13 13 nm). Without approach data vectors.ESTABLISHED_BY_NM."""
+        if self.procedures is None or self.destination is None or not self.arrival_runway:
+            return vectors.ESTABLISHED_BY_NM
+        arrival = self._expected_arrival()
+        approach = (arrival.approach if arrival and arrival.runway == self.arrival_runway and arrival.approach
+                    else self.procedures.approach(self.arrival_runway))
+        first = approach.legs[0] if approach and approach.legs else None
+        if first is None or first.path != "IF" or first.lat is None:
+            return vectors.ESTABLISHED_BY_NM
+        along, across = vectors.frame(self.destination.runway_end(self.arrival_runway), first.lat, first.lon)
+        return along if abs(across) <= JOIN_ACROSS_NM and JOIN_MIN_NM <= along <= JOIN_MAX_NM             else vectors.ESTABLISHED_BY_NM
 
     def _expected_arrival(self):
         """The arrival as it would be planned now for the landing runway (fixed with the descent, Milestone 10 B);
@@ -427,13 +448,15 @@ class AirMixin:
         heading and remembers the leg."""
         along, across = vectors.frame(end, state.lat, state.lon)
         self.vector_side, self.vector_at = vectors.side_of(across), None
-        self.vector_inbound = along > vectors.BASE_ALONG_NM
-        if vectors.straight_in(along, across):
+        join = self._join_nm()
+        base = vectors.base_along_nm(join)
+        self.vector_inbound = along > base
+        if vectors.straight_in(along, across, join):
             self.vector_leg = "base"
             true = (end.heading_true + INTERCEPT_ANGLE * self.vector_side) % 360
         else:
             self.vector_leg = "downwind"
-            true = bearing_deg(state.lat, state.lon, *vectors.base_point(end, across))
+            true = bearing_deg(state.lat, state.lon, *vectors.base_point(end, across, base))
         self.vector_heading = self._magnetic(true)
         return self.vector_heading
 
@@ -454,15 +477,16 @@ class AirMixin:
                 return self._base_turn(station, state, end, across, now)
             return []
         if self.vector_leg == "downwind":
-            base = vectors.base_point(end, self.vector_side * vectors.DOWNWIND_NM)
+            base_nm = vectors.base_along_nm(self._join_nm())
+            base = vectors.base_point(end, self.vector_side * vectors.DOWNWIND_NM, base_nm)
             # Going out on the downwind: the turn 1 nm before the base point's distance, the turn's radius takes the
             # aircraft there (Milestone 10 G: within 2 nm of the point it came at 10 nm and met the localizer 7.8 nm
             # out). Coming in from in front: at the base point, or abeam it.
             if self.vector_inbound:
-                level = (along <= vectors.BASE_ALONG_NM or
+                level = (along <= base_nm or
                          distance_nm(state.lat, state.lon, *base) <= vectors.BASE_WITHIN_NM)
             else:
-                level = along >= vectors.BASE_ALONG_NM - vectors.BASE_TURN_LEAD_NM
+                level = along >= base_nm - vectors.BASE_TURN_LEAD_NM
             if level:
                 return self._base_turn(station, state, end, across, now)
             wanted = self._magnetic(bearing_deg(state.lat, state.lon, *base))

@@ -24,7 +24,7 @@ def test_the_descent_is_planned_along_the_transition(eddh, eddm):
     to_landu = (track_to_go_nm(s.atc.plan.waypoints, dest, state.lat, state.lon)
                 - track_to_go_nm(s.atc.plan.waypoints, dest, LANDU.lat, LANDU.lon))
     along = sum(distance_nm(a.lat, a.lon, b.lat, b.lon) for a, b in zip(legs, legs[1:]))
-    expected = to_landu + along + vectors.path_nm(end, legs[-1].lat, legs[-1].lon)
+    expected = to_landu + along + vectors.path_nm(end, legs[-1].lat, legs[-1].lon, s.atc._join_nm())
     assert abs(s.atc._path_to_go_nm(state) - expected) < 0.1
 
 
