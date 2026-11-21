@@ -10,7 +10,7 @@ from atc.controller import vectors, wake
 from atc.sim.traffic import M_PER_NM, Traffic
 from atc.controller.arrival import entry_fix, plan_arrival, spoken_arrival
 from atc.flightplan.route import first_fix
-from atc.flightplan.track import track_to_go_nm
+from atc.flightplan.track import flying_to, track_to_go_nm
 from atc.intent.schema import Intent
 from atc.phraseology import spoken
 from atc.sim.base import AircraftState
@@ -22,6 +22,7 @@ from atc.controller.common import (APPROACH_SPEED_KT, CENTER_HANDOFF_FT, CENTER_
                                    DESCENT_MARGIN_NM, DIRECT_MAX_NM, FINAL_CONE_DEG, FINAL_CONE_NM, FINAL_FIX_NM,
                                    FINAL_SPEED_KT, GAP_SHRINK_NM, INTERCEPT_ANGLE, MAX_FL,
                                    ON_COURSE_DEG, PATTERN_AGL_FT, PATTERN_NM, SHORTCUTS, SHORTCUT_MIN_NM,
+                                   SHORTCUT_SKIPS, CENTER_TURNS_FT,
                                    SPACING_SPEED_KT, SPEED_CONTROL_UNTIL_NM, VFR_SQUAWK, Response,
                                    Station, center_station)
 
@@ -85,6 +86,19 @@ class AirMixin:
         en_route = {id(w) for w in (points if last is None else points[:last + 1]) if w.leg == "route"}
         return [w for w in self._route_ahead(state) if id(w) in en_route]
 
+    def _next_route_points(self, state: AircraftState) -> list:
+        """In the plan's order, the waypoint the aircraft flies to (the fix it was sent direct to) and the ones after
+        it up to the arrival's entry fix: a direct-to the k-th of them leaves out k points (the user, 2026-11-21)."""
+        dest = (self.destination.lat, self.destination.lon)
+        points = list(self.plan.waypoints)
+        idents = [w.ident for w in points]
+        to = flying_to(self.plan.waypoints, dest, state.lat, state.lon)
+        if self.direct_fix in idents[to:]:  # straight to it: the points before it are left out already
+            to = idents.index(self.direct_fix, to)
+        entry = entry_fix(self.plan, self.procedures)
+        last = idents.index(entry) if entry in idents[to:] else len(points) - 1
+        return [w for w in points[to:last + 1] if w.leg != "star"]
+
     def _arrival_ahead(self, state: AircraftState) -> set[str]:
         """The fixes ahead on the arrival cleared with the descent: the STAR and the transition to the approach
         from Little Navmap, else the plan's STAR points and its entry fix."""
@@ -111,18 +125,21 @@ class AirMixin:
 
     def _shortcut(self, state: AircraftState) -> str | None:
         """A direct-to Center gives on the check-in, only as a real shortcut (Milestone 8, A2, the user: "1-2 real
-        shortcuts a flight"; the test flight got one at every check-in, Zucka and Landu twice): of the route points
-        ahead within DIRECT_MAX_NM the one that saves most against the way the aircraft flies now, at least
-        SHORTCUT_MIN_NM; at most SHORTCUTS a flight, never the fix already given.
+        shortcuts a flight"; the test flight got one at every check-in, Zucka and Landu twice): of the next route
+        points, leaving out at most SHORTCUT_SKIPS (the user, 2026-11-21), the one within DIRECT_MAX_NM that saves
+        most against the way the aircraft flies now, at least SHORTCUT_MIN_NM; at most SHORTCUTS a flight, never
+        the fix already given.
         Only en route (Milestone 10 C; the test flight got "direct Landu" at the Frankfurt check-in, which cut the
-        top of descent away): never after the descent, never past the STAR's first fix, and only when the track
-        left after it still reaches to the top of descent."""
+        top of descent away): never after the descent, never past the STAR's first fix, never to it above
+        CENTER_TURNS_FT, and only when the track left after it still reaches to the top of descent."""
         if self.shortcuts >= SHORTCUTS or self.destination is None or self.descent_given:
             return None
         dest = (self.destination.lat, self.destination.lon)
         now, room = self._track_to_go_nm(state), self._top_of_descent_nm(state)
+        ahead = self._next_route_points(state)
+        entry = entry_fix(self.plan, self.procedures) if state.alt_msl_ft > CENTER_TURNS_FT else None
         left = {w.ident: track_to_go_nm(self.plan.waypoints, dest, state.lat, state.lon, w.ident)
-                for w in self._en_route_ahead(state) if w.ident != self.direct_fix
+                for w in ahead[:SHORTCUT_SKIPS + 1] if w.leg == "route" and w.ident not in (self.direct_fix, entry)
                 and distance_nm(state.lat, state.lon, w.lat, w.lon) <= DIRECT_MAX_NM}
         saved = {fix: now - miles for fix, miles in left.items() if miles >= room}
         fix = max(saved, key=saved.get, default=None)

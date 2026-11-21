@@ -23,16 +23,52 @@ def en_route(eddh, eddm, plan=SIMBRIEF):
     return s
 
 
+def dogleg(before, lat, lon):
+    """The test flight's route with a dogleg before `before`, so a direct to it is a real shortcut."""
+    points = list(SIMBRIEF.waypoints)
+    i = next(i for i, w in enumerate(points) if w.ident == before)
+    points.insert(i, Waypoint("DOGLG", lat, lon, "route"))
+    return replace(SIMBRIEF, waypoints=tuple(points))
+
+
 def test_no_shortcut_that_cuts_away_the_top_of_descent(eddh, eddm):
-    """At ALOSO a direct to LANDU leaves 170 nm to fly: given while the descent starts later than that, not when it
-    would have to start before (the test flight: "direct Landu" cut the top of descent away)."""
-    s = en_route(eddh, eddm)
-    state = at(s, "ALOSO")
-    s.atc._top_of_descent_nm = lambda state: 165
-    assert s.atc._shortcut(state) == "LANDU"
+    """At URONA via a dogleg east, a direct to ABERU is a real shortcut: given while the descent starts later than
+    the track left after it, not when it would have to start before (the test flight: "direct Landu" cut the top of
+    descent away)."""
+    plan = dogleg("ABERU", 50.4, 12.6)
+    s = en_route(eddh, eddm, plan)
+    state = at(s, "URONA", plan)
+    s.atc._top_of_descent_nm = lambda state: 100
+    assert s.atc._shortcut(state) == "ABERU"
     s.atc.shortcuts = 0
-    s.atc._top_of_descent_nm = lambda state: 175
-    assert s.atc._shortcut(state) != "LANDU"
+    s.atc._top_of_descent_nm = lambda state: 200
+    assert s.atc._shortcut(state) is None
+
+
+def test_a_shortcut_skips_at_most_two_route_points(eddh, eddm):
+    """The user, 2026-11-21: "keine Directs die viel zu viele Punkte überspringen". With a dogleg east before TIPAM:
+    from DENIX TIPAM is far out of reach, and nothing nearer saves 10 nm on this straight route; on the way from URONA
+    to ABERU a direct to TIPAM leaves out ABERU and the dogleg, two points."""
+    plan = dogleg("TIPAM", 50.0, 13.2)
+    s = en_route(eddh, eddm, plan)
+    s.atc._top_of_descent_nm = lambda state: 0
+    assert s.atc._shortcut(at(s, "DENIX", plan)) is None
+    at(s, "URONA", plan)
+    s.sim.update(lat=50.2, lon=12.0)  # just past URONA, flying to ABERU
+    assert s.atc._shortcut(s.sim.read()) == "TIPAM"
+
+
+def test_no_direct_to_the_arrival_from_cruise(eddh, eddm):
+    """No "direct Landu" above FL195: the STAR's entry fix only once the aircraft is below, where Munich's sector
+    may turn it (the test flight got it at FL350)."""
+    plan = dogleg("LANDU", 48.4, 12.9)
+    s = en_route(eddh, eddm, plan)
+    s.atc.procedures = PROCEDURES
+    s.atc._top_of_descent_nm = lambda state: 0
+    state = at(s, "VESIX", plan)
+    assert s.atc._shortcut(state) is None
+    s.sim.update(alt_msl_ft=15000, alt_agl_ft=13500)
+    assert s.atc._shortcut(s.sim.read()) == "LANDU"
 
 
 def test_no_shortcut_after_the_descent(eddh, eddm):

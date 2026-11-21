@@ -42,6 +42,10 @@ MAX_FL = 410
 DIRECT_MAX_NM = 150  # Center's direct-to: the farthest route point ahead within this distance
 SHORTCUTS = 2  # Center's direct-tos a flight (the user: "1-2 real shortcuts")
 SHORTCUT_MIN_NM = 10  # a direct-to must save at least this much
+SHORTCUT_SKIPS = 2  # a direct-to leaves out at most this many route points (the user, 2026-11-21: the test flight
+# got "direct Landu" at FL350 116 nm out, past seven points of T703 and T105)
+CENTER_TURNS_FT = 19500  # Munich: Center is released for turns and descent below FL195, so no direct to the
+# STAR's entry fix above (VATSIM Germany SOP; at FL350 it would cut the descent away)
 CENTER_HANDOFF_FT, CENTER_HANDOFF_NM = 10000, 30  # Departure -> Center: passing FL100 or this far out
 VFR_SQUAWK = "7000"
 GO_AROUND_BELOW_AGL_FT, GO_AROUND_CLIMB_FT = 300, 200  # low on final, then climbing this much

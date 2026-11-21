@@ -19,6 +19,17 @@ def to_go_from_each(points: list[tuple[float, float]]) -> list[float]:
     return rest
 
 
+def flying_to(waypoints: tuple[Waypoint, ...], destination: tuple[float, float], lat: float, lon: float) -> int:
+    """The index of the waypoint the aircraft flies to: the end of the route leg it is nearest to (len(waypoints)
+    for the destination)."""
+    points = [(w.lat, w.lon) for w in waypoints] + [destination]
+    if len(points) == 1:
+        return 0
+    proj = LocalProjection(lat, lon)
+    here, xy = proj.xy(lat, lon), [proj.xy(*p) for p in points]
+    return 1 + min(range(len(points) - 1), key=lambda i: point_segment_distance(here, xy[i], xy[i + 1]))
+
+
 def track_to_go_nm(waypoints: tuple[Waypoint, ...], destination: tuple[float, float], lat: float,
                    lon: float, direct: str | None = None) -> float:
     """Nautical miles still to fly from (lat, lon) along the route to the destination; straight there without a
@@ -29,10 +40,8 @@ def track_to_go_nm(waypoints: tuple[Waypoint, ...], destination: tuple[float, fl
     if len(points) == 1:
         return distance_nm(lat, lon, *destination)
     rest = to_go_from_each(points)
-    proj = LocalProjection(lat, lon)
-    here, xy = proj.xy(lat, lon), [proj.xy(*p) for p in points]
-    leg = min(range(len(points) - 1), key=lambda i: point_segment_distance(here, xy[i], xy[i + 1]))
-    along = distance_nm(lat, lon, *points[leg + 1]) + rest[leg + 1]
+    to = flying_to(waypoints, destination, lat, lon)
+    along = distance_nm(lat, lon, *points[to]) + rest[to]
     fix = next((i for i, w in enumerate(waypoints) if w.ident == direct), None)
     if fix is None:
         return along
