@@ -58,6 +58,20 @@ def point_segment_distance(p: Point, a: Point, b: Point) -> float:
     return distance(p, (a[0] + t * ab[0], a[1] + t * ab[1]))
 
 
+
+def alongside_distance(p: Point, a: Point, b: Point, beyond_m: float) -> float:
+    """How far p is sideways from the segment a-b, if it is beside it (up to beyond_m past either end); farther past
+    an end: infinity."""
+    ab = (b[0] - a[0], b[1] - a[1])
+    length = math.hypot(*ab)
+    if length == 0:
+        return distance(p, a)
+    along = ((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1]) / length
+    if along < -beyond_m or along > length + beyond_m:
+        return math.inf
+    return abs((p[0] - a[0]) * ab[1] - (p[1] - a[1]) * ab[0]) / length
+
+
 def segment_distance_nm(lat: float, lon: float, a: tuple[float, float], b: tuple[float, float]) -> float:
     """How far (lat, lon) is from the line a-b, flat around the point: fine up to a few hundred nm."""
     proj = LocalProjection(lat, lon)

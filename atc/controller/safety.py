@@ -1,5 +1,5 @@
 """Where an aircraft on the ground must not be without a clearance: past the runway-holding position."""
-from atc.airport.geo import distance, point_segment_distance
+from atc.airport.geo import distance
 from atc.airport.model import Airport, Runway
 from atc.airport.taxi import TaxiGraph
 
@@ -18,13 +18,13 @@ class RunwayZones:
             self.zones.append((rwy, a, b, rwy.ends[0].name))
 
     def runway_at(self, lat: float, lon: float) -> Runway | None:
-        """The runway whose protected area this point is in, if any. Standing at a hold-short point never counts:
-        beyond a runway end, the distance to the centreline segment is measured to the end, not sideways."""
+        """The runway whose protected area this point is in, if any. Standing at a hold-short point never counts,
+        nor past a runway end (TaxiGraph.strip_distance)."""
         p = self.graph.proj.xy(lat, lon)
         if any(distance(p, self.graph.nodes[n]) <= AT_HOLD_SHORT_M for n in self.graph.hold_short):
             return None
-        inside = [(point_segment_distance(p, a, b), rwy) for rwy, a, b, name in self.zones
-                  if point_segment_distance(p, a, b) < self.graph.strip_limit(name, p)]
+        inside = [(d, rwy) for rwy, a, b, name in self.zones
+                  if (d := self.graph.strip_distance(name, p)) < self.graph.strip_limit(name, p)]
         return min(inside, key=lambda d_r: d_r[0])[1] if inside else None
 
 

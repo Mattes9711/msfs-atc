@@ -277,3 +277,19 @@ def test_past_a_hold_line_a_farther_hold_point_close_by_does_not_matter():
     assert zones.runway_at(*ll(1060, 170)) is None
     assert zones.runway_at(*ll(1000, 60)).ends[0].name == "09"  # short of Z's hold line
     assert zones.runway_at(*ll(1060, -170)) is None  # the other side: no hold lines there, the median (138 m)
+
+
+def test_past_a_runway_end_is_off_the_runway():
+    # EDDV, the emulator, 2026-11-21: taxiway L passes 36 m past the end of 09C, 39 m beside its line, with no hold
+    # line there and no crossing in the taxi clearance; measured to the end it was inside the strip: stop immediately
+    from tests.test_taxi import ll
+    a = airport([RWY_09_27], [
+        path((1000, 90), (1000, 300), "A", start="HSND"), path((1000, 300), (-40, 300), "L"),
+        path((-40, 300), (-40, -300), "L")], gate=(-40, -300))
+    s = Session(a)
+    zones = RunwayZones(a, s.atc.taxi)
+    assert zones.runway_at(*ll(-40, 30)) is None  # on L, past the end of 09
+    assert zones.runway_at(*ll(-5, 30)).ends[0].name == "09"  # at the very end, still on it
+    assert zones.runway_at(*ll(1000, 60)).ends[0].name == "09"  # beside it, short of A's hold line
+    route = s.atc.taxi.route(s.atc.taxi.nearest_node(*ll(-40, 300)), s.atc.taxi.nearest_node(*ll(-40, -300)))
+    assert route.taxiways == ["L"] and route.crossings == []

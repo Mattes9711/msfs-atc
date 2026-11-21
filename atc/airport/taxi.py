@@ -6,7 +6,8 @@ import statistics
 from collections import defaultdict
 from dataclasses import dataclass
 
-from atc.airport.geo import LocalProjection, Point, distance, point_segment_distance, segments_cross
+from atc.airport.geo import (LocalProjection, Point, alongside_distance, distance, point_segment_distance,
+                             segments_cross)
 from atc.airport.model import Airport
 
 NAME_CHANGE_PENALTY_M = 150  # so "via A, B" beats a slightly shorter "via A, A3, A, B2, B"
@@ -18,6 +19,7 @@ STRIP_MARGIN_M = 10  # … within its hold lines, give or take this
 HOLD_LINE_MARGIN_M = 5  # an aircraft *at* the holding point is not on the runway
 DEFAULT_CLEARANCE_M = 30  # beyond the runway edge, when the scenery has no hold-short points
 LOCAL_HOLD_M = 250  # hold-short points this close (same side) set the strip's edge: the innermost one
+RUNWAY_END_MARGIN_M = 10  # past a runway end by more than this, an aircraft is off the runway
 FT_TO_M = 0.3048
 
 
@@ -121,7 +123,16 @@ class TaxiGraph:
             self.strip_limit_m[name] = (statistics.median(d for _, d, _ in holds) - HOLD_LINE_MARGIN_M if holds
                                         else rwy.width_ft * FT_TO_M / 2 + DEFAULT_CLEARANCE_M)
             self.in_strip[name] = {n for n in self.adjacent if n not in self.hold_short
-                                   and point_segment_distance(self.nodes[n], r1, r2) < self.strip_limit(name, n)}
+                                   and self.strip_distance(name, n) < self.strip_limit(name, n)}
+
+    def strip_distance(self, runway: str, at: int | tuple[float, float]) -> float:
+        """How far a node or a point (x, y) is from the runway's centreline, sideways; past an end it is off the
+        runway (infinity): the hold lines are beside the runway, and a crossing is one of its centreline. EDDV, the
+        emulator, 2026-11-21: taxiway L passes 36 m past the end of 09C, 39 m beside its line, with no hold line;
+        measured to the end, 53 m against a strip of 51 m, the aircraft was on the runway: stop immediately."""
+        p = self.nodes[at] if isinstance(at, int) else at
+        _, _, r1, r2 = next(r for r in self._runways if r[0] == runway)
+        return alongside_distance(p, r1, r2, RUNWAY_END_MARGIN_M)
 
     def strip_limit(self, runway: str, at: int | tuple[float, float]) -> float:
         """How far from the centreline the runway's strip ends at a node or a point (x, y): at the innermost hold
