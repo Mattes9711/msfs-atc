@@ -156,3 +156,16 @@ def test_e3b_into_the_zone_without_a_clearance_a_hint_once():
     assert airborne_at(f, 180, 5, 1400, field=CROSS) == []
     airborne_at(f, 0, 9, 1400, field=CROSS)  # out again
     assert "EDXV" in f.atc.crossed and f.atc.crossing_ahead() is None
+
+
+def test_an_exit_point_outside_the_zone_is_still_reported():
+    # Hamburg's Whiskey one, 1 nm outside its zone: Tower let the flight go at the zone's edge, before W1
+    far = controlled("EDXV", "Victor", 53.0 + 20 / 60, (Frequency("T", "Victor", TWR_V),),
+                     (("NOVMR", 0, 10), ("SIERA", 180, 5)))
+    f = on_the_way(far)
+    cleared(f)
+    airborne_at(f, 180, 5, 1400, field=far)
+    assert airborne_at(f, 180, 3, 1400, field=far) == [] and f.atc.ctr_point.code == "N"  # Sierra passed
+    assert airborne_at(f, 0, 8.5, 1400, field=far) == [] and f.atc.ctr_stage == "crossing"  # out, November ahead
+    assert airborne_at(f, 0, 10, 1400, field=far) == []
+    assert airborne_at(f, 0, 11, 1400, field=far) == [f"{SHORT}, leaving the control zone, frequency change approved"]

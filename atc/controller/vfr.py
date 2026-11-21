@@ -2,8 +2,8 @@
 controller.py), split off to keep the files short; it uses the controller's state through self.
 
 Departure (E1): with the takeoff clearance Tower says how to leave the zone, "leave the control zone via November,
-one thousand five hundred feet or below, squawk 7000", and "report November". At the point (or out of the zone)
-Tower lets the flight go: "leaving the control zone, frequency change approved".
+one thousand five hundred feet or below, squawk 7000", and "report November". At the point (or out of the zone,
+unless the point lies outside it) Tower lets the flight go: "leaving the control zone, frequency change approved".
 Arrival (E2): the inbound call to the destination's Tower gets "enter the control zone via Sierra, one thousand five
 hundred feet or below, report Sierra"; at Sierra "join right downwind runway 25, report downwind"; on downwind
 "report final"; on final the landing clearance. No Approach, no Departure, no radar vectors.
@@ -48,6 +48,7 @@ ZONE_STAGES = ("in", "joining", "final_due", "final")
 ZONE_SEARCH_NM = 15  # fields this close to the line origin-destination may have a zone on the way (E3)
 ZONE_NEAR_NM = 2  # a zone this close to the line is on the way
 CROSSING_CALL_NM = 10  # this close to a zone on the way: the suggestion to request the crossing
+BEYOND_POINT_NM = 2  # a point outside the zone: this much farther out than it, the flight is let go all the same
 
 
 @dataclass(frozen=True)
@@ -245,7 +246,7 @@ class VfrMixin:
         inside = in_zone(origin, state.lat, state.lon, state.alt_msl_ft)
         if check := self._ctr_altitude_check(origin, tower, inside, state):
             return check
-        if not inside or self._ctr_passed(state):
+        if self._ctr_passed(state) or (not inside and not self._ctr_point_ahead(origin, state)):
             return self._ctr_leave(tower, state)
         return []
 
@@ -420,7 +421,7 @@ class VfrMixin:
             if self.ctr_point is self.ctr_exit:
                 return self._ctr_leave(tower, state)
             self._crossing_next()
-        if self.ctr_entered and not inside:
+        if self.ctr_entered and not inside and not self._ctr_point_ahead(field, state):
             return self._ctr_leave(tower, state)
         return []
 
@@ -442,6 +443,16 @@ class VfrMixin:
         nm = distance_nm(state.lat, state.lon, p.lat, p.lon)
         self.ctr_closest = min(self.ctr_closest, nm)
         return self.ctr_closest <= POINT_PASSED_NM and nm > self.ctr_closest + PASSED_MARGIN_NM
+
+    def _ctr_point_ahead(self, airport: Airport, state: AircraftState) -> bool:
+        """The point to report lies outside the zone and isn't reached yet (EDDH's Delta, Lubeck's Lima 2 to 3 nm
+        out): out of the zone, Tower still waits for its report. Not once the flight is well beyond it (another
+        way out)."""
+        p = self.ctr_point.point if self.ctr_point else None
+        if p is None:
+            return False
+        out = zone_distance_nm(airport, p.lat, p.lon)
+        return out > 0 and zone_distance_nm(airport, state.lat, state.lon) <= out + BEYOND_POINT_NM
 
     def _ctr_tick(self, state: AircraftState) -> list[Response] | None:
         """tick() during a zone flight. None: none now, the rest of tick() goes on."""

@@ -104,6 +104,28 @@ def test_e1_too_high_in_the_zone_then_out_over_the_top():
     assert airborne_at(f, 0, 3, 2600) == [f"{SHORT}, leaving the control zone, frequency change approved"]
 
 
+FAR_POINT = replace(ORIGIN, vfr_points=(VfrPoint("NOVMR", *destination_point(ORIGIN.lat, ORIGIN.lon, 0, 10)),))
+
+
+def test_e1_a_point_outside_the_zone_is_still_reported():
+    # EDDH's Delta, Lubeck's Lima: 2 to 3 nm outside the zone, Tower let the flight go at the zone's edge (8 nm)
+    f = Flight(FAR_POINT, DEST)
+    readback_departure(f)
+    airborne_at(f, 0, 1, 800)
+    assert airborne_at(f, 0, 8.5, 1400) == [] and f.atc.ctr_stage == "out"  # out of the zone, November ahead
+    assert suggestion(f.atc)["text"] == f"Tango Tower, {SHORT}, November"
+    assert airborne_at(f, 0, 10, 1400) == []
+    assert airborne_at(f, 5, 11, 1400) == [f"{SHORT}, leaving the control zone, frequency change approved"]
+
+
+def test_e1_well_beyond_a_point_outside_the_zone_the_flight_is_let_go():
+    f = Flight(FAR_POINT, DEST)
+    readback_departure(f)
+    airborne_at(f, 0, 1, 800)
+    assert airborne_at(f, 90, 9, 1400) == []  # out to the east, 1 nm out of the zone
+    assert airborne_at(f, 90, 12.5, 1400) == [f"{SHORT}, leaving the control zone, frequency change approved"]
+
+
 def test_e1_not_before_the_readback():
     f = Flight(ORIGIN, DEST)
     ready(f)
