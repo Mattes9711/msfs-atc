@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import pytest
 
+from atc.controller import vectors
 from atc.phraseology import spoken
 from tests.test_air_flow import MUNICH_APPROACH, cleared_for_takeoff, fly, s_total
 from tests.test_enroute import CS
@@ -51,6 +52,6 @@ def test_the_transition_without_its_speed_limit_and_the_intercept_without_a_spee
     assert confirmed(s.say(MUNICH_APPROACH, "descend 5000 feet, Lufthansa 4AB"))
     assert downwind(s, eddm, 4, 50) == [] and downwind(s, eddm, 9, 100) == []
     intercept = magnetic(eddm, end.heading_true + 30)
-    assert downwind(s, eddm, 11.2, 150) == [
+    assert downwind(s, eddm, vectors.BASE_ALONG_NM - vectors.BASE_TURN_LEAD_NM + 0.2, 150) == [
         f"{CS}, turn left heading {spoken.heading(intercept)}, maintain fife thousand feet until established, "
         "cleared ILS approach runway zero eight right"]

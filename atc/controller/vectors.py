@@ -23,7 +23,7 @@ import math
 
 from atc.airport.geo import bearing_deg, destination_point, distance_nm
 
-BASE_ALONG_NM = 12  # where the base leg is: far enough out to be established by about 10 NM
+BASE_ALONG_NM = 14  # where the base leg is: the intercept 2.5 nm beside the centreline meets it about 10 NM out
 DOWNWIND_NM = 5  # the downwind's distance beside the centreline
 BASE_WITHIN_NM = 2  # this close to the base point: turn base
 BASE_TURN_LEAD_NM = 1  # out on the downwind the base turn this much before BASE_ALONG_NM: the turn takes it there
@@ -31,8 +31,8 @@ INTERCEPT_ACROSS_NM = 2.5  # this close beside the centreline on base: intercept
 BASE_LEG_MIN_NM = 2  # less than this left to INTERCEPT_ACROSS_NM when the base turn is due: no base leg, the
 # intercept heading and the approach clearance at once (emulator, 2026-11-19: a downwind 3.8-4.1 nm beside the
 # centreline, the turn took most of it, the intercept came 16-24 s after the base turn in the same direction)
-STRAIGHT_IN_ALONG_NM = 14  # farther out in front than this: no downwind, straight towards the final
-ESTABLISHED_BY_NM = 8  # a straight-in intercept must meet the centreline at least this far out
+STRAIGHT_IN_ALONG_NM = 16  # farther out in front than this: no downwind, straight towards the final
+ESTABLISHED_BY_NM = 10  # a straight-in intercept must meet the centreline at least this far out
 CORRECT_DEG = 20  # the way to the base point this far off the assigned heading: a corrected heading
 CORRECT_EVERY_S = 30  # not more often than this
 CORRECT_NEAR_NM = 5  # this close to the base point no correction: the bearing swings there, and the base turn

@@ -60,9 +60,9 @@ PILOT> /com 118.830
        (COM1 118.830: Munich Approach)
 PILOT> Munich Approach, Lufthansa 4AB, descending flight level 100
        (understood: readback, callsign DLH4AB (yours), flight_level=100)
-ATC:   Lufthansa four Alfa Bravo, Munich Approach, descend altitude four thousand fife hundred feet, QNH one zero one niner, speed two two zero knots, fly heading one eight fife, vectors ILS approach runway zero eight right
-PILOT> descend 4500 feet, QNH 1019, speed 220 knots, heading 185, Lufthansa 4AB
-       (understood: readback, callsign DLH4AB (yours), altitude_ft=4500 heading=185 speed_kt=220 qnh=1019)
+ATC:   Lufthansa four Alfa Bravo, Munich Approach, descend altitude four thousand fife hundred feet, QNH one zero one niner, speed two two zero knots, fly heading one niner zero, vectors ILS approach runway zero eight right
+PILOT> descend 4500 feet, QNH 1019, speed 220 knots, heading 190, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), altitude_ft=4500 heading=190 speed_kt=220 qnh=1019)
        (readback correct)
 ATC:   Lufthansa four Alfa Bravo, readback correct
 # radar vectors, flown onto a 10 nm final

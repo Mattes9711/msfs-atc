@@ -99,7 +99,7 @@ def test_fly_the_transition_with_altitudes_speeds_and_vectors_at_its_end(eddh, e
     # The transition's downwind is 4 nm beside the centreline: no base leg (gone in the turn, K9), the intercept
     # heading and the clearance at once
     intercept = magnetic(eddm, end.heading_true + 30)
-    [cleared] = downwind(s, eddm, 11.2, 150)
+    [cleared] = downwind(s, eddm, vectors.BASE_ALONG_NM - vectors.BASE_TURN_LEAD_NM + 0.2, 150)
     assert cleared == (f"{CS}, turn left heading {spoken.heading(intercept)}, maintain fife thousand feet until "
                        "established, cleared ILS approach runway zero eight right, speed one eight zero knots")
 
@@ -112,9 +112,9 @@ def test_traffic_ahead_makes_the_downwind_longer(eddh, eddm):
     s.atc.pending = []
     assert downwind(s, eddm, 4, 50) == [] and s.atc.vector_leg == "downwind"
     ahead = SimpleNamespace(model="A320", title="", object_id=7, callsign="EWG12", airline="Eurowings")
-    s.atc._ahead_in_sequence = lambda state: [(14.0, ahead, "final")]  # 14 track miles to go
-    assert downwind(s, eddm, 11.2, 100) == []  # 3 nm behind it: base at 14 nm, not 12
-    [cleared] = downwind(s, eddm, 13.2, 150)
+    s.atc._ahead_in_sequence = lambda state: [(18.0, ahead, "final")]  # 18 track miles to go
+    assert downwind(s, eddm, 15.2, 100) == []  # 3 nm behind it: base at 18 nm, not 14
+    [cleared] = downwind(s, eddm, 17.2, 150)
     assert ", turn left heading " in cleared and "cleared ILS approach runway" in cleared
 
 

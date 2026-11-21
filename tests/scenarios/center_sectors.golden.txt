@@ -81,4 +81,4 @@ PILOT> /com 118.830
        (COM1 118.830: Munich Approach)
 PILOT> Munich Approach, Lufthansa 4AB, with you
        (understood: checkin, callsign DLH4AB (yours))
-ATC:   Lufthansa four Alfa Bravo, Munich Approach, descend altitude four thousand fife hundred feet, QNH one zero one niner, speed two two zero knots, fly heading one eight fife, vectors ILS approach runway zero eight right
+ATC:   Lufthansa four Alfa Bravo, Munich Approach, descend altitude four thousand fife hundred feet, QNH one zero one niner, speed two two zero knots, fly heading one niner zero, vectors ILS approach runway zero eight right

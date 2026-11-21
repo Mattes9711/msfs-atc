@@ -9,6 +9,7 @@ was dropped every second, so the crossing was asked for and cleared twice.
 """
 from dataclasses import replace
 
+from atc.controller import vectors
 from atc.controller.controller import Controller
 from atc.controller.suggest import suggestion
 from tests.test_air_flow import HAMBURG_APPROACH, MUNICH_TOWER, cleared_for_takeoff
@@ -76,15 +77,15 @@ def parked_state(airport):
 
 
 def cleared_on_base(eddh, eddm):
-    """Vectored, then cleared on the base leg 12 nm out, 2 nm beside the centreline, with an intercept heading."""
+    """Vectored, then cleared on the base leg (14 nm out), 2 nm beside the centreline, with an intercept heading."""
     s = arriving(eddh, eddm)
     end = eddm.runway_end(s.atc.arrival_runway)
     at(s, eddm, 0, 8, (end.heading_true + 180) % 360)
     check_in(s, eddm)
-    at(s, eddm, 12, 5, (end.heading_true + 180) % 360)
+    at(s, eddm, vectors.BASE_ALONG_NM, 5, (end.heading_true + 180) % 360)
     s.tick(now=100)  # the base turn
     read_back(s)
-    at(s, eddm, 12, 2, (end.heading_true + 90) % 360)
+    at(s, eddm, vectors.BASE_ALONG_NM, 2, (end.heading_true + 90) % 360)
     [cleared] = s.tick(now=200)
     assert "cleared ILS approach runway" in cleared
     read_back(s)

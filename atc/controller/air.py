@@ -380,8 +380,12 @@ class AirMixin:
         return end, end.heading_true, distance_nm(end.lat, end.lon, state.lat, state.lon), offset
 
     def _on_final(self, state: AircraftState) -> bool:
-        _, _, dist, offset = self._final_geometry(state)
-        return dist <= FINAL_CONE_NM and abs(offset) <= FINAL_CONE_DEG
+        """In the cone in front of the runway and flying towards it: a downwind 4 nm beside the centreline is in
+        the cone 15 nm out, flying away from the runway, and is not on final."""
+        _, course, dist, offset = self._final_geometry(state)
+        heading_true = state.heading_mag + (self.destination.mag_var or 0)
+        towards = abs((heading_true - course + 540) % 360 - 180) <= 90
+        return dist <= FINAL_CONE_NM and abs(offset) <= FINAL_CONE_DEG and towards
 
     def _magnetic(self, true_heading: float) -> int:
         """True → magnetic, in the 5-degree steps ATC uses, 360 instead of 000."""
