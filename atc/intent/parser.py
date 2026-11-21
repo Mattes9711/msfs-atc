@@ -214,6 +214,9 @@ def extract_items(tokens: list[str], t: str) -> dict:
             m := re.search(r"\bshort (?:of )?(\d{1,2})([lrc])?(?: (left|right|center|centre))?\b", t)):
         items["hold_short"] = f"{int(m[1]):02}" + (m[2] or (m[3][0] if m[3] else "")).upper()
 
+    # "taxi to holding point bravo 1 runway 33": the holding point by name ("holding point runway 33" has none)
+    if m := re.search(r"\bholding point ([a-z]) ?(\d{1,2})([a-z])?\b", t):
+        items["holding_point"] = f"{m[1]}{m[2]}{m[3] or ''}".upper()
     if taxiways := _taxiways(tokens):
         items["taxiways"] = taxiways
     # "leave the control zone via November", "enter the control zone via S1", "... to the north" (Milestone 9 E):

@@ -14,7 +14,7 @@ def taxiing(eddh, eddm):
     s.say(GROUND, "Lufthansa 4AB, request clearance information alpha")
     s.say(GROUND, f"runway 23, 5000 feet, squawk {s.atc.squawk}, Lufthansa 4AB")
     s.say(GROUND, "Lufthansa 4AB, request taxi")
-    s.say(GROUND, "holding point runway 23, Lufthansa 4AB")
+    s.say(GROUND, "holding point A3 runway 23, Lufthansa 4AB")
     return s
 
 

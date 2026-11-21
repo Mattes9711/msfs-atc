@@ -93,3 +93,24 @@ def test_items_are_validated():
         rb.Item("atis", "b", "information bravo")  # not a readback item
     with pytest.raises(ValueError):
         rb.Item("squawk", 4721, "squawk four seven two one")  # squawk is text
+
+
+def test_the_named_holding_point_must_be_read_back():
+    # EDHL: "taxi to holding point Bravo one runway 33" read back as "taxi to holding point runway 33" was accepted
+    issued = rb.taxi("33", ["A"], holding_point="B1")
+    assert rb.instruction_text(issued) == "taxi to holding point Bravo one runway tree tree, via Alfa"
+    assert check(issued, "taxi to holding point runway 33 via alpha, Lufthansa 4AB").correction == \
+        "read back holding point"
+    assert check(issued, "taxi to holding point bravo 1 runway 33 via alpha, Lufthansa 4AB").ok
+    assert check(issued, "holding point B1, runway 33, via A, Lufthansa 4AB").ok
+    assert check(issued, "runway 33 via alpha, bravo 1, Lufthansa 4AB").ok  # named as the last taxiway
+    assert check(issued, "taxi to holding point delta 1 runway 33 via alpha, Lufthansa 4AB").correction == \
+        "negative, I say again, taxi to holding point Bravo one runway tree tree"
+    assert check(rb.taxi("33", ["A"]), "taxi to holding point runway 33 via alpha, Lufthansa 4AB").ok
+
+
+def test_the_named_holding_point_in_the_pilots_words():
+    from atc.controller.suggest import readback_part
+    parts = [readback_part(i) for i in rb.taxi("33", ["A"], holding_point="B1")]
+    assert parts == ["taxi to holding point B1", "runway 33", "via A"]
+    assert parse(", ".join(parts), "DLH4AB").items == {"holding_point": "B1", "runway": "33", "taxiways": ["A"]}

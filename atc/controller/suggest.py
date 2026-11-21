@@ -48,9 +48,11 @@ def readback_part(item: rb.Item) -> str:
     if key == "runway":
         before = phrase.split("runway")[0].strip()  # "taxi to holding point", "cross", "cleared ILS approach", ""
         before = {"cross": "crossing"}.get(before, before)
-        if before.startswith("taxi to holding point"):
-            before = "taxi to holding point"  # its name is spoken in the phrase; the runway is enough
+        if before.startswith("taxi to holding point"):  # named: "taxi to holding point B1" came with its own item
+            before = "" if before != "taxi to holding point" else before
         return f"{before} runway {value}".strip()
+    if key == "holding_point":
+        return f"taxi to holding point {value}"
     if key == "hold_short":
         return f"hold short runway {value}"
     if key == "taxiways":

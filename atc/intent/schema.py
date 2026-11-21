@@ -16,6 +16,7 @@ KINDS = (
 ITEMS = {
     "runway": str,  # "23", "08L"
     "hold_short": str,  # runway designator
+    "holding_point": str,  # the named holding point of a taxi clearance, "B1", "A13"
     "taxiways": list,  # ["A", "B3"]
     "flight_level": int,  # 120 = FL120
     "altitude_ft": int,

@@ -197,7 +197,7 @@ def test_atc_calls_without_a_transmission(eddh, eddm):
     session.step("Lufthansa 4AB, request clearance information alpha")
     session.step(f"runway 23, 5000 feet, squawk {s.atc.squawk}, Lufthansa 4AB")
     session.step("Lufthansa 4AB, request taxi")
-    session.step("holding point runway 23, Lufthansa 4AB")
+    session.step("holding point A3 runway 23, Lufthansa 4AB")
     out.lines.clear()
     goal = s.atc.taxi.latlon[s.atc.route_out.edges[-1].b]
     s.sim.update(lat=goal[0], lon=goal[1])  # the pilot taxied there in the sim
@@ -299,7 +299,7 @@ def test_the_live_loop_gives_the_controller_the_time_for_the_hold_short_hint(edd
     session.step("Lufthansa 4AB, request clearance information alpha")
     session.step(f"runway 15, 5000 feet, squawk {s.atc.squawk}, Lufthansa 4AB")
     session.step("Lufthansa 4AB, request taxi")
-    session.step("holding point runway 15 via A5, E1, hold short runway 05, Lufthansa 4AB")
+    session.step("holding point E1 runway 15 via A5, hold short runway 05, Lufthansa 4AB")
     [(_, hold)] = s.atc.crossing_points(s.atc.route_out)
     s.sim.update(lat=s.atc.taxi.latlon[hold][0], lon=s.atc.taxi.latlon[hold][1])
     out.lines.clear()

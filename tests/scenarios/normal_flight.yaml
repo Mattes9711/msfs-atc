@@ -15,7 +15,7 @@ steps:
   - cleared to Munich, Amluh 2G, runway 23, climb 5000 feet, squawk {squawk}, Lufthansa 4AB
   - Lufthansa 4AB, request push and start
   - Lufthansa 4AB, request taxi
-  - taxi to holding point runway 23, Lufthansa 4AB
+  - taxi to holding point A3 runway 23, Lufthansa 4AB
   - /goto holding
   - /com 121.280
   - Hamburg Tower, Lufthansa 4AB, holding point runway 23, ready for departure

@@ -24,7 +24,7 @@ def test_the_pushback_is_read_back(eddh):
 def test_no_switching_before_the_frequency_readback(eddh, eddm):
     s = strict(eddh, eddm)
     s.say(GROUND, "Lufthansa 4AB, request taxi")
-    s.say(GROUND, "taxi to holding point runway 23, Lufthansa 4AB")
+    s.say(GROUND, "taxi to holding point A3 runway 23, Lufthansa 4AB")
     goal = s.atc.taxi.latlon[s.atc.route_out.edges[-1].b]
     s.sim.update(lat=goal[0], lon=goal[1])
     s.tick()  # "contact Hamburg Tower one two one decimal two eight zero"

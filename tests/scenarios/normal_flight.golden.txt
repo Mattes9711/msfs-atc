@@ -18,8 +18,8 @@ ATC:   Lufthansa four Alfa Bravo, push and start approved, facing west
 PILOT> Lufthansa 4AB, request taxi
        (understood: request_taxi, callsign DLH4AB (yours))
 ATC:   Lufthansa four Alfa Bravo, taxi to holding point Alfa tree runway two tree
-PILOT> taxi to holding point runway 23, Lufthansa 4AB
-       (understood: readback, callsign DLH4AB (yours), runway=23)
+PILOT> taxi to holding point A3 runway 23, Lufthansa 4AB
+       (understood: readback, callsign DLH4AB (yours), runway=23 holding_point=A3)
        (readback correct)
 ATC:   Lufthansa four Alfa Bravo, readback correct
 PILOT> /goto holding

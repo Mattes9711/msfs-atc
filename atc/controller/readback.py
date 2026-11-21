@@ -11,8 +11,8 @@ from atc.intent.schema import ITEMS
 from atc.phraseology import spoken
 
 READ_BACK_NAMES = {
-    "runway": "runway", "hold_short": "hold short", "taxiways": "taxi route", "flight_level": "level",
-    "altitude_ft": "altitude", "heading": "heading", "speed_kt": "speed", "squawk": "squawk",
+    "runway": "runway", "holding_point": "holding point", "hold_short": "hold short", "taxiways": "taxi route",
+    "flight_level": "level", "altitude_ft": "altitude", "heading": "heading", "speed_kt": "speed", "squawk": "squawk",
     "frequency_khz": "frequency", "qnh": "QNH", "cleared_takeoff": "takeoff clearance",
     "cleared_land": "landing clearance", "line_up": "line up", "direct": "direct-to",
     "pushback": "pushback", "hold_position": "hold position", "vfr_point": "route",
@@ -44,7 +44,7 @@ class ReadbackResult:
         """What ATC says when the readback is not OK; None when it is."""
         parts = []
         if self.wrong:
-            parts.append("negative, I say again, " + ", ".join(i.phrase for i in self.wrong))
+            parts.append("negative, I say again, " + instruction_text(self.wrong))
         if self.missing:
             parts.append("read back " + spoken_list([READ_BACK_NAMES[i.key] for i in self.missing]))
         return ", ".join(parts) or None
@@ -56,7 +56,11 @@ def spoken_list(words: Sequence[str]) -> str:
 
 
 def check_readback(issued: Sequence[Item], heard: dict) -> ReadbackResult:
-    """Compare by value, never by wording: 'climb FL120' and 'up to one two zero' are the same readback."""
+    """Compare by value, never by wording: 'climb FL120' and 'up to one two zero' are the same readback. The holding
+    point named as the last taxiway ("via A5, E1") is named all the same."""
+    point = next((i.value for i in issued if i.key == "holding_point"), None)
+    if point and "holding_point" not in heard and heard.get("taxiways", [None])[-1:] == [point]:
+        heard = {**heard, "holding_point": point}
     wrong = tuple(i for i in issued if i.key in heard and not same(i.key, heard[i.key], i.value))
     missing = tuple(i for i in issued if i.key not in heard)
     return ReadbackResult(wrong, missing)
@@ -76,7 +80,8 @@ def same(key: str, heard, value) -> bool:
 
 
 def instruction_text(items: Sequence[Item]) -> str:
-    return ", ".join(i.phrase for i in items)
+    """The items as ATC says them; two items said in one phrase (runway and holding point) said once."""
+    return ", ".join(dict.fromkeys(i.phrase for i in items))
 
 
 # Builders: one per kind of instruction, so the controller never assembles phrases by hand.
@@ -121,9 +126,12 @@ def qnh(hpa: int) -> Item:
 
 def taxi(runway: str, taxiways: Sequence[str] = (), hold_short: str | None = None,
          holding_point: str | None = None) -> list[Item]:
+    """"taxi to holding point Bravo one runway three three": the holding point's name is read back too (it is the
+    clearance limit); it is said in the runway's phrase."""
     point = f"{spoken.spell(holding_point)} " if holding_point else ""
-    return [Item("runway", runway, f"taxi to holding point {point}runway {spoken.runway(runway)}"),
-            *taxi_to_stand(taxiways, hold_short)]
+    phrase = f"taxi to holding point {point}runway {spoken.runway(runway)}"
+    named = [Item("holding_point", holding_point, phrase)] if holding_point else []
+    return [*named, Item("runway", runway, phrase), *taxi_to_stand(taxiways, hold_short)]
 
 
 def taxi_to_stand(taxiways: Sequence[str] = (), hold_short: str | None = None) -> list[Item]:

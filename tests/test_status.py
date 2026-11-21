@@ -34,7 +34,7 @@ def test_a_handoff_points_at_the_next_controller(eddh, eddm):
     s.say(GROUND, "Lufthansa 4AB, request clearance information alpha")
     s.say(GROUND, f"runway 23, 5000 feet, squawk {s.atc.squawk}, Lufthansa 4AB")
     s.say(GROUND, "Lufthansa 4AB, request taxi")
-    s.say(GROUND, "holding point runway 23, Lufthansa 4AB")
+    s.say(GROUND, "holding point A3 runway 23, Lufthansa 4AB")
     goal = s.atc.taxi.latlon[s.atc.route_out.edges[-1].b]
     s.sim.update(lat=goal[0], lon=goal[1])
     st = status(s)  # Ground: "contact Hamburg Tower"

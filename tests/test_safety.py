@@ -31,7 +31,7 @@ def taxiing(eddh, eddm):
     s.say(GROUND, "Lufthansa 4AB, request clearance information alpha")
     s.say(GROUND, f"runway 23, 5000 feet, squawk {s.atc.squawk}, Lufthansa 4AB")
     s.say(GROUND, "Lufthansa 4AB, request taxi")
-    s.say(GROUND, "holding point runway 23, Lufthansa 4AB")
+    s.say(GROUND, "holding point A3 runway 23, Lufthansa 4AB")
     return s
 
 
@@ -99,7 +99,7 @@ def at_the_crossing():
     assert s.say(121900, "Lufthansa 4AB, request taxi") == [
         "Lufthansa four Alfa Bravo, taxi to holding point Alfa fife runway two seven, via Alfa, "
         "hold short runway one eight"]
-    s.say(121900, "runway 27 via alpha alpha 5, hold short runway 18, Lufthansa 4AB")
+    s.say(121900, "holding point alpha 5 runway 27 via alpha, hold short runway 18, Lufthansa 4AB")
     [(runway_name, hold)] = s.atc.crossing_points(s.atc.route_out)
     assert runway_name == "18"
     s.sim.update(lat=s.atc.taxi.latlon[hold][0], lon=s.atc.taxi.latlon[hold][1], ground_speed_kt=0)

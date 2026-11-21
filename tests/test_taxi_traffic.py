@@ -16,7 +16,7 @@ def taxiing(eddh, eddm):
     s.say(GROUND, f"cleared to Munich, Amluh 2G, runway 23, climb 5000 feet, squawk {s.atc.squawk}, Lufthansa 4AB")
     s.say(GROUND, "Lufthansa 4AB, request push and start")
     s.say(GROUND, "Lufthansa 4AB, request taxi")
-    s.say(GROUND, "taxi to holding point runway 23, Lufthansa 4AB")
+    s.say(GROUND, "taxi to holding point A3 runway 23, Lufthansa 4AB")
     assert s.atc.phase == "taxi" and s.atc.route_out is not None
     return s
 

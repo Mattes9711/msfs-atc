@@ -13,7 +13,7 @@ steps:
   - cleared to Munich, runway 15, climb 5000 feet, squawk {squawk}, Lufthansa 4AB
   - Lufthansa 4AB, request push and start
   - Lufthansa 4AB, request taxi
-  - taxi to holding point runway 15 via A5, E1, hold short runway 05, Lufthansa 4AB
+  - taxi to holding point E1 runway 15 via A5, hold short runway 05, Lufthansa 4AB
   - comment: at the hold short of runway 05/23, ATC waits for the report
   - /goto crossing
   - Hamburg Ground, Lufthansa 4AB, holding short runway 05

@@ -44,7 +44,7 @@ def test_pushback_complete_is_answered(eddh, eddm):
 def test_tower_check_in_at_the_holding_point_is_answered(eddh, eddm):
     s = cleared(eddh, eddm)
     s.say(GROUND, "Lufthansa 4AB, request taxi")
-    s.say(GROUND, "taxi to holding point runway 23, Lufthansa 4AB")
+    s.say(GROUND, "taxi to holding point A3 runway 23, Lufthansa 4AB")
     goal = s.atc.taxi.latlon[s.atc.route_out.edges[-1].b]
     s.sim.update(lat=goal[0], lon=goal[1])
     s.tick()  # "contact Hamburg Tower"

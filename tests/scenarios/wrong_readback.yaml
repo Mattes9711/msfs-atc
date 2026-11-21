@@ -16,8 +16,8 @@ steps:
   - squawk {squawk}, Lufthansa 4AB
   - Lufthansa 4AB, request taxi
   - comment: wrong runway
-  - taxi to holding point runway 05, Lufthansa 4AB
-  - taxi to holding point runway 23, Lufthansa 4AB
+  - taxi to holding point A3 runway 05, Lufthansa 4AB
+  - taxi to holding point A3 runway 23, Lufthansa 4AB
   - /goto holding
   - /com 121.280
   - Hamburg Tower, Lufthansa 4AB, ready for departure

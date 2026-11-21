@@ -135,7 +135,7 @@ def test_the_beacon_means_ready_for_pushback_then_taxi_after_the_push(eddh, eddm
     f.run(5)
     assert f.said()[3] == "Hamburg Ground, Lufthansa 4AB, request taxi"
     f.run(10)
-    assert f.said()[4].startswith("taxi to holding point runway 23")  # read back
+    assert f.said()[4].startswith("taxi to holding point A3, runway 23")  # read back
     assert f.s.atc.phase == "taxi"
 
 

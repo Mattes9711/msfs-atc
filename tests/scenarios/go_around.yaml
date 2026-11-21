@@ -11,7 +11,7 @@ steps:
   - Hamburg Ground, Lufthansa 4AB, request IFR clearance to Munich, information alpha
   - cleared to Munich, runway 23, climb 5000 feet, squawk {squawk}, Lufthansa 4AB
   - Lufthansa 4AB, request taxi
-  - taxi to holding point runway 23, Lufthansa 4AB
+  - taxi to holding point A3 runway 23, Lufthansa 4AB
   - /goto holding
   - /com 121.280
   - Hamburg Tower, Lufthansa 4AB, ready for departure
