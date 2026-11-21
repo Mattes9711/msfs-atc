@@ -264,3 +264,16 @@ def test_a_hold_line_nearer_in_than_the_others_ends_the_runway_there():
     assert zones.runway_at(*ll(1800, 80)).ends[0].name == "09"  # short of it
     assert zones.runway_at(*ll(800, 150)).ends[0].name == "09"  # short of B's, 170 m out
     assert zones.runway_at(*ll(1000, 0)).ends[0].name == "09"  # on the centreline
+
+
+def test_past_a_hold_line_a_farther_hold_point_close_by_does_not_matter():
+    # EDDH, the emulator, 2026-11-21: past Z5O's hold line (86 m out), at 170 m, a hold point 200 m out was the
+    # nearest one; with its line as the edge the aircraft was back "on the runway": stop immediately
+    from tests.test_taxi import ll
+    a = airport([RWY_09_27], [
+        path((1000, 86), (1000, 300), "Z", start="HSND"), path((1100, 200), (1100, 300), "W", start="HSND"),
+        path((1000, 300), (1100, 300), "L")], gate=(1050, 300))
+    zones = RunwayZones(a, Session(a).atc.taxi)
+    assert zones.runway_at(*ll(1060, 170)) is None
+    assert zones.runway_at(*ll(1000, 60)).ends[0].name == "09"  # short of Z's hold line
+    assert zones.runway_at(*ll(1060, -170)) is None  # the other side: no hold lines there, the median (138 m)

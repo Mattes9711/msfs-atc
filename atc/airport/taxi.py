@@ -17,7 +17,7 @@ CROSSING_STEPS = 10  # how far a hold-short point's taxiway is followed to find 
 STRIP_MARGIN_M = 10  # … within its hold lines, give or take this
 HOLD_LINE_MARGIN_M = 5  # an aircraft *at* the holding point is not on the runway
 DEFAULT_CLEARANCE_M = 30  # beyond the runway edge, when the scenery has no hold-short points
-LOCAL_HOLD_M = 250  # a hold-short point this close sets the strip's edge there (one taxiway's hold line nearer in)
+LOCAL_HOLD_M = 250  # hold-short points this close (same side) set the strip's edge: the innermost one
 FT_TO_M = 0.3048
 
 
@@ -65,6 +65,11 @@ class TaxiRoute:
         return sum(e.length_m for e in taxi if not e.name) / total if total else 0.0
 
 
+def _left_of(p: tuple[float, float], a: tuple[float, float], b: tuple[float, float]) -> bool:
+    """Whether p lies left of the line a→b (looking from a to b)."""
+    return (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]) > 0
+
+
 class TaxiGraph:
     def __init__(self, airport: Airport):
         self.airport = airport
@@ -107,28 +112,29 @@ class TaxiGraph:
         # How far from each centreline its hold lines are, from the scenery's own hold-short points (they differ
         # per runway: ~60 m for small runways, ~90 m or more for big ones), and the nodes inside them
         self.strip_limit_m: dict[str, float] = {}
-        self._strip_holds: dict[str, list[tuple[tuple[float, float], float]]] = {}
+        self._strip_holds: dict[str, list[tuple[tuple[float, float], float, bool]]] = {}  # (xy, distance, left)
         self.in_strip: dict[str, set[int]] = {}
         for rwy, (name, _, r1, r2) in zip(airport.runways, self._runways):
-            holds = [(self.nodes[n], d) for n in self.hold_short
+            holds = [(self.nodes[n], d, _left_of(self.nodes[n], r1, r2)) for n in self.hold_short
                      if (d := point_segment_distance(self.nodes[n], r1, r2)) <= HOLD_SHORT_MAX_FROM_CENTERLINE_M]
             self._strip_holds[name] = holds
-            self.strip_limit_m[name] = (statistics.median(d for _, d in holds) - HOLD_LINE_MARGIN_M if holds
+            self.strip_limit_m[name] = (statistics.median(d for _, d, _ in holds) - HOLD_LINE_MARGIN_M if holds
                                         else rwy.width_ft * FT_TO_M / 2 + DEFAULT_CLEARANCE_M)
             self.in_strip[name] = {n for n in self.adjacent if n not in self.hold_short
                                    and point_segment_distance(self.nodes[n], r1, r2) < self.strip_limit(name, n)}
 
     def strip_limit(self, runway: str, at: int | tuple[float, float]) -> float:
-        """How far from the centreline the runway's strip ends at a node or a point (x, y): at the nearest
-        hold-short point's line, if one is close, else at the median of them all. EDHL, the emulator, 2026-11-19:
-        runway 07's hold lines are 166-171 m out, the one on taxiway C 98 m; with the median for all of them, an
-        aircraft that had vacated via C and passed its hold line was still "on the runway": stop immediately."""
+        """How far from the centreline the runway's strip ends at a node or a point (x, y): at the innermost hold
+        line close by on that side (past any of them is off the runway), else at the median of them all.
+        EDHL, the emulator, 2026-11-19: runway 07's hold lines are 166-171 m out, the one on taxiway C 98 m; with the
+        median for all of them, an aircraft that had vacated via C and passed its hold line was still "on the
+        runway": stop immediately. EDDH, 2026-11-21: past Z5O's hold line (86 m), a hold point 200 m out was the
+        nearest one; with only the nearest the aircraft was back on the runway."""
         p = self.nodes[at] if isinstance(at, int) else at
-        near = [(distance(p, xy), d) for xy, d in self._strip_holds[runway]]
-        nearest = min(near, default=None)
-        if nearest is None or nearest[0] > LOCAL_HOLD_M:
-            return self.strip_limit_m[runway]
-        return nearest[1] - HOLD_LINE_MARGIN_M
+        _, _, r1, r2 = next(r for r in self._runways if r[0] == runway)
+        left = _left_of(p, r1, r2)
+        near = [d for xy, d, side in self._strip_holds[runway] if side == left and distance(p, xy) <= LOCAL_HOLD_M]
+        return min(near) - HOLD_LINE_MARGIN_M if near else self.strip_limit_m[runway]
 
     def distance_m(self, node: int, lat: float, lon: float) -> float:
         return distance(self.nodes[node], self.proj.xy(lat, lon))
