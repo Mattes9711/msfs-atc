@@ -364,7 +364,7 @@ class AirMixin:
         items = [rb.altitude(self._approach_altitude(), self._verb(self._approach_altitude(), state))]
         if self.destination_metar and self.destination_metar.qnh_hpa:
             items.append(rb.qnh(self.destination_metar.qnh_hpa))
-        items += [rb.speed(APPROACH_SPEED_KT), rb.heading(heading)]
+        items += [*([rb.speed(APPROACH_SPEED_KT)] if self._speeds_given() else []), rb.heading(heading)]
         self._set_pending(items, station.key)
         approach_type = "ILS" if end.ils else "RNAV"
         return [self._say(station, f"{self.cs}, {station.name}, " + rb.instruction_text(items) +
@@ -449,6 +449,12 @@ class AirMixin:
         self._set_pending([item], station.key)
         return self._transmit(station, f"{self.cs}, {item.phrase}", state)
 
+    def _speeds_given(self) -> bool:
+        """Approach gives speeds (220 knots on the vectors, 180 on the intercept, the STAR's limits) only to aircraft
+        that fly them: a light aircraft (wake category L: C172, PA28, DA40) flies 90 to 120 knots and is left at its
+        own speed, as controllers do. An unknown type counts as an airliner."""
+        return wake.category(self.plan.aircraft or "") != "L"
+
     def _approach_altitude(self) -> int:
         """The altitude for the vectors to the final: the approach's final approach fix altitude (EDDM ILS 26R:
         5000 ft, Milestone 10 D), else 3000 ft above the airport, rounded up to 100 ft."""
@@ -470,23 +476,24 @@ class AirMixin:
         approach_type = "ILS" if end.ils else "RNAV"
         cleared = rb.Item("runway", end.name, f"cleared {approach_type} approach runway {spoken.runway(end.name)}")
         sequence = f"{seq}, " if (seq := self._sequence(state)) else ""  # "number two, traffic to follow …"
+        speed = [rb.speed(FINAL_SPEED_KT)] if self._speeds_given() else []
         if intercept and abs(offset) <= ON_COURSE_DEG:  # already on the localizer: no turn needed
-            items = [cleared, rb.speed(FINAL_SPEED_KT)]
+            items = [cleared, *speed]
             self._set_pending(items, station.key)
             return self._transmit(station, f"{self.cs}, {sequence}" + rb.instruction_text(items), state)
         if intercept:
             target = self._magnetic(course + (INTERCEPT_ANGLE if offset > 0 else -INTERCEPT_ANGLE))
             if target == self.vector_heading and abs((target - state.heading_mag + 540) % 360 - 180) <= 10:
                 # Already on the intercept heading (a straight-in): no turn, only the clearance (Milestone 10 F)
-                items = [cleared, rb.speed(FINAL_SPEED_KT)]
+                items = [cleared, *speed]
                 text = (f"{self.cs}, {sequence}maintain {spoken.altitude(self._approach_altitude())} until "
-                        f"established, {cleared.phrase}, {items[1].phrase}")
+                        f"established, " + ", ".join(i.phrase for i in items))
                 self._set_pending(items, station.key)
                 return self._transmit(station, text, state)
             turn = turn or vectors.turn_direction(state.heading_mag, target)
-            items = [rb.heading(target, turn), cleared, rb.speed(FINAL_SPEED_KT)]
+            items = [rb.heading(target, turn), cleared, *speed]
             text = (f"{self.cs}, {sequence}{items[0].phrase}, maintain {spoken.altitude(self._approach_altitude())} "
-                    f"until established, {cleared.phrase}, {items[2].phrase}")
+                    f"until established, " + ", ".join(i.phrase for i in items[1:]))
             self._set_pending(items, station.key)
             return self._transmit(station, text, state)
         return self._direct_approach_clearance(station, state, sequence)

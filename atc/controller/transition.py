@@ -138,7 +138,7 @@ class TransitionMixin:
             items.append(rb.altitude(floor, "descend"))
         ahead = [leg for leg in self.transition_legs[self.transition_at:] if leg.speed_kt]
         limit = ahead[0] if ahead else None
-        if (limit and limit.speed_kt < (self.transition_speed or STAR_SPEED_KT)
+        if (limit and self._speeds_given() and limit.speed_kt < (self.transition_speed or STAR_SPEED_KT)
                 and distance_nm(state.lat, state.lon, limit.lat, limit.lon) <= SPEED_AHEAD_NM):
             self.transition_speed = limit.speed_kt
             item = rb.speed(limit.speed_kt)
@@ -196,7 +196,7 @@ class TransitionMixin:
         heading = self._first_vector(end, state)
         items = [rb.heading(heading, vectors.turn_direction(state.heading_mag, heading))]
         if said:
-            if (self.transition_speed or STAR_SPEED_KT) > APPROACH_SPEED_KT:
+            if self._speeds_given() and (self.transition_speed or STAR_SPEED_KT) > APPROACH_SPEED_KT:
                 speed = rb.speed(APPROACH_SPEED_KT)
                 items.append(rb.Item(speed.key, speed.value, f"reduce {speed.phrase}"))
             self._set_pending(items, station.key)
