@@ -172,8 +172,35 @@ def test_e2_from_the_point_into_the_circuit_and_down():
     assert suggestion(f.atc)["text"] == f"Uniform Tower, {SHORT}, right downwind runway 09"
     assert f.say(TWR_B, f"Uniform Tower, {SHORT}, right downwind runway 09") == [f"{SHORT}, report final"]
     f.sim.circuit(DEST, DEST.runway_end("09"), "final")
+    assert f.tick() == []  # "report final" was asked for: Tower waits for the call (EDHL emulator run)
+    assert suggestion(f.atc)["text"] == f"Uniform Tower, {SHORT}, final runway 09"
+    [landing] = f.say(TWR_B, f"Uniform Tower, {SHORT}, final runway 09")
+    assert "runway zero niner, cleared to land" in landing and f.atc.phase == "landing"
+
+
+def test_e2_without_the_final_call_tower_clears_on_short_final():
+    f = inbound()
+    f.say(TWR_B, f"Uniform Tower, {FULL}, 12 miles south, 2500 feet, for landing")
+    f.say(TWR_B, f"Enter the control zone via Sierra, 1500 feet or below, runway 09, QNH 1019, {SHORT}")
+    f.say(TWR_B, f"Uniform Tower, {SHORT}, overhead Sierra")
+    f.say(TWR_B, f"join right downwind runway 09, {SHORT}")
+    f.say(TWR_B, f"Uniform Tower, {SHORT}, right downwind runway 09")
+    f.sim.on_final(DEST, DEST.runway_end("09"), 2)
+    assert f.tick() == []
+    f.sim.on_final(DEST, DEST.runway_end("09"), 0.9)
     [landing] = f.tick()
     assert "runway zero niner, cleared to land" in landing and f.atc.phase == "landing"
+
+
+def test_e2_turning_final_before_reporting_downwind_tower_clears():
+    f = inbound()
+    f.say(TWR_B, f"Uniform Tower, {FULL}, 12 miles south, 2500 feet, for landing")
+    f.say(TWR_B, f"Enter the control zone via Sierra, 1500 feet or below, runway 09, QNH 1019, {SHORT}")
+    f.say(TWR_B, f"Uniform Tower, {SHORT}, overhead Sierra")
+    f.say(TWR_B, f"join right downwind runway 09, {SHORT}")
+    f.sim.circuit(DEST, DEST.runway_end("09"), "final")
+    [landing] = f.tick()
+    assert "runway zero niner, cleared to land" in landing
 
 
 def test_e2_passing_the_point_tower_calls():

@@ -6,7 +6,7 @@ one thousand five hundred feet or below, squawk 7000", and "report November". At
 unless the point lies outside it) Tower lets the flight go: "leaving the control zone, frequency change approved".
 Arrival (E2): the inbound call to the destination's Tower gets "enter the control zone via Sierra, one thousand five
 hundred feet or below, report Sierra"; at Sierra "join right downwind runway 25, report downwind"; on downwind
-"report final"; on final the landing clearance. No Approach, no Departure, no radar vectors.
+"report final"; at that call the landing clearance (without it, on short final). No Approach, no Departure, no radar vectors.
 
 The points are the field's visual reporting points (Little Navmap's VFR waypoints); without any, a direction
 ("leave the control zone to the north"). Like the taxi route (Milestone 8 C) Tower watches: the altitude limit
@@ -45,6 +45,7 @@ PASSED_MARGIN_NM = 0.5
 ALTITUDE_MARGIN_FT = 300  # above the limit by more than this: "check altitude"
 COMPASS = ("north", "east", "south", "west")
 ZONE_STAGES = ("in", "joining", "final_due", "final")
+FINAL_LATE_NM = 1  # "report final" asked for but not called: this close in, Tower clears by itself
 ZONE_SEARCH_NM = 15  # fields this close to the line origin-destination may have a zone on the way (E3)
 ZONE_NEAR_NM = 2  # a zone this close to the line is on the way
 CROSSING_CALL_NM = 10  # this close to a zone on the way: the suggestion to request the crossing
@@ -313,6 +314,11 @@ class VfrMixin:
         return circuit_leg(dest, self.arrival_runway, state.lat, state.lon, (state.heading_mag + dest.mag_var) % 360,
                            state.alt_msl_ft, state.on_ground)
 
+    def _ctr_final_late(self, state: AircraftState) -> bool:
+        """On final without the asked-for call, this close in: Tower clears by itself (before VFR_GO_AROUND_NM)."""
+        end = self.destination.runway_end(self.arrival_runway)
+        return distance_nm(state.lat, state.lon, end.lat, end.lon) <= FINAL_LATE_NM
+
     def _ctr_final(self, station: Station, state: AircraftState, called: bool = False) -> list[Response]:
         self.phase, self.ctr_stage = "final", "final"
         return self._final_call(station, state, auto=not called)
@@ -470,6 +476,8 @@ class VfrMixin:
             return self._ctr_in_tick(state) if self.ctr_stage == "in" else []  # no descent, no Approach
         if self.phase == "approach":
             if self.ctr_stage in ("joining", "final_due") and self._ctr_leg(state) == "final":
+                if self.ctr_stage == "final_due" and not self._ctr_final_late(state):
+                    return []  # "report final" was asked for: wait for the call
                 return self._ctr_final(self.station("arrival_tower"), state)
             return []  # no speed control in the circuit
         if self.phase == "final":
