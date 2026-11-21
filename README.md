@@ -4,8 +4,9 @@ Voice ATC for Microsoft Flight Simulator 2020, running entirely on your own PC: 
 no cloud. You talk on push-to-talk; Clearance, Ground, Tower, Departure, Center and Approach answer in ICAO
 phraseology, with a voice of their own for each controller.
 
-> **Early test version (0.2.0).** Most of it has been flown in MSFS, the newest parts (VFR flights, the overlay,
-> live speech text, co-pilot calls, GSX, cabin sound) only in practice mode so far. Reports are welcome in the Issues.
+> **Early test version (0.3.0).** Most of it has been flown in MSFS; the newest parts (VFR flights, the overlay,
+> live speech text, co-pilot calls, GSX, cabin sound) so far only in practice mode and in the flight emulator.
+> Reports are welcome in the Issues.
 
 > **MSFS 2024: not tested yet.** It connects through SimConnect the same way, and MSFS ATC reads Little Navmap's
 > MSFS 2024 database while MSFS 2024 runs (load the scenery library for MSFS 2024 in Little Navmap 3.0.14 or
@@ -22,6 +23,8 @@ phraseology, with a voice of their own for each controller.
 - **The app window:** a flight-strip console with your frequencies and what to say next, a map drawn like a
   chart (taxi diagram at the airport, frequencies of the area wherever you move it), the words while you speak,
   and a small overlay over the sim (windowed or borderless mode).
+- **German airports** with their real stations from the VATGER datahub: Delivery, Apron East and West, a VFR
+  Tower.
 - **Readbacks are checked**, numbers spoken digit by digit; strict readbacks for training.
 - **Real traffic** from LiveTraffic, FSLTL or MSFS: runway in use from the traffic, give way and follow on the
   ground, departure and wake turbulence spacing, the approach sequence, the other pilots on the frequency.
@@ -48,7 +51,7 @@ Get `MSFS-ATC-<version>-win64.zip` from the [Releases](../../releases), unzip it
   starts with itself); otherwise install the MSFS SDK or set its path in Settings > Simulator
 - a microphone and a push-to-talk key or button
 
-On the first start it downloads the speech model (about 0.5 GB) and the voices (about 140 MB).
+On the first start it downloads the speech models (about 0.6 GB) and the voices (about 140 MB).
 
 ## From source
 

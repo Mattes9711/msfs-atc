@@ -27,7 +27,8 @@ What you need
 The first start
 ---------------
 MSFS ATC downloads what it needs once, with progress in the radio log:
-- the speech recognition model (whisper small.en, about 0.5 GB),
+- the speech recognition model (whisper small.en, about 0.5 GB) and a faster one for the words while you
+  speak (base.en, about 145 MB),
 - the ATC voice (Piper, about 79 MB) and the German cabin voice (about 63 MB).
 Until then you can type your transmissions.
 

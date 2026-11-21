@@ -1,6 +1,6 @@
 [project]
 name = "atc"
-version = "0.2.0"
+version = "0.3.0"
 description = "Voice ATC for Microsoft Flight Simulator 2020"
 license = "GPL-3.0-or-later"
 requires-python = ">=3.12"
