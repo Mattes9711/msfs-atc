@@ -9,6 +9,7 @@ from atc.controller.give_way import traffic_name
 from atc.controller import vectors, wake
 from atc.sim.traffic import M_PER_NM, Traffic
 from atc.controller.arrival import entry_fix, plan_arrival, spoken_arrival
+from atc.controller.transition import path_legs, path_to_go_nm
 from atc.flightplan.route import first_fix
 from atc.flightplan.track import flying_to, track_to_go_nm
 from atc.intent.schema import Intent
@@ -235,10 +236,29 @@ class AirMixin:
         vectored straight in and the aircraft was still at FL220 12 nm out). Compared with _top_of_descent_nm.
         Shorter still when the vectors to the landing runway are (atc/controller/vectors.py path_nm): the emulator's
         flight from the south to EDDH 05 was turned in at about straight + 7 nm and came 1560 ft high at 10 nm."""
+        end = self.destination.runway_end(self.arrival_runway) if self.arrival_runway else None
+        if (along := self._transition_to_go_nm(state, end)) is not None:
+            return along
         straight = distance_nm(state.lat, state.lon, self.destination.lat, self.destination.lon)
         path = min(self._track_to_go_nm(state), straight + VECTOR_ALLOWANCE_NM)
-        end = self.destination.runway_end(self.arrival_runway) if self.arrival_runway else None
         return min(path, vectors.path_nm(end, state.lat, state.lon)) if end else path
+
+    def _transition_to_go_nm(self, state: AircraftState, end) -> float | None:
+        """Along the arrival's transition when one with positions leads to the landing runway and the aircraft is on
+        its way along it (transition.path_to_go_nm); None when Approach vectors or there is none."""
+        arrival = self.arrival or self._expected_arrival()
+        if (end is None or arrival is None or arrival.transition is None or arrival.runway != self.arrival_runway
+                or self.vectoring or (self.transition_flown and self.transition_legs is None)):
+            return None
+        legs = path_legs(arrival)
+        if not legs:
+            return None
+        first = legs[0]
+        dest = (self.destination.lat, self.destination.lon)
+        on_route = any(w.ident == first.ident for w in self.plan.waypoints)
+        to_first = (self._track_to_go_nm(state) - track_to_go_nm(self.plan.waypoints, dest, first.lat, first.lon)
+                    if on_route else None)
+        return path_to_go_nm(legs, end, state.lat, state.lon, to_first)
 
     def descent_due_in_nm(self, state: AircraftState) -> float:
         """How far ahead the descent point is (<= 0: due now). For the airport the way left as Approach vectors it

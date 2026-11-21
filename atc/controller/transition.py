@@ -16,7 +16,7 @@ runway …", and the vectors come only after its last fix (Milestone 10 F).
 A part of Controller (atc/controller/controller.py), split off to keep the files short; it uses the controller's
 state through self.
 """
-from atc.airport.geo import LocalProjection, distance_nm, point_segment_distance
+from atc.airport.geo import LocalProjection, bearing_deg, distance_nm, point_segment_distance
 from atc.airport.procedures import Leg
 from atc.controller import readback as rb
 from atc.controller import vectors, wake
@@ -33,6 +33,7 @@ SPEED_AHEAD_NM = 12  # a speed limit this close ahead: "reduce speed …" now
 CLEARANCE_AHEAD_NM = 8  # a transition without vectors: the approach clearance this far before its end
 STAR_SPEED_KT = 250  # what the aircraft flies when Approach takes it: the speed below FL100
 TROMBONE_MAX_NM = 25  # the downwind is made longer for traffic ahead, up to this far out
+ON_THE_WAY_DEG = 45  # before the transition's first fix, heading within this of it: on the way to it
 
 
 def path_legs(arrival: Arrival) -> list[Leg]:
@@ -97,6 +98,31 @@ def off_path_nm(before: tuple[float, float], fix: tuple[float, float], lat: floa
     return point_segment_distance(proj.xy(lat, lon), proj.xy(*before), proj.xy(*fix)) / M_PER_NM
 
 
+def path_to_go_nm(legs: list[Leg], end, lat: float, lon: float, to_first_nm: float | None = None) -> float | None:
+    """The miles still to fly along the transition to the threshold (the user, 2026-11-21: the descent was planned
+    on a straight-in while Munich's LANDU transition to 08 is 75 nm and to 26 97 nm): to the fix flown to, along
+    the legs, then from the vectors fix as Approach vectors (vectors.path_nm), else straight to the threshold.
+    to_first_nm: the miles to the first fix while it is still ahead (along the route). None when the aircraft is
+    beside the transition, not on its way along it."""
+    if len(legs) < 2:
+        return None
+    points = [(leg.lat, leg.lon) for leg in legs]
+    target, off = nearest(points, lat, lon)
+    if to_first_nm is not None and to_first_nm > PASSED_NM:  # still ahead on the route, even when beside a leg
+        target, off = 0, distance_nm(lat, lon, *points[0])
+    if target == 0:
+        lead = off if to_first_nm is None else max(off, to_first_nm)
+    elif off > OFF_PATH_NM:
+        return None
+    else:
+        lead = distance_nm(lat, lon, *points[target])
+    along = sum(distance_nm(*points[i], *points[i + 1]) for i in range(target, len(points) - 1))
+    last = legs[-1]
+    tail = vectors.path_nm(end, last.lat, last.lon) if last.vectors else distance_nm(last.lat, last.lon, end.lat,
+                                                                                         end.lon)
+    return lead + along + tail
+
+
 class TransitionMixin:
     def _start_transition(self, station: Station, state: AircraftState) -> list[Response]:
         """Approach's first call when the aircraft is on its way along the transition: altitude, QNH, a speed when
@@ -111,7 +137,9 @@ class TransitionMixin:
             return []
         target, off = nearest([(leg.lat, leg.lon) for leg in legs], state.lat, state.lon)
         if off > OFF_PATH_NM:
-            return []
+            if not self._on_the_way_to(legs[0], state):
+                return []
+            target = 0
         self.phase, self.transition_flown, self.transition_station = "approach", True, station
         self.transition_legs, self.transition_at = legs, target
         self.transition_from = (state.lat, state.lon) if target == 0 else (legs[target - 1].lat, legs[target - 1].lon)
@@ -125,6 +153,16 @@ class TransitionMixin:
         said = [f"expect vectors {approach}"] if star else             [f"cleared transition {arrival.transition.name.title()}", f"expect {approach}"]
         text = ", ".join([*(i.phrase for i in items), *said])
         return [self._say(station, f"{self.cs}, {station.name}, {text}")]
+
+    def _on_the_way_to(self, fix: Leg, state: AircraftState) -> bool:
+        """Still before the transition's first fix and flying to it: sent direct to it, or heading within
+        ON_THE_WAY_DEG of it (the emulator's flight 2026-11-21: handed over 16 nm before LANDU, flying to it, and
+        Approach gave heading 220 instead of the transition)."""
+        if self.direct_fix == fix.ident:
+            return True
+        heading_true = (state.heading_mag + (self.destination.mag_var or 0)) % 360
+        off = abs((bearing_deg(state.lat, state.lon, fix.lat, fix.lon) - heading_true + 180) % 360 - 180)
+        return off <= ON_THE_WAY_DEG
 
     def _transition_items(self, state: AircraftState) -> list[rb.Item]:
         """What is due now: a lower altitude when the fixes ahead allow one, a speed limit coming close."""
