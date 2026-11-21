@@ -34,6 +34,8 @@ CLEARANCE_AHEAD_NM = 8  # a transition without vectors: the approach clearance t
 STAR_SPEED_KT = 250  # what the aircraft flies when Approach takes it: the speed below FL100
 TROMBONE_MAX_NM = 25  # the downwind is made longer for traffic ahead, up to this far out
 ON_THE_WAY_DEG = 45  # before the transition's first fix, heading within this of it: on the way to it
+DOWNWIND_DEG = 30  # a transition leg within this of the final's outbound course is its downwind
+EARLY_BASE_NM = 3  # the downwind's next fix this much farther out than the base turn: the base turn before it
 
 
 def path_legs(arrival: Arrival) -> list[Leg]:
@@ -200,6 +202,8 @@ class TransitionMixin:
                 or off_path_nm(self.transition_from, (fix.lat, fix.lon), state.lat, state.lon) > OFF_PATH_NM):
             self.transition_legs = None
             return self._vectors_instead(station, state)
+        if calls := self._early_base(station, state, fix, now):
+            return calls
         if (not legs[-1].vectors and not self.transition_star and self.transition_at == len(legs) - 1
                 and distance_nm(state.lat, state.lon, fix.lat, fix.lon) <= CLEARANCE_AHEAD_NM):
             self.transition_legs = None
@@ -208,6 +212,28 @@ class TransitionMixin:
             self._set_pending(items, station.key)
             return self._transmit(station, f"{self.cs}, " + rb.instruction_text(items), state)
         return []
+
+    def _early_base(self, station: Station, state: AircraftState, fix: Leg, now: float | None) -> list[Response]:
+        """On the transition's downwind the base turn as soon as it is due, not only at the downwind's last fix (the
+        emulator, 2026-11-21: Munich 08's LANDU transition runs on to DM420, 23 nm west of the field; the aircraft
+        flew 6 minutes at 5000 ft past the base turn). Controllers turn the aircraft in when the height and the
+        traffic allow: _base_along_nm."""
+        if self.transition_star or not self.transition_legs[-1].vectors:
+            return []
+        end = self.destination.runway_end(self.arrival_runway)
+        outbound = (end.heading_true + 180) % 360
+        course = bearing_deg(*self.transition_from, fix.lat, fix.lon)
+        if abs((course - outbound + 540) % 360 - 180) > DOWNWIND_DEG:
+            return []
+        along, across = vectors.frame(end, state.lat, state.lon)
+        fix_along, _ = vectors.frame(end, fix.lat, fix.lon)
+        base = self._base_along_nm(state) - vectors.BASE_TURN_LEAD_NM
+        if along < base or fix_along < base + EARLY_BASE_NM:
+            return []
+        self.transition_legs, self.vectoring, self.vector_own = None, station, True
+        self.vector_leg, self.vector_side, self.vector_at = "downwind", vectors.side_of(across), now
+        self.vector_heading = round(state.heading_mag / 5) * 5 % 360 or 360
+        return self._base_turn(station, state, end, across, now)
 
     def _transition_end(self, station: Station, state: AircraftState, last: Leg, now: float | None):
         """The vectors fix passed: Approach vectors from here, the downwind flown on the procedure's course until the
@@ -255,12 +281,14 @@ class TransitionMixin:
         return self._transmit(station, f"{self.cs}, {sequence}{cleared.phrase}", state)
 
     def _base_along_nm(self, state: AircraftState) -> float:
-        """How far out the base turn comes on the procedure's downwind: BASE_ALONG_NM, farther with an arrival ahead
-        so it is the spacing ahead after the turn (the "trombone")."""
-        ahead = self._ahead_in_sequence(state)
-        if not ahead:
-            return vectors.BASE_ALONG_NM
-        nm, t, _ = ahead[0]
-        need = wake.approach_spacing_nm(wake.category(t.model, t.title), wake.category(self.plan.aircraft or ""))
+        """How far out the base turn comes on the procedure's downwind: BASE_ALONG_NM; farther when the aircraft is
+        still high (vectors.energy_along_nm), or with an arrival ahead so it is the spacing ahead after the turn (the
+        "trombone"); TROMBONE_MAX_NM at the most."""
         _, across = vectors.frame(self.destination.runway_end(self.arrival_runway), state.lat, state.lon)
-        return min(TROMBONE_MAX_NM, max(vectors.BASE_ALONG_NM, nm + need + 1 - abs(across)))
+        along = max(vectors.BASE_ALONG_NM,
+                    vectors.energy_along_nm(state.alt_msl_ft - self.destination.elevation_ft, across))
+        if ahead := self._ahead_in_sequence(state):
+            nm, t, _ = ahead[0]
+            need = wake.approach_spacing_nm(wake.category(t.model, t.title), wake.category(self.plan.aircraft or ""))
+            along = max(along, nm + need + 1 - abs(across))
+        return min(TROMBONE_MAX_NM, along)

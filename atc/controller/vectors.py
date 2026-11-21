@@ -33,6 +33,8 @@ BASE_LEG_MIN_NM = 2  # less than this left to INTERCEPT_ACROSS_NM when the base 
 # centreline, the turn took most of it, the intercept came 16-24 s after the base turn in the same direction)
 STRAIGHT_IN_ALONG_NM = 16  # farther out in front than this: no downwind, straight towards the final
 ESTABLISHED_BY_NM = 10  # a straight-in intercept must meet the centreline at least this far out
+DESCENT_NM_PER_1000_FT = 3  # the 3:1 rule: 3 nm flown for each 1000 ft down
+ENERGY_MARGIN_NM = 4  # and these miles more to slow down to the final speed
 CORRECT_DEG = 20  # the way to the base point this far off the assigned heading: a corrected heading
 CORRECT_EVERY_S = 30  # not more often than this
 CORRECT_NEAR_NM = 5  # this close to the base point no correction: the bearing swings there, and the base turn
@@ -88,6 +90,12 @@ def path_nm(end, lat: float, lon: float) -> float:
     if straight_in(along, across):
         return abs(across) / math.sin(math.radians(30)) + along - abs(across) / math.tan(math.radians(30))
     return distance_nm(lat, lon, *base_point(end, across)) + DOWNWIND_NM + BASE_ALONG_NM
+
+
+def energy_along_nm(height_ft: float, across: float) -> float:
+    """How far out the base turn must come at the least for the height still to lose (above the field): the base
+    leg and the final are |across| + along miles, the 3:1 rule wants height/1000*3 and the slowing down."""
+    return max(0.0, height_ft) / 1000 * DESCENT_NM_PER_1000_FT + ENERGY_MARGIN_NM - abs(across)
 
 
 def turn_direction(from_heading: float, to_heading: float) -> str:

@@ -22,7 +22,8 @@ from atc.controller.common import (APPROACH_SPEED_KT, CENTER_HANDOFF_FT, CENTER_
                                    VECTOR_ALLOWANCE_NM,
                                    DESCENT_MARGIN_NM, DIRECT_MAX_NM, FINAL_CONE_DEG, FINAL_CONE_NM, FINAL_FIX_NM,
                                    FINAL_SPEED_KT, GAP_SHRINK_NM, INTERCEPT_ANGLE, MAX_FL,
-                                   ON_COURSE_DEG, PATTERN_AGL_FT, PATTERN_NM, SHORTCUTS, SHORTCUT_MIN_NM,
+                                   ON_COURSE_DEG, ON_FINAL_HEADING_DEG, PATTERN_AGL_FT, PATTERN_NM, SHORTCUTS,
+                                   SHORTCUT_MIN_NM,
                                    SHORTCUT_SKIPS, CENTER_TURNS_FT,
                                    SPACING_SPEED_KT, SPEED_CONTROL_UNTIL_NM, VFR_SQUAWK, Response,
                                    Station, center_station)
@@ -380,11 +381,13 @@ class AirMixin:
         return end, end.heading_true, distance_nm(end.lat, end.lon, state.lat, state.lon), offset
 
     def _on_final(self, state: AircraftState) -> bool:
-        """In the cone in front of the runway and flying towards it: a downwind 4 nm beside the centreline is in
-        the cone 15 nm out, flying away from the runway, and is not on final."""
+        """In the cone in front of the runway and flying towards the final course, within ON_FINAL_HEADING_DEG of
+        it: a downwind 4 nm beside the centreline is in the cone 15 nm out, flying away from the runway, and a base
+        leg 14 nm out 3.7 nm beside it, flying across (emulator, 2026-11-21: cleared there, onto the localizer
+        only 9.3 nm out); both are not on final."""
         _, course, dist, offset = self._final_geometry(state)
         heading_true = state.heading_mag + (self.destination.mag_var or 0)
-        towards = abs((heading_true - course + 540) % 360 - 180) <= 90
+        towards = abs((heading_true - course + 540) % 360 - 180) <= ON_FINAL_HEADING_DEG
         return dist <= FINAL_CONE_NM and abs(offset) <= FINAL_CONE_DEG and towards
 
     def _magnetic(self, true_heading: float) -> int:

@@ -27,6 +27,7 @@ FINAL_FIX_NM = 10
 # Radar vectors: downwind, base and intercept, see atc/controller/vectors.py (Milestone 8, H)
 INTERCEPT_ANGLE = 30
 FINAL_CONE_DEG, FINAL_CONE_NM = 15, 18
+ON_FINAL_HEADING_DEG = 60  # in the final cone and heading within this of the final course: on final
 ON_COURSE_DEG = 3  # this close to the extended centreline counts as established
 APPROACH_SPEED_KT, FINAL_SPEED_KT = 220, 180
 AIRBORNE_AGL_FT = 500
