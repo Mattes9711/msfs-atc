@@ -12,12 +12,20 @@ for 26R and for 26L). `approach_leg` holds the legs (`is_missed` the missed appr
 `transition_leg` the transitions, named after their first fix. Altitudes: "A" at, "+" at or above, "-" at or below,
 "B" between (altitude1 the top, altitude2 the bottom). Speeds: only "-", at or below.
 
+The legs' own coordinates (fix_laty, fix_lonx) are empty in Little Navmap's MSFS database (found 2026-11-21: all
+443810 transition legs), so each fix is looked up by its ident and region in the tables `waypoint`, `vor` and `ndb`,
+of several the one nearest the airport (terminal waypoints like DM429 exist once per airport). Without the positions
+Approach never followed a transition and the STAR's "LANDU at or below FL100" never moved the descent.
+
 LICENCE: the user's own database, read in place on their machine only; never shipped, nothing from it in the repo.
 """
 import sqlite3
 from dataclasses import dataclass
 
+from atc.airport.geo import distance_nm
+
 ALTITUDE = {"A": "at", "+": "at_or_above", "-": "at_or_below", "B": "between"}
+FIX_TABLES = {"W": "waypoint", "TW": "waypoint", "V": "vor", "TV": "vor", "N": "ndb", "TN": "ndb"}
 VECTORS = {"FM", "VM"}  # legs that end by "manual termination": the controller's vectors from there
 APPROACH_TYPES = ("ILS", "RNAV", "LOC", "VORDME", "VOR", "NDBDME", "NDB")  # preferred in this order
 
@@ -133,6 +141,7 @@ class Procedures:
 def load_procedures(con: sqlite3.Connection, ident: str) -> Procedures:
     """The airport's STARs and approaches, with their transitions; empty when the database has none."""
     stars, approaches = [], []
+    fixes = FixFinder(con, ident)
     rows = con.execute("select approach_id, type, suffix, runway_name, fix_ident, arinc_name from approach "
                        "where airport_ident = ? order by approach_id", (ident.upper(),)).fetchall()
     for r in rows:
@@ -142,12 +151,12 @@ def load_procedures(con: sqlite3.Connection, ident: str) -> Procedures:
         legs = con.execute("select * from approach_leg where approach_id = ? order by approach_leg_id",
                            (approach_id,)).fetchall()
         transitions = tuple(
-            Transition(t[1], tuple(_leg(dict(row)) for row in con.execute(
+            Transition(t[1], tuple(_leg(dict(row), fixes) for row in con.execute(
                 "select * from transition_leg where transition_id = ? order by transition_leg_id", (t[0],))))
             for t in con.execute("select transition_id, fix_ident from transition where approach_id = ? "
                                  "order by transition_id", (approach_id,)))
-        common = tuple(_leg(dict(row)) for row in legs if not row["is_missed"])
-        missed = tuple(_leg(dict(row)) for row in legs if row["is_missed"])
+        common = tuple(_leg(dict(row), fixes) for row in legs if not row["is_missed"])
+        missed = tuple(_leg(dict(row), fixes) for row in legs if row["is_missed"])
         if suffix == "A":
             stars.append(Procedure(fix_ident, "star", runway, common, transitions))
         else:
@@ -156,15 +165,55 @@ def load_procedures(con: sqlite3.Connection, ident: str) -> Procedures:
     return Procedures(ident.upper(), tuple(stars), tuple(approaches))
 
 
-def _leg(row: dict) -> Leg:
+class FixFinder:
+    """Where a procedure's fix is: by ident and region in the navaid tables, of several the nearest to the airport.
+    None when the database doesn't have it (an old one without the tables, a fix of another kind)."""
+
+    def __init__(self, con: sqlite3.Connection, airport: str):
+        self.con, self.found = con, {}
+        try:
+            row = con.execute("select laty, lonx from airport where ident = ?", (airport.upper(),)).fetchone()
+        except sqlite3.OperationalError:
+            row = None
+        self.near = (row[0], row[1]) if row else None
+
+    def position(self, kind: str | None, ident: str, region: str | None) -> tuple[float, float] | None:
+        tables = [FIX_TABLES[kind]] if kind in FIX_TABLES else ["waypoint", "vor", "ndb"]
+        key = (tuple(tables), ident, region)
+        if key not in self.found:
+            self.found[key] = self._look_up(tables, ident, region)
+        return self.found[key]
+
+    def _look_up(self, tables: list[str], ident: str, region: str | None) -> tuple[float, float] | None:
+        rows = []
+        for table in tables:
+            try:
+                rows += self.con.execute(f"select laty, lonx, region from {table} where ident = ?", (ident,)).fetchall()
+            except sqlite3.OperationalError:
+                continue  # no such table
+        if region and any(r[2] == region for r in rows):
+            rows = [r for r in rows if r[2] == region]
+        if not rows:
+            return None
+        if self.near is None:
+            return rows[0][0], rows[0][1]
+        best = min(rows, key=lambda r: distance_nm(r[0], r[1], *self.near))
+        return best[0], best[1]
+
+
+def _leg(row: dict, fixes: FixFinder | None = None) -> Leg:
     ident = row.get("fix_ident") or ""
     alt = ALTITUDE.get(row.get("alt_descriptor") or "")
     alt1, alt2 = row.get("altitude1") or 0, row.get("altitude2") or 0
-    has_fix = bool(ident) and (row.get("fix_laty") or row.get("fix_lonx"))
+    position = None
+    if ident and (row.get("fix_laty") or row.get("fix_lonx")):
+        position = (row["fix_laty"], row["fix_lonx"])
+    elif ident and fixes is not None and row.get("fix_type") != "R":  # a runway's threshold is not a navaid
+        position = fixes.position(row.get("fix_type"), ident, row.get("fix_region") or None)
     return Leg(
         ident=ident,
-        lat=row["fix_laty"] if has_fix else None,
-        lon=row["fix_lonx"] if has_fix else None,
+        lat=position[0] if position else None,
+        lon=position[1] if position else None,
         path=row.get("type") or "",
         alt=alt if alt and alt1 else None,
         alt_ft=round(alt1) if alt and alt1 else None,

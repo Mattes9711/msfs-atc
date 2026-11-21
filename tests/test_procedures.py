@@ -8,6 +8,7 @@ import pytest
 
 from atc.airport.json_data import JsonAirportData
 from atc.airport.littlenavmap import LittleNavmapAirportData
+from atc.airport.procedures import load_procedures
 
 LEG_COLUMNS = ("type text, fix_ident text, fix_laty real, fix_lonx real, alt_descriptor text, altitude1 real, "
                "altitude2 real, speed_limit_type text, speed_limit integer, course real")
@@ -148,3 +149,29 @@ def test_unknown_airport_and_old_databases(source, tmp_path):
     con.close()
     assert LittleNavmapAirportData(old).procedures("EXMP") is None
     assert JsonAirportData(tmp_path).procedures("EXMP") is None
+
+
+def test_fix_positions_from_the_navaid_tables():
+    """As in Little Navmap's MSFS database: the legs carry no coordinates, only ident, type and region. A fix
+    found twice is taken from its region, of several in it the nearest to the airport; a runway is no navaid."""
+    con = sqlite3.connect(":memory:")
+    con.row_factory = sqlite3.Row
+    con.executescript(SCHEMA.replace("course real", "course real, fix_type text, fix_region text") + """
+        create table waypoint (ident text, region text, airport_ident text, laty real, lonx real);
+        create table vor (ident text, region text, laty real, lonx real);
+        create table ndb (ident text, region text, laty real, lonx real);
+    """)
+    con.execute("insert into airport values (1, 'EXMP', 'EXAMPLE', 48.35, 11.79, 1487, 4.1)")
+    con.execute("insert into approach values (1, 'EXMP', '26R', 'GPS', 'A', 'TANGO2B', 'RW26R')")
+    con.executemany("insert into waypoint values (?, ?, ?, ?, ?)", [
+        ("TANGO", "XX", None, 48.60, 12.27), ("TANGO", "YY", None, 48.40, 11.90),  # the other region: nearer
+        ("DX411", "XX", "EXMP", 48.50, 12.20), ("DX411", "XX", "EOTH", 51.00, 7.00)])  # another airport's
+    con.execute("insert into vor values ('MIKEY', 'XX', 48.57, 11.60)")
+    con.executemany("insert into approach_leg (approach_id, is_missed, type, fix_ident, fix_type, fix_region) "
+                    "values (1, 0, ?, ?, ?, ?)", [("IF", "TANGO", "W", "XX"), ("TF", "DX411", "TW", "XX"),
+                                                  ("TF", "MIKEY", "V", "XX"), ("TF", "NOFIX", "W", "XX"),
+                                                  ("TF", "RW26R", "R", "XX")])
+    star = load_procedures(con, "EXMP").star("TANGO2B")
+    assert [(l.ident, l.lat, l.lon) for l in star.legs] == [
+        ("TANGO", 48.60, 12.27), ("DX411", 48.50, 12.20), ("MIKEY", 48.57, 11.60), ("NOFIX", None, None),
+        ("RW26R", None, None)]
