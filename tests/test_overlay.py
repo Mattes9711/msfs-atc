@@ -99,10 +99,22 @@ def test_the_live_words_only_with_the_setting(server, monkeypatch):
     app, base = server
     from atc.audio import setup
 
-    class Listener:
+    class Listener:  # the app may already listen, or close it, before the test ends
         live_wanted = False
         live = None
         context = None
+
+        def __init__(self):
+            self.stopped = threading.Event()
+
+        def attach(self, sink):
+            pass
+
+        def listen(self):
+            self.stopped.wait()
+
+        def close(self):
+            self.stopped.set()
 
     made = []
     monkeypatch.setattr("atc.app.server.load_voice", lambda config, progress: object())
