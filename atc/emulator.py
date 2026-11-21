@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 
 from atc.airport.geo import bearing_deg, destination_point, distance_nm
 from atc import emulator_check
-from atc.controller import vectors
+from atc.controller import vectors, wake
 from atc.controller.circuit import circuit_leg, circuit_side
 from atc.controller.suggest import suggestion
 from atc.controller.vfr import ctr_limit_ft, zone_distance_nm
@@ -55,7 +55,7 @@ MIN_ESTABLISHED_NM = 6  # intercepting the localizer closer in than this is too 
 COMPLAINTS = ("say again", "negative", "stop immediately", "go around", "confirm descending", "unable",
               "check altitude")
 # VFR: a small aircraft (a C172)
-VFR_ROTATE_KT, VFR_CLIMB_KT, VFR_CRUISE_KT = 55, 75, 100
+VFR_ROTATE_KT, VFR_CLIMB_KT, VFR_CRUISE_KT, VFR_FINAL_KT = 55, 75, 100, 75
 VFR_CLIMB_FPM, VFR_DESCENT_FPM = 700, 500
 VFR_ACCEL_KT_S = 1.0
 VFR_CRUISE_FT = 2500
@@ -196,6 +196,8 @@ class Pilot:
         self.loc_at_nm: float | None = None
         self.abort: str | None = None
         self.vfr = atc.vfr
+        # A small aircraft (a C172), VFR or on an IFR flight plan with a light type: its speeds and climb rates
+        self.small = atc.vfr or wake.category(atc.plan.aircraft or "") == "L"
         self.say: str | None = None  # what the pilot says this step (the emulator passes it to the live loop)
         self.called: dict[str, float] = {}  # call text -> when
         self.reported: list[str] = []  # VFR: what the pilot reported and where, for the report
@@ -359,9 +361,9 @@ class Pilot:
     def _takeoff_roll(self, now: float) -> float:
         s = self.sim.read()
         hdg = (s.heading_mag + self.atc.airport.mag_var) % 360
-        gs = s.ground_speed_kt + (TAKEOFF_ACCEL_KT_S / 2 if self.vfr else TAKEOFF_ACCEL_KT_S) * GROUND_STEP_S
+        gs = s.ground_speed_kt + (TAKEOFF_ACCEL_KT_S / 2 if self.small else TAKEOFF_ACCEL_KT_S) * GROUND_STEP_S
         lat, lon = destination_point(s.lat, s.lon, hdg, gs * GROUND_STEP_S / 3600)
-        if gs >= (VFR_ROTATE_KT if self.vfr else ROTATE_KT):
+        if gs >= (VFR_ROTATE_KT if self.small else ROTATE_KT):
             elev = self.atc.airport.elevation_ft
             self.sim.update(lat=lat, lon=lon, ground_speed_kt=gs, on_ground=False, alt_msl_ft=elev + 50,
                             alt_agl_ft=50)
@@ -416,6 +418,11 @@ class Pilot:
 
     def _target_speed(self, alt: float, agl: float, along: float | None) -> float:
         atc = self.atc
+        if self.small:  # its own speeds; one given by ATC only when it can fly it
+            if self.loc and along is not None:
+                return VFR_FINAL_KT
+            cruise = VFR_CLIMB_KT if agl < 3000 and atc.phase in ("airborne", "climb") else VFR_CRUISE_KT
+            return min(cruise, self.speed_cmd or cruise)
         if self.loc and along is not None:
             return 145 if along <= 5 else min(180, self.speed_cmd or 180)
         if atc.phase in ("approach", "final", "landing") or atc.approach_cleared:
@@ -455,10 +462,10 @@ class Pilot:
         gs = gs + max(-ACCEL_KT_S * dt, min(ACCEL_KT_S * dt, speed - gs))
         target = self._target_alt(alt, along)
         if target > alt:
-            fpm = 3000 if alt < 10000 else 2200 if alt < 25000 else 1500
+            fpm = VFR_CLIMB_FPM if self.small else 3000 if alt < 10000 else 2200 if alt < 25000 else 1500
             alt = min(target, alt + fpm * dt / 60)
         elif target < alt:
-            fpm = 3000 if self.loc else min(3000, max(1000, gs * 1000 / 3 / 60))
+            fpm = 3000 if self.loc else min(3000, max(VFR_DESCENT_FPM if self.small else 1000, gs * 1000 / 3 / 60))
             alt = max(target, alt - fpm * dt / 60)
         lat, lon = destination_point(lat, lon, hdg, gs * dt / 3600)
         self.sim.update(lat=lat, lon=lon, alt_msl_ft=alt, alt_agl_ft=max(0.0, alt - self._elevation(lat, lon)),
@@ -899,6 +906,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="live: the real METAR (runway in use); none: no weather")
     p.add_argument("--wind", default=None, metavar="DDD/SS",
                    help="the same wind at every airport instead (e.g. 230/15): other runways in use")
+    p.add_argument("--aircraft", default=None, type=str.upper,
+                   help="the type, e.g. C172: a light one flies slowly (default C172 for VFR, an airliner for IFR)")
     p.add_argument("--config", default=None, help="settings file")
     p.add_argument("--log", action="store_true", help="print the whole radio log, not only the report")
     return p
@@ -925,7 +934,8 @@ def main(argv: list[str] | None = None) -> int:
     for pair in args.flights:
         origin, _, dest = pair.upper().partition("-")
         requests.append(PlanRequest(callsign=args.callsign or ("DEABC" if vfr else "DLH4AB"), departure=origin,
-                                    destination=dest or None, rules=args.rules, aircraft="C172" if vfr else None,
+                                    destination=dest or None, rules=args.rules,
+                                    aircraft=args.aircraft or ("C172" if vfr else None),
                                     cruise_ft=parse_level(args.cruise or (str(VFR_CRUISE_FT) if vfr else "FL340"))))
     folder = paths.logs_dir() / "emulator"
     folder.mkdir(parents=True, exist_ok=True)
