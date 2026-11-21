@@ -7,7 +7,7 @@ AT_HOLD_SHORT_M = 15
 
 
 class RunwayZones:
-    """For each runway, how far from the centreline its hold-short lines are (TaxiGraph.strip_limit_m: the taxi
+    """For each runway, how far from the centreline its hold-short lines are (TaxiGraph.strip_limit: the taxi
     router keeps out of the same strip)."""
 
     def __init__(self, airport: Airport, graph: TaxiGraph):
@@ -15,7 +15,7 @@ class RunwayZones:
         self.zones = []
         for rwy in airport.runways:
             a, b = (graph.proj.xy(e.lat, e.lon) for e in rwy.ends)
-            self.zones.append((rwy, a, b, graph.strip_limit_m[rwy.ends[0].name]))
+            self.zones.append((rwy, a, b, rwy.ends[0].name))
 
     def runway_at(self, lat: float, lon: float) -> Runway | None:
         """The runway whose protected area this point is in, if any. Standing at a hold-short point never counts:
@@ -23,8 +23,8 @@ class RunwayZones:
         p = self.graph.proj.xy(lat, lon)
         if any(distance(p, self.graph.nodes[n]) <= AT_HOLD_SHORT_M for n in self.graph.hold_short):
             return None
-        inside = [(point_segment_distance(p, a, b), rwy) for rwy, a, b, limit in self.zones
-                  if point_segment_distance(p, a, b) < limit]
+        inside = [(point_segment_distance(p, a, b), rwy) for rwy, a, b, name in self.zones
+                  if point_segment_distance(p, a, b) < self.graph.strip_limit(name, p)]
         return min(inside, key=lambda d_r: d_r[0])[1] if inside else None
 
 

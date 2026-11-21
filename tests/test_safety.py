@@ -38,7 +38,7 @@ def taxiing(eddh, eddm):
 def test_hold_short_points_set_the_protected_distance(eddh):
     s = Session(eddh)
     zones = RunwayZones(eddh, s.atc.taxi)
-    limits = {rwy.ends[0].name: limit for rwy, _, _, limit in zones.zones}
+    limits = s.atc.taxi.strip_limit_m
     assert all(40 < limit < 200 for limit in limits.values())
     assert zones.runway_at(*midpoint(rwy_05_23(eddh))) == rwy_05_23(eddh)
     gate = eddh.default_parking()
@@ -249,3 +249,18 @@ def test_crossing_clearance_names_the_next_runway_to_hold_short_of():
     assert s.say(121900, "Test Ground, Lufthansa 4AB, holding short runway 18") == [
         "Lufthansa four Alfa Bravo, cross runway one eight, hold short runway zero niner"]
     assert confirmed(s.say(121900, "crossing runway 18, holding short runway 09, Lufthansa 4AB"))
+
+
+def test_a_hold_line_nearer_in_than_the_others_ends_the_runway_there():
+    # EDHL, the emulator, 2026-11-19: runway 07's hold lines 166-171 m out, the one on taxiway C 98 m; vacated via C
+    # and past its hold line, the median (163 m) still had the aircraft on the runway: "stop immediately" twice
+    from tests.test_taxi import ll
+    a = airport([RWY_09_27], [
+        path((200, 170), (200, 300), "A", start="HSND"), path((800, 170), (800, 300), "B", start="HSND"),
+        path((1400, 170), (1400, 300), "D", start="HSND"), path((1800, 100), (1800, 300), "C", start="HSND"),
+        path((200, 300), (1800, 300), "L")], gate=(1000, 300))
+    zones = RunwayZones(a, Session(a).atc.taxi)
+    assert zones.runway_at(*ll(1800, 124)) is None  # past C's hold line, 100 m out
+    assert zones.runway_at(*ll(1800, 80)).ends[0].name == "09"  # short of it
+    assert zones.runway_at(*ll(800, 150)).ends[0].name == "09"  # short of B's, 170 m out
+    assert zones.runway_at(*ll(1000, 0)).ends[0].name == "09"  # on the centreline
