@@ -28,6 +28,7 @@ class GsxLink:
         self.state: gsx.GsxState | None = None
         self.next_read = 0.0
         self.requested: set[str] = set()
+        self.waiting: set[str] = set()  # said why not requested yet
 
     def step(self, controller, aircraft, sink: Sink) -> gsx.GsxState | None:
         """GSX's state now (None while GSX isn't running), after acting on it."""
@@ -48,15 +49,22 @@ class GsxLink:
             if now.departure == gsx.COMPLETED and before.departure != gsx.COMPLETED:
                 sink.emit(Event("notice", "GSX: pushback finished"))
         if self.control and not self.menu.busy:
-            if (controller.phase == "pushback" and not controller.pending and now.departure == gsx.AVAILABLE):
-                self._request("pushback", sink)
-            if (controller.phase == "taxi_in" and aircraft is not None and self._at_stand(controller, aircraft)
-                    and now.deboarding == gsx.AVAILABLE):
-                self._request("deboarding", sink)
+            if controller.phase == "pushback" and not controller.pending:
+                self._request("pushback", now.departure, sink)
+            if controller.phase == "taxi_in" and aircraft is not None and self._at_stand(controller, aircraft):
+                self._request("deboarding", now.deboarding, sink)
         return now
 
-    def _request(self, service: str, sink: Sink) -> None:
+    def _request(self, service: str, state: int, sink: Sink) -> None:
+        """Asks GSX once, as soon as it offers the service; until then says once why not (on 2026-11-21 the log
+        said nothing, and nobody could tell whether the app had tried)."""
         if service in self.requested:
+            return
+        if state != gsx.AVAILABLE:
+            if service not in self.waiting:
+                self.waiting.add(service)
+                sink.emit(Event("notice", f"GSX: {service} not requested yet, GSX has it "
+                                          f"{gsx.STATE_NAMES.get(state, state)}"))
             return
         self.requested.add(service)
         self.menu.start(service)

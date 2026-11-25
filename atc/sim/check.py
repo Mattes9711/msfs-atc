@@ -65,9 +65,10 @@ def check_gsx(sim: SimConnectSource, open_menu: bool) -> None:
     if open_menu:
         sim.set_lvar(gsx.MENU_OPEN, 1)
         time.sleep(2)
+        path = gsx.menu_file()
         try:
-            lines = gsx.menu_file().read_text(encoding="utf-8").splitlines()
-            print("GSX menu:", *lines, sep="\n  ")
+            lines = path.read_text(encoding="utf-8").splitlines()
+            print(f"GSX menu ({path}):", *lines, sep="\n  ")
         except OSError as e:
             print(f"GSX menu file not readable: {e}")
 

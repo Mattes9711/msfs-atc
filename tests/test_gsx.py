@@ -275,3 +275,46 @@ def test_an_old_menu_file_is_not_read_as_the_new_one(tmp_path):
     fake.time[0] += 5
     assert fake.menu().request("pushback") == "GSX: pushback requested (Request Pushback)"
     assert fake.set[-1] == (gsx.MENU_CHOICE, 3)  # chosen from the new menu, not the old one's 0
+
+
+def test_the_menu_file_is_found_in_the_gsx_pro_package(tmp_path):
+    """2026-11-25: GSX Pro on MSFS writes its menu into its panel's folder, not %APPDATA%\\Virtuali\\GSX."""
+    root, packages = tmp_path / "Addon Manager", tmp_path / "XboxGames"
+    env = {"APPDATA": str(tmp_path / "Roaming")}
+    places = gsx.menu_candidates(str(root), packages, env)
+    assert places[0] == root / "MSFS" / "fsdreamteam-gsx-pro" / "html_ui" / "InGamePanels" / "FSDT_GSX_Panel" / "menu"
+    assert places[1] == packages / "Community" / "fsdreamteam-gsx-pro" / gsx.PANEL
+    assert gsx.menu_file(places) == places[-1]  # none there yet: the old place, so the log names one
+    places[1].parent.mkdir(parents=True)
+    places[1].write_text("", encoding="utf-8")
+    assert gsx.menu_file(places) == places[1]
+
+
+def test_the_community_folder_from_usercfg(tmp_path):
+    cfg = tmp_path / "Packages" / "Microsoft.FlightSimulator_8wekyb3d8bbwe" / "LocalCache" / "UserCfg.opt"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text('Version 1\nInstalledPackagesPath "D:\\XboxGames"\n', encoding="utf-8")
+    assert str(gsx._packages_path({"LOCALAPPDATA": str(tmp_path), "APPDATA": str(tmp_path / "none")})) == "D:\\XboxGames"
+    assert gsx._packages_path({"LOCALAPPDATA": str(tmp_path / "none"), "APPDATA": str(tmp_path / "none")}) is None
+
+
+def test_a_boot_message_is_not_a_menu(tmp_path):
+    """GSX's auto-restarter writes "#BOOT# ..." into the menu file while GSX restarts."""
+    clock = [0.0]
+    menu = gsx.GsxMenu(lambda n, v: (tmp_path / "menu").write_text("#BOOT# GSX restarting\nplease wait",
+                                                                   encoding="utf-8"),
+                       tmp_path / "menu", clock=lambda: clock[0], sleep=lambda s: clock.__setitem__(0, clock[0] + s))
+    assert "did not open" in menu.request("pushback")
+
+
+def test_a_skipped_request_says_why_once():
+    gsx_link, menu, clock = link(lvars(departure=gsx.NOT_AVAILABLE))
+    atc, sink = SimpleNamespace(phase="pushback", pending=(), stand_in=None), Collector()
+    gsx_link.step(atc, None, sink)
+    clock[0] = 10
+    gsx_link.step(atc, None, sink)
+    assert menu.asked == [] and [e.text for e in sink.events] == [
+        "GSX: pushback not requested yet, GSX has it not available"]
+    gsx_link.sim.values, clock[0] = lvars(departure=gsx.AVAILABLE), 20  # GSX offers it later: asked then
+    gsx_link.step(atc, None, sink)
+    assert menu.asked == ["pushback"]

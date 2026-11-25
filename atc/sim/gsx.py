@@ -5,8 +5,8 @@ FSDT_GSX_BOARDING_STATE, FSDT_GSX_DEBOARDING_STATE and FSDT_GSX_DEPARTURE_STATE 
 1 available, 2 not available, 3 bypassed, 4 requested, 5 performing, 6 completed.
 
 It is controlled through its menu, as other tools do (e.g. Fenix2GSX): FSDT_GSX_MENU_OPEN = 1 opens the menu and GSX
-writes its text to %APPDATA%\\Virtuali\\GSX\\menu (the title, then one option per line); FSDT_GSX_MENU_CHOICE = n
-picks option n (0 = the first option line). A choice can lead to another menu (the handling operator, the push
+writes its text to the file "menu" of its in-game panel (the title, then one option per line; see menu_file);
+FSDT_GSX_MENU_CHOICE = n picks option n (0 = the first option line). A choice can lead to another menu (the handling operator, the push
 direction): that one is left to the pilot in GSX's own window and shown in the log, since picking blindly could order
 the wrong service.
 
@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Callable
 
 AVAILABLE, NOT_AVAILABLE, BYPASSED, REQUESTED, PERFORMING, COMPLETED = 1, 2, 3, 4, 5, 6
+STATE_NAMES = {AVAILABLE: "available", NOT_AVAILABLE: "not available", BYPASSED: "bypassed", REQUESTED: "requested",
+               PERFORMING: "in progress", COMPLETED: "completed"}
 STATE_LVARS = {"running": "L:FSDT_GSX_COUATL_STARTED", "boarding": "L:FSDT_GSX_BOARDING_STATE",
                "deboarding": "L:FSDT_GSX_DEBOARDING_STATE", "departure": "L:FSDT_GSX_DEPARTURE_STATE"}
 MENU_OPEN, MENU_CHOICE = "L:FSDT_GSX_MENU_OPEN", "L:FSDT_GSX_MENU_CHOICE"
@@ -30,8 +32,51 @@ MENU_TRIES = 2  # opening the menu once more before giving up
 CLOSE = -2  # MENU_CHOICE value that closes the menu
 
 
-def menu_file() -> Path:
-    return Path(os.environ.get("APPDATA", "")) / "Virtuali" / "GSX" / "menu"
+PANEL = Path("html_ui") / "InGamePanels" / "FSDT_GSX_Panel" / "menu"
+PACKAGE = "fsdreamteam-gsx-pro"
+BOOT = "#BOOT#"  # GSX's auto-restarter writes its messages into the menu file: never a menu
+
+
+def _fsdt_root() -> str | None:
+    """Where the FSDreamTeam Addon Manager installed GSX (its own registry value)."""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Fsdreamteam") as key:
+            return str(winreg.QueryValueEx(key, "root")[0])
+    except (ImportError, OSError):
+        return None
+
+
+def _packages_path(env=os.environ) -> Path | None:
+    """MSFS's InstalledPackagesPath from UserCfg.opt (MS Store or Steam), for the Community folder."""
+    for cfg in (Path(env.get("LOCALAPPDATA", "")) / "Packages" / "Microsoft.FlightSimulator_8wekyb3d8bbwe"
+                / "LocalCache" / "UserCfg.opt", Path(env.get("APPDATA", "")) / "Microsoft Flight Simulator" / "UserCfg.opt"):
+        try:
+            for line in cfg.read_text(encoding="utf-8", errors="replace").splitlines():
+                if line.startswith("InstalledPackagesPath"):
+                    return Path(line.split(None, 1)[1].strip().strip('"'))
+        except (OSError, IndexError):
+            continue
+    return None
+
+
+def menu_candidates(root: str | None = None, packages: Path | None = None, env=os.environ) -> list[Path]:
+    """Where GSX may write its menu, the likeliest first: GSX Pro on MSFS writes it into its own panel's folder
+    (found 2026-11-25; until then the app waited for the old FSX/P3D place, %APPDATA%\\Virtuali\\GSX\\menu)."""
+    found = []
+    if root:
+        found.append(Path(root) / "MSFS" / PACKAGE / PANEL)
+    if packages:
+        found.append(packages / "Community" / PACKAGE / PANEL)
+    found.append(Path(env.get("APPDATA", "")) / "Virtuali" / "GSX" / "menu")
+    return found
+
+
+def menu_file(candidates: list[Path] | None = None) -> Path:
+    """The first place that exists (the last one if none does, so the log names a place)."""
+    if candidates is None:
+        candidates = menu_candidates(_fsdt_root(), _packages_path())
+    return next((p for p in candidates if p.exists()), candidates[-1])
 
 
 @dataclass(frozen=True)
@@ -95,7 +140,7 @@ class GsxMenu:
         if self._mtime() == self.since:
             return None
         lines = self._lines()
-        return lines if lines and len(lines) > 1 else None
+        return lines if lines and len(lines) > 1 and not lines[0].startswith(BOOT) else None
 
     def _click(self, name: str, value: float, stage: str, wait_s: float) -> None:
         self.since = self._mtime()

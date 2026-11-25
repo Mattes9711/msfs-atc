@@ -1030,7 +1030,7 @@ C3. ✅ **Read GSX** (built against a fake GSX; still to be checked in MSFS): it
 C4. ✅ **Control GSX** (built against a fake GSX; still to be checked in MSFS; a GSX question after the choice,
     e.g. the push direction, is left to the pilot in GSX's window): after "push and start approved" the app requests the GSX pushback; at the stand after
     arrival it requests deboarding. Through the GSX menu (FSDT_GSX_MENU_OPEN, FSDT_GSX_MENU_CHOICE and the menu
-    text GSX writes to %APPDATA%\Virtuali\GSX\menu). **Must be checked at the PC.**
+    text GSX writes to its panel's folder, `<GSX package>\html_ui\InGamePanels\FSDT_GSX_Panel\menu`, found through the Addon Manager's registry value or the Community folder; 2026-11-25: until then the app waited for %APPDATA%\Virtuali\GSX\menu, which GSX Pro on MSFS never writes, so every request failed). **Must be checked at the PC.**
 
 **To check at the PC** (MSFS with GSX running, parked at a gate):
 `.venv\Scripts\python -m atc.sim.check --gsx-menu --tune 121.705` prints GSX's L-vars, opens the GSX menu and
