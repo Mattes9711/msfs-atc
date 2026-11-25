@@ -115,3 +115,59 @@ def test_shutdown_stops_a_running_session():
     launcher.shutdown(app, server)
     assert not app.running
     assert any(e.text == "session ended" for e in app.log.events)
+
+
+class BrokenWebview:
+    """pywebview whose .NET side won't load (the friend's copy, 2026-11-25): webview.screens already fails."""
+
+    @property
+    def screens(self):
+        raise RuntimeError("Failed to load the .NET runtime")
+
+
+def test_a_window_that_cannot_open_falls_back_to_the_browser_and_says_why(monkeypatch, tmp_path):
+    import sys
+    monkeypatch.setitem(sys.modules, "webview", BrokenWebview())
+    monkeypatch.setattr(launcher, "window_state_file", lambda: tmp_path / "window.json")
+    monkeypatch.setattr(launcher, "window_error", "")
+    app = SimpleNamespace(overlay="old")
+    assert launcher.run_window("http://127.0.0.1:1/", app) is False
+    assert launcher.window_error == "RuntimeError: Failed to load the .NET runtime"
+    assert app.overlay is None
+
+
+def test_without_a_console_the_fallback_is_shown_in_a_box(monkeypatch):
+    boxes, opened = [], []
+    monkeypatch.setattr(launcher, "log_to_file_without_console", lambda: True)
+    monkeypatch.setattr(launcher, "show_error", boxes.append)
+    monkeypatch.setattr(launcher.webbrowser, "open", opened.append)
+    monkeypatch.setattr(launcher, "wait_for_ctrl_c", lambda: None)
+
+    def no_window(url, app=None):
+        launcher.window_error = "RuntimeError: no WebView2"
+        return False
+    monkeypatch.setattr(launcher, "run_window", no_window)
+    launcher.main(["--port", "0"])
+    assert len(opened) == 1 and len(boxes) == 1 and "no WebView2" in boxes[0]
+
+
+def test_an_error_at_the_start_is_logged_and_shown(monkeypatch, capsys):
+    boxes = []
+    monkeypatch.setattr(launcher, "show_error", boxes.append)
+    monkeypatch.setattr(launcher, "run", lambda argv, headless: 1 / 0)
+    monkeypatch.setattr(launcher, "log_to_file_without_console", lambda: False)
+    with pytest.raises(SystemExit) as e:
+        launcher.main([])
+    assert e.value.code == 1
+    assert "ZeroDivisionError" in capsys.readouterr().err and not boxes  # a console: no box
+    monkeypatch.setattr(launcher, "log_to_file_without_console", lambda: True)
+    with pytest.raises(SystemExit):
+        launcher.main([])
+    assert len(boxes) == 1 and "ZeroDivisionError: division by zero" in boxes[0] and "app.log" in boxes[0]
+
+
+def test_the_log_starts_with_the_version(capsys, monkeypatch):
+    monkeypatch.setattr(launcher, "run", lambda argv, headless: None)
+    launcher.main([])
+    first = capsys.readouterr().out.splitlines()[0]
+    assert first.startswith("--- MSFS ATC ") and "?" not in first.split()[3]

@@ -12,6 +12,7 @@ datas = [
     (str(ROOT / "data" / "centers_vatsim.json"), "data"),  # German Center sectors, CC BY-SA 4.0 (VATSIM data)
     (str(ROOT / "data" / "stations_vatsim.json"), "data"),  # German airport station roles, CC BY-SA 4.0
     (str(ROOT / "packaging" / "README.txt"), "."),
+    (str(ROOT / "pyproject.toml"), "."),  # the version, for the first line of app.log
 ]
 binaries = []
 hiddenimports = []
