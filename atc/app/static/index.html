@@ -163,8 +163,21 @@
             <button type="button" class="icon-button" id="zoom-in" aria-label="Zoom in">+</button>
             <button type="button" class="icon-button" id="zoom-out" aria-label="Zoom out">−</button>
           </div>
+          <div class="map-card" id="map-card" hidden aria-live="polite">
+            <div class="map-card-head"><strong id="card-callsign"></strong>
+              <button type="button" class="icon-button" id="card-close" aria-label="Close">×</button></div>
+            <div class="map-card-sub" id="card-type"></div>
+            <dl>
+              <dt>Level</dt><dd id="card-alt"></dd>
+              <dt>GS</dt><dd id="card-gs"></dd>
+              <dt>HDG</dt><dd id="card-hdg"></dd>
+            </dl>
+          </div>
           <div class="map-tools">
             <button type="button" class="chip" id="map-follow" hidden title="Back to your aircraft; the map then moves with it">Follow</button>
+            <button type="button" class="chip layer" data-layer="land" aria-pressed="true" title="Land, sea and borders (Natural Earth)">Land</button>
+            <button type="button" class="chip layer" data-layer="sectors" aria-pressed="true" title="Control zones and Center sectors">Sectors</button>
+            <button type="button" class="chip layer" data-layer="traffic" aria-pressed="true" title="Other aircraft; click one for its details">Traffic</button>
             <button type="button" class="chip" id="map-theme" aria-pressed="false" title="The chart in white (day) or dark (night)">Night</button>
           </div>
         </div>
@@ -286,6 +299,7 @@
                 <li>ATC voice: Piper (GPL-3.0) with the LibriTTS-R voice (CC BY 4.0); German cabin voice: Thorsten Müller (CC0)</li>
                 <li>Speech recognition: Whisper by OpenAI, faster-whisper by SYSTRAN (MIT)</li>
                 <li>Design values after unslop by Damir Sokolovsky (CC BY 4.0)</li>
+                <li>Land, lakes and borders on the map: made with Natural Earth (public domain)</li>
               </ul>
             </section>
           </form>

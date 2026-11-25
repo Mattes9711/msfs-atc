@@ -221,13 +221,15 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; margin:
   --chart-runway: #16181a; --chart-runway-mark: #fbfbf9;
   --chart-tower: #1d4f91; --chart-field: #8b5a2b; --chart-zone: #1d4f91; --chart-sector: #8f9499;
   --chart-you: #b8770a;
+  --chart-water: #e4edf4; --chart-border: #b4bac0; --chart-traffic: #2f64a8;
 }
 .map[data-chart="night"] {
-  --chart-bg: #0a0c0e; --chart-ink: #e8eaec; --chart-ink-2: #a8afb6; --chart-ink-3: #808891;
+  --chart-bg: #151a20; --chart-ink: #e8eaec; --chart-ink-2: #a8afb6; --chart-ink-3: #808891;
   --chart-paved: #2b3036; --chart-paved-edge: #4a5259; --chart-apron: #1d2126;
-  --chart-runway: #c9ced3; --chart-runway-mark: #0a0c0e;
+  --chart-runway: #c9ced3; --chart-runway-mark: #151a20;
   --chart-tower: #7aa7e0; --chart-field: #c4956a; --chart-zone: #7aa7e0; --chart-sector: #4a5259;
   --chart-you: #e6b450;
+  --chart-water: #0a0d11; --chart-border: #3a434d; --chart-traffic: #6fa8ff;
 }
 .map:focus { outline: none; }
 .map:focus-visible { box-shadow: inset 0 0 0 2px var(--chart-tower); }
@@ -250,8 +252,20 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; margin:
   .band-name { display: none; }
 }
 
+/* The card of the aircraft clicked on the map */
+.map-card { position: absolute; left: 16px; bottom: 16px; width: 200px; padding: 8px 10px; background: var(--chart-bg);
+            border: 1px solid var(--chart-ink-3); border-left: 3px solid var(--chart-traffic); color: var(--chart-ink); }
+.map-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.map-card-head strong { font-size: 15px; line-height: 20px; font-weight: 600; }
+.map-card-head .icon-button { width: 24px; height: 24px; min-height: 0; font-size: 16px; }
+.map-card-sub { font-size: 11px; line-height: 16px; color: var(--chart-ink-2); margin-bottom: 6px; }
+.map-card dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; font-size: 12px; line-height: 16px; }
+.map-card dt { color: var(--chart-ink-2); }
+.map-card dd { margin: 0; font-family: "B612 Mono", monospace; }
+
 .map-zoom { position: absolute; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 4px; }
-.map-tools { position: absolute; right: 60px; bottom: 16px; display: flex; gap: 6px; }
+.map-tools { position: absolute; right: 60px; bottom: 16px; display: flex; flex-wrap: wrap; justify-content: flex-end;
+             gap: 6px; max-width: calc(100% - 76px); }
 .map .icon-button, .map .chip { background: var(--chart-bg); color: var(--chart-ink); border-color: var(--chart-ink-3);
                                 transition: border-color 120ms var(--ease), background-color 120ms var(--ease); }
 .map .icon-button:hover, .map .chip:hover { border-color: var(--chart-ink); color: var(--chart-ink); }

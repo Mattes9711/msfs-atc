@@ -83,4 +83,6 @@ Center sectors without Little Navmap (Germany only): made from the
 too. The roles of the German airport frequencies (Delivery, Apron, VFR Tower) come from the VATGER datahub as well;
 `data/stations_vatsim.json` is CC BY-SA 4.0. For the simulator only.
 
+Land, lakes and borders on the map: made with [Natural Earth](https://www.naturalearthdata.com) (public domain).
+
 MSFS ATC is not made by or connected with Microsoft, Asobo Studio, FSDreamTeam (GSX), LiveTraffic or SimBrief.

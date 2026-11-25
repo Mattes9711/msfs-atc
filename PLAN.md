@@ -1497,6 +1497,17 @@ O4. ✅ **The map as a chart, with a free camera** (`controller/mapdata.py`, `ap
     **Camera:** drag or arrow keys to move, wheel to zoom about the cursor, + and −; "Follow" brings it back to
     the aircraft. **Paper** (black on white, default) or **Night** (the console's inks), remembered in the page.
     Amber stays "you": the aircraft and the taxi route. The band is one swipeable row below 640 px.
+O5. ✅ **The map in the look of a VATSIM radar map, offline** (user request 2026-11-25, after vatsim-radar.com; its
+    look only, none of its code). **Land, sea and borders** from Natural Earth 1:50 million (public domain), built
+    once into `static/world.json` (420 KB gzipped) by `python -m atc.app.world <folder>` (`app/world.py`): the
+    sea in `--chart-water`, the land in the chart's background so label boxes blend in, lakes over it, borders as a
+    hairline; only outside the taxi chart, each line skipped when out of view. **Sectors:** the one the aircraft is
+    in tinted, the one tuned on COM1 filled and outlined in tower blue. **Traffic** as airliner silhouettes along
+    their heading (blue in the air, grey on the ground) with callsign and level; a click opens a card (callsign,
+    type and registration, level, ground speed, heading; `moving()` now sends `type` and `reg`), the aircraft ringed
+    in amber; a drag of less than 5 px counts as a click. **Airport badges** D, G, T, A after the name for the
+    stations it has (ATIS left out), the one tuned on COM1 in amber. **Layer chips** Land, Sectors, Traffic,
+    remembered in the page. The Night chart became a radar look: dark slate land on near-black sea.
 
 ### Later versions (agreed, in rough order)
 

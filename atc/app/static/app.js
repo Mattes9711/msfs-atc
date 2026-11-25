@@ -299,8 +299,9 @@ for (const tab of Object.keys(VIEWS)) $("tab-" + tab).addEventListener("click", 
 
 // --- map: drawn by us on a canvas as a chart, no map tiles, so it works offline -----------------------------------
 // Close in it is an airport diagram (taxiways as paved surfaces to their real width, runways filled, holding positions,
-// stands); further out an enroute chart (airports with a data block, control zones dashed, Center sectors with their
-// frequency box). The camera is free: drag or the arrow keys move it, the wheel zooms about the cursor, "Follow"
+// stands); further out an enroute chart over land and sea (Natural Earth, static/world.json: airports with a data
+// block and their stations as badges, control zones dashed, Center sectors with their frequency box, the one on COM1
+// filled), with the traffic as aircraft symbols: click one for its card. The camera is free: drag or the arrow keys move it, the wheel zooms about the cursor, "Follow"
 // brings it back to the aircraft. What lies around the camera comes from /api/map/area (Milestone 11 O4).
 
 const MAP_MIN_NM = 0.4, MAP_MAX_NM = 1500;  // how many nautical miles the map is wide, at most and at least
@@ -319,6 +320,11 @@ const charts = new Map();  // ident → an airport in full (or null: none), for 
 let bandShown = "";
 let chartTheme = "paper";
 try { chartTheme = localStorage.getItem("chart-theme") === "night" ? "night" : "paper"; } catch (error) { /* paper */ }
+let world = null;  // land, lakes, borders (static/world.json): loaded once, "loading" meanwhile
+const layers = { land: true, sectors: true, traffic: true };  // what the pilot shows: the chips under the map
+try { Object.assign(layers, JSON.parse(localStorage.getItem("map-layers") || "{}")); } catch (error) { /* all on */ }
+let picked = null;  // the callsign of the traffic whose card is open
+let trafficShown = [];  // [{t, x, y}] where each traffic was drawn: what a click hits
 
 function chartFreq(khz) {
   // As charts print them: a 25 kHz channel without its trailing zeros (118.2, 126.85, 123.125), an 8.33 kHz channel
@@ -333,13 +339,18 @@ function tokens() {  // the chart's colours (app.css, .map[data-chart]), read on
   const style = getComputedStyle($("map"));
   const out = {};
   for (const name of ["bg", "ink", "ink-2", "ink-3", "paved", "paved-edge", "apron", "runway", "runway-mark",
-                      "tower", "field", "zone", "sector", "you"]) {
+                      "tower", "field", "zone", "sector", "you", "water", "border", "traffic"]) {
     out[name] = style.getPropertyValue("--chart-" + name).trim();
   }
   return out;
 }
 
 async function loadMap() {
+  if (!world) {
+    world = "loading";
+    fetch("/static/world.json").then((r) => (r.ok ? r.json() : null))
+      .then((data) => { world = data; drawMap(); }).catch(() => { world = null; });
+  }
   if (!mapData) {
     try { mapData = await api("/api/map"); } catch (error) { /* drawn without it; tried again next time */ }
   }
@@ -442,7 +453,8 @@ function drawMap() {
 
   const flight = (mapData && mapData.airports) || [];
   const sectors = (mapArea && mapArea.sectors) || (mapData && mapData.sectors) || [];
-  if (widthNm >= 10) drawSectors(m, sectors);
+  if (layers.land && !chart) drawWorld(m, bounds);
+  if (layers.sectors && widthNm >= 10) drawSectors(m, sectors, own);
   if (mapArea && widthNm >= 4) drawZones(m, mapArea.zones);
   if (chart) {
     const diagrams = [...flight, ...[...charts.values()].filter(Boolean)];
@@ -451,10 +463,47 @@ function drawMap() {
   if (!chart) drawRoute(m);
   if (!chart || widthNm > 3) drawAirports(m, flight, chart);
   drawTaxiRoute(m);
-  drawTraffic(m, cosLat);
-  if (own) { const [x, y] = xy(own.lat, own.lon); arrow(g, x, y, own.heading, 9, c.you, c.bg); }
+  trafficShown = [];
+  if (layers.traffic) drawTraffic(m, cosLat);
+  if (own) { const [x, y] = xy(own.lat, own.lon); plane(g, x, y, own.heading, 13, c.you, c.bg); }
   drawScale(m);
   showBand(flight, sectors);
+  showCard();
+}
+
+function drawWorld(m, box) {
+  // The sea is the background, the land is the chart's paper, lakes are sea again, borders a fine rule. A line is
+  // only followed where it moves a pixel: from afar most of a coast's points fall on the same few pixels
+  if (!world || world === "loading") return;
+  const { g, c } = m;
+  const lines = (items, close) => {
+    g.beginPath();
+    for (const { box: [s, w, n, e], line } of items) {
+      if (n < box.s || s > box.n || e < box.w || w > box.e) continue;
+      let lastX = null, lastY = null;
+      for (let i = 0; i < line.length; i += 2) {
+        const [x, y] = m.xy(line[i], line[i + 1]);
+        if (lastX === null) g.moveTo(x, y);
+        else if (Math.abs(x - lastX) + Math.abs(y - lastY) >= 1 || i === line.length - 2) g.lineTo(x, y);
+        else continue;
+        lastX = x; lastY = y;
+      }
+      if (close) g.closePath();
+    }
+  };
+  g.fillStyle = c.water;
+  g.fillRect(0, 0, m.w, m.h);
+  lines(world.land, true);
+  g.fillStyle = c.bg;
+  g.fill("evenodd");
+  lines(world.lakes, true);
+  g.fillStyle = c.water;
+  g.fill("evenodd");
+  lines(world.borders, false);
+  g.strokeStyle = c.border;
+  g.lineWidth = 1;
+  g.setLineDash([]);
+  g.stroke();
 }
 
 function path(m, points) {  // a polyline through [lat, lon] points
@@ -468,13 +517,30 @@ function free(m, x, y, width, height) {  // a label's box does not touch one alr
   return true;
 }
 
-function drawSectors(m, sectors) {
-  // The boundary as a thin rule; name and frequency in an outlined box, as an enroute chart's frequency box
+function drawSectors(m, sectors, own) {
+  // The boundary as a thin rule; name and frequency in an outlined box, as an enroute chart's frequency box. The
+  // sector the aircraft is in is tinted; the one on COM1 filled in the stations' colour, its rule bolder
   const { g, c } = m;
-  g.strokeStyle = c.sector;
+  const com1 = status && status.com1_khz;
+  for (const s of sectors) {
+    const tuned = com1 && s.khz === com1;
+    if (!tuned && !(own && inside(own.lat, own.lon, s.polygon))) continue;
+    g.beginPath(); path(m, s.polygon); g.closePath();
+    g.globalAlpha = tuned ? 0.14 : 0.07;
+    g.fillStyle = tuned ? c.tower : c.sector;
+    g.fill();
+    g.globalAlpha = 1;
+  }
   g.lineWidth = 1;
   g.setLineDash([]);
-  for (const s of sectors) { g.beginPath(); path(m, s.polygon); g.closePath(); g.stroke(); }
+  for (const s of sectors) {
+    const tuned = com1 && s.khz === com1;
+    g.strokeStyle = tuned ? c.tower : c.sector;
+    g.lineWidth = tuned ? 2 : 1;
+    g.beginPath(); path(m, s.polygon); g.closePath(); g.stroke();
+  }
+  g.strokeStyle = c.sector;
+  g.lineWidth = 1;
   const labelled = new Set();
   for (const s of sectors) {
     const key = s.name + s.khz;
@@ -487,6 +553,7 @@ function drawSectors(m, sectors) {
     const width = Math.max(...lines.map((l) => g.measureText(l).width)) + 12, height = lines.length * 13 + 6;
     if (!free(m, x - width / 2, y - height / 2, width, height)) continue;
     labelled.add(key);
+    g.strokeStyle = com1 && s.khz === com1 ? c.tower : c.sector;
     g.fillStyle = c.bg;
     g.fillRect(x - width / 2, y - height / 2, width, height);
     g.strokeRect(x - width / 2 + 0.5, y - height / 2 + 0.5, width - 1, height - 1);
@@ -726,7 +793,8 @@ function drawAirports(m, flight, chart) {
     }
     if (!lines.length) continue;
     g.font = "11px B612, sans-serif";
-    const width = Math.max(...lines.map((l) => g.measureText(l).width)), height = lines.length * 13;
+    const badges = stations(a), first = g.measureText(lines[0]).width + (badges.length ? 4 + badges.length * 13 : 0);
+    const width = Math.max(first, ...lines.slice(1).map((l) => g.measureText(l).width)), height = lines.length * 13;
     const lx = x + 10, ly = y - 8 - height / 2;
     if (!free(m, lx, ly, width, height) && !mine.has(a.ident)) continue;
     lines.forEach((line, i) => {
@@ -734,7 +802,32 @@ function drawAirports(m, flight, chart) {
       g.fillStyle = i ? c.ink : colour;
       g.fillText(line, lx, ly + 6 + i * 13);
     });
+    g.font = "11px B612, sans-serif";
+    let bx = lx + g.measureText(lines[0]).width + 4;
+    g.font = "bold 9px B612, sans-serif";
+    g.textAlign = "center";
+    for (const b of badges) {  // filled: the station tuned on COM1
+      g.fillStyle = b.tuned ? c.you : colour;
+      g.globalAlpha = b.tuned ? 1 : 0.85;
+      g.fillRect(bx, ly, 11, 11);
+      g.globalAlpha = 1;
+      g.fillStyle = c.bg;
+      g.fillText(b.letter, bx + 5.5, ly + 6);
+      bx += 13;
+    }
+    g.textAlign = "left";
   }
+}
+
+// Which stations an airport has, as on VATSIM maps: Delivery, Ground, Tower, Approach (ATIS left out)
+const BADGES = [["D", ["DEL", "CLD"]], ["G", ["GND", "APRON", "RAMP"]], ["T", ["TWR"]], ["A", ["APP", "DEP"]]];
+
+function stations(a) {
+  const tuned = status && status.com1_khz;
+  return BADGES.map(([letter, labels]) => {
+    const found = (a.frequencies || []).filter((f) => labels.some((l) => (f.label || "").startsWith(l)));
+    return found.length ? { letter, tuned: found.some((f) => f.khz === tuned) } : null;
+  }).filter(Boolean);
 }
 
 function drawTaxiRoute(m) {  // the taxi route ATC gave: the colour of "you", on top of the taxiways
@@ -747,7 +840,9 @@ function drawTaxiRoute(m) {  // the taxi route ATC gave: the colour of "you", on
   m.g.lineCap = "butt";
 }
 
-function drawTraffic(m, cosLat) {  // small arrows with the callsign (on the ground only when zoomed in close)
+function drawTraffic(m, cosLat) {
+  // Aircraft symbols with the callsign and level (on the ground only when zoomed in close, and greyed); the one whose
+  // card is open ringed in amber
   const { g, c, xy } = m;
   const since = Math.min((performance.now() - trafficReadAt) / 1000, DEAD_RECKON_S);
   g.font = "10px 'B612 Mono', monospace";
@@ -756,10 +851,38 @@ function drawTraffic(m, cosLat) {  // small arrows with the callsign (on the gro
     const nm = (t.gs || 0) * since / 3600, rad = t.heading * Math.PI / 180;  // where it is now, roughly
     const [x, y] = xy(t.lat + nm * Math.cos(rad) / 60, t.lon + nm * Math.sin(rad) / 60 / cosLat);
     if (!m.seen(x, y)) continue;
-    arrow(g, x, y, t.heading, 6, c["ink-2"], c.bg);
-    g.fillStyle = c["ink-2"];
-    g.fillText(t.callsign + (t.on_ground ? "" : " " + level(t.alt_ft)), x + 9, y);
+    const colour = t.on_ground ? c["ink-3"] : c.traffic;
+    if (t.callsign === picked) {
+      g.strokeStyle = c.you; g.lineWidth = 2;
+      g.beginPath(); g.arc(x, y, 13, 0, Math.PI * 2); g.stroke();
+    }
+    plane(g, x, y, t.heading, t.on_ground ? 8 : 10, colour, c.bg);
+    g.fillStyle = colour;
+    g.fillText(t.callsign + (t.on_ground ? "" : " " + level(t.alt_ft)), x + 13, y);
+    trafficShown.push({ t, x, y });
   }
+}
+
+function showCard() {  // the card of the traffic clicked on the map, kept up to date; hidden while the aircraft
+  const card = $("map-card");  // is missing (back when it is: a traffic list can miss one for a moment)
+  const t = picked && ((mapMoving && mapMoving.traffic) || []).find((a) => a.callsign === picked);
+  if (!t) { card.hidden = true; return; }
+  card.hidden = false;
+  text("card-callsign", t.callsign);
+  text("card-type", [t.type, t.reg].filter(Boolean).join(" · ") || "unknown type");
+  text("card-alt", t.on_ground ? "on the ground" : level(t.alt_ft));
+  text("card-gs", Math.round(t.gs || 0) + " KT");
+  text("card-hdg", String(Math.round(t.heading) % 360 || 360).padStart(3, "0") + "°");
+}
+
+function pickAt(x, y) {  // a click on the map: the nearest traffic within reach opens its card, elsewhere closes it
+  let best = null, reach = 16;
+  for (const s of trafficShown) {
+    const d = Math.hypot(s.x - x, s.y - y);
+    if (d < reach) { reach = d; best = s.t; }
+  }
+  picked = best && best.callsign;
+  drawMap();
 }
 
 function drawScale(m) {  // a chart's scale bar, bottom left: a round number of miles, 60 to 160 px long
@@ -812,15 +935,23 @@ function bandCell(label, khz, title) {
   return cell;
 }
 
-function arrow(g, x, y, heading, size, fill, edge) {  // a triangle pointing along the heading (0 = north, up)
-  const a = heading * Math.PI / 180;
-  const tip = [x + Math.sin(a) * size, y - Math.cos(a) * size];
-  const left = [x + Math.sin(a + 2.5) * size * 0.8, y - Math.cos(a + 2.5) * size * 0.8];
-  const right = [x + Math.sin(a - 2.5) * size * 0.8, y - Math.cos(a - 2.5) * size * 0.8];
+// An airliner seen from above, nose up, half of it (x >= 0) from the nose to the tail; mirrored for the other half
+const PLANE_HALF = [[0, -1], [0.09, -0.88], [0.1, -0.3], [0.95, 0.14], [0.95, 0.28], [0.1, 0.08], [0.08, 0.6],
+                    [0.36, 0.8], [0.36, 0.92], [0, 0.84]];
+const PLANE = new Path2D();
+[...PLANE_HALF, ...PLANE_HALF.slice(1, -1).reverse().map(([x, y]) => [-x, y])]
+  .forEach(([x, y], i) => (i ? PLANE.lineTo(x, y) : PLANE.moveTo(x, y)));
+PLANE.closePath();
+
+function plane(g, x, y, heading, size, fill, edge) {  // the aircraft symbol along the heading (0 = north, up)
+  g.save();
+  g.translate(x, y);
+  g.rotate(heading * Math.PI / 180);
+  g.scale(size, size);
+  if (edge) { g.strokeStyle = edge; g.lineWidth = 3 / size; g.stroke(PLANE); }
   g.fillStyle = fill;
-  g.beginPath(); g.moveTo(...tip); g.lineTo(...left); g.lineTo(...right); g.closePath();
-  if (edge) { g.strokeStyle = edge; g.lineWidth = 1.5; g.stroke(); }
-  g.fill();
+  g.fill(PLANE);
+  g.restore();
 }
 
 function zoomBy(factor, x, y) {  // zoom about a point on the map (the cursor), the middle if none
@@ -861,15 +992,26 @@ $("zoom-in").addEventListener("click", () => zoomBy(0.5));
 $("zoom-out").addEventListener("click", () => zoomBy(2));
 $("map-follow").addEventListener("click", () => { follow = true; drawMap(); });
 $("map-theme").addEventListener("click", () => setChartTheme(chartTheme === "night" ? "paper" : "night"));
+for (const chip of document.querySelectorAll(".map-tools .layer")) {  // the layers shown, kept for the next start
+  const name = chip.dataset.layer;
+  chip.setAttribute("aria-pressed", String(layers[name]));
+  chip.addEventListener("click", () => {
+    layers[name] = !layers[name];
+    chip.setAttribute("aria-pressed", String(layers[name]));
+    try { localStorage.setItem("map-layers", JSON.stringify(layers)); } catch (error) { /* only for this window */ }
+    drawMap();
+  });
+}
 setChartTheme(chartTheme);
 $("map-canvas").addEventListener("wheel", (event) => {
   event.preventDefault();
   const r = event.currentTarget.getBoundingClientRect();
   zoomBy(event.deltaY > 0 ? 1.25 : 0.8, event.clientX - r.left, event.clientY - r.top);
 }, { passive: false });
-let dragFrom = null;
+let dragFrom = null, dragged = 0;  // dragged: pixels moved since the button went down (little: a click)
 $("map-canvas").addEventListener("pointerdown", (event) => {
   dragFrom = [event.clientX, event.clientY];
+  dragged = 0;
   event.currentTarget.setPointerCapture(event.pointerId);
   $("map").focus({ preventScroll: true });
 });
@@ -877,10 +1019,20 @@ $("map-canvas").addEventListener("pointermove", (event) => {
   if (!dragFrom) return;
   const dx = event.clientX - dragFrom[0], dy = event.clientY - dragFrom[1];
   if (!dx && !dy) return;
+  dragged = Math.max(dragged, Math.abs(dx) + Math.abs(dy));
+  if (dragged < 5) return;  // still a click; once a drag, the map follows from where the button went down
   dragFrom = [event.clientX, event.clientY];
   pan(dx, dy);
 });
-for (const type of ["pointerup", "pointercancel"]) $("map-canvas").addEventListener(type, () => { dragFrom = null; });
+$("map-canvas").addEventListener("pointerup", (event) => {
+  if (dragFrom && dragged < 5) {
+    const r = event.currentTarget.getBoundingClientRect();
+    pickAt(event.clientX - r.left, event.clientY - r.top);
+  }
+  dragFrom = null;
+});
+$("map-canvas").addEventListener("pointercancel", () => { dragFrom = null; });
+$("card-close").addEventListener("click", () => { picked = null; drawMap(); });
 $("map").addEventListener("keydown", (event) => {
   const step = $("map").clientWidth / 6;
   const moves = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };

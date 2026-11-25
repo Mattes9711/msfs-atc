@@ -150,6 +150,7 @@ def moving(atc) -> dict:
         own = {"lat": state.lat, "lon": state.lon, "on_ground": state.on_ground,
                "heading": (state.heading_mag + atc.current_airport().mag_var) % 360}
     traffic = [{"callsign": t.callsign, "lat": t.lat, "lon": t.lon, "heading": t.heading_true,
-                "alt_ft": round(t.alt_ft), "on_ground": t.on_ground, "gs": round(t.ground_speed_kt, 1)}
+                "alt_ft": round(t.alt_ft), "on_ground": t.on_ground, "gs": round(t.ground_speed_kt, 1),
+                "type": t.model, "reg": t.atc_id}  # type and registration: the card when it is clicked on the map
                for t in atc.picture.aircraft.values()]  # gs: the map moves them on between readings
     return {"own": own, "traffic": traffic, "taxi_route": taxi_route(atc)}

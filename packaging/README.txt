@@ -54,4 +54,5 @@ Data Project (github.com/vatsimnetwork/vatspy-data-project) and the VATGER datah
 both CC BY-SA 4.0. The roles of German airport frequencies (data/stations_vatsim.json, CC BY-SA 4.0: Delivery,
 Apron, VFR Tower) come from the VATGER datahub too. For the simulator only.
 Design values after unslop by Damir Sokolovsky (CC BY 4.0).
+Land, lakes and borders on the map: made with Natural Earth (naturalearthdata.com, public domain).
 MSFS ATC is not made by or connected with Microsoft, Asobo, FSDreamTeam (GSX) or LiveTraffic.

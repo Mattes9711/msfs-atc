@@ -29,7 +29,7 @@ def test_moving_parts_come_with_the_status(eddh):
     m = s.atc.status()["map"]
     assert m["own"]["lat"] == s.sim.read().lat and 0 <= m["own"]["heading"] < 360
     assert m["traffic"] == [{"callsign": "Lufthansa 123", "lat": 53.6, "lon": 10.0, "heading": 0.0, "alt_ft": 60,
-                             "on_ground": True, "gs": 0.0}]
+                             "on_ground": True, "gs": 0.0, "type": "A320", "reg": "D-AIZA"}]
     assert moving(Session(eddh).atc)["own"] is None  # before the first tick
 
 
